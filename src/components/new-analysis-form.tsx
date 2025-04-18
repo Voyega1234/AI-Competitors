@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/use-toast"
 import { Card, CardContent } from "@/components/ui/card"
+import { Loader2 } from "lucide-react"
 
 const formSchema = z.object({
   clientName: z.string().min(2, {
@@ -17,17 +18,26 @@ const formSchema = z.object({
   }),
   facebookUrl: z.string().url({
     message: "Please enter a valid Facebook URL.",
-  }),
+  }).or(z.literal("")).optional(),
   websiteUrl: z.string().url({
     message: "Please enter a valid website URL.",
-  }),
+  }).or(z.literal("")).optional(),
   market: z.string({
     required_error: "Please select a market.",
   }),
+  productFocus: z.string().optional(),
   additionalInfo: z.string().optional(),
 })
 
-export function NewAnalysisForm() {
+// Export the inferred type
+export type NewAnalysisFormData = z.infer<typeof formSchema>;
+
+interface NewAnalysisFormProps {
+  onSubmitAnalysis: (formData: NewAnalysisFormData) => Promise<void>;
+  isLoading: boolean;
+}
+
+export function NewAnalysisForm({ onSubmitAnalysis, isLoading }: NewAnalysisFormProps) {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -35,23 +45,16 @@ export function NewAnalysisForm() {
       facebookUrl: "",
       websiteUrl: "",
       market: "thailand",
+      productFocus: "",
       additionalInfo: "",
     },
   })
-
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    toast({
-      title: "Analysis started",
-      description: "Your competitor analysis is now being processed.",
-    })
-    console.log(values)
-  }
 
   return (
     <Card>
       <CardContent className="pt-6">
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+          <form onSubmit={form.handleSubmit(onSubmitAnalysis)} className="space-y-8">
             <FormField
               control={form.control}
               name="clientName"
@@ -109,7 +112,8 @@ export function NewAnalysisForm() {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="thailand">Thailand (Default)</SelectItem>
+                      <SelectItem value="global">Global</SelectItem>
+                      <SelectItem value="thailand">Thailand</SelectItem>
                       <SelectItem value="bangkok">Bangkok</SelectItem>
                       <SelectItem value="chiang_mai">Chiang Mai</SelectItem>
                       <SelectItem value="phuket">Phuket</SelectItem>
@@ -117,6 +121,20 @@ export function NewAnalysisForm() {
                     </SelectContent>
                   </Select>
                   <FormDescription>Select the target market for your analysis.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="productFocus"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Product/Service Focus (Optional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g., Gold Investment, Food Delivery, Robo-advisor" {...field} />
+                  </FormControl>
+                  <FormDescription>Specify the main product/service for competitor comparison.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -141,7 +159,9 @@ export function NewAnalysisForm() {
                 </FormItem>
               )}
             />
-            <Button type="submit">Start Analysis</Button>
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Start Analysis"}
+            </Button>
           </form>
         </Form>
       </CardContent>

@@ -41,6 +41,39 @@ import { NewAnalysisForm } from './new-analysis-form';
 import { CompetitorTable } from './competitor-table';
 import { RecommendationCards } from './recommendation-cards';
 
+// Import the form data type
+import type { NewAnalysisFormData } from './new-analysis-form';
+
+// Define the Competitor type expected from the API
+// Match the structure returned by the modified jina-search API route
+interface CompetitorResult {
+  id: string;
+  name: string;
+  website: string | null; // API guarantees string | null
+  facebookUrl: string | null; // API guarantees string | null
+  services: string[]; // API guarantees non-null array
+  features: string[]; // API guarantees non-null array
+  pricing: string; // API guarantees non-null string
+  strengths: string[]; // API guarantees non-null array
+  weaknesses: string[]; // API guarantees non-null array
+  specialty: string; // API guarantees non-null string
+  targetAudience: string; // API guarantees non-null string
+  brandTone: string; // API guarantees non-null string
+  brandPerception: { // API guarantees non-null object with non-null strings
+    positive: string;
+    negative: string;
+  };
+  marketShare: string; // API guarantees non-null string
+  complaints: string[]; // API guarantees non-null array
+  adThemes: string[]; // API guarantees non-null array
+  // Add the fields that CompetitorTable expects but Jina doesn't provide directly
+  // These were added with default values in the API
+  seo: { domainAuthority: number; backlinks: number; organicTraffic: string }; // API guarantees non-null object/values
+  websiteQuality: { uxScore: number; loadingSpeed: string; mobileResponsiveness: string }; // API guarantees non-null object/values
+  usp: string; // API guarantees non-null string
+  socialMetrics: { followers: number; engagement: string }; // API guarantees non-null object/values
+}
+
 interface FacebookAd {
   id: string;               // ad_archive_id
   collationId?: string;      // collation_id
@@ -277,6 +310,13 @@ export default function CompetitorAdDashboard() {
   const [expandedOrganicPosts, setExpandedOrganicPosts] = useState(false);
   // Add state to track which section is active
   const [activeSection, setActiveSection] = useState<string | null>(null);
+
+  // --- New State for Analysis ---
+  const [analysisCompetitors, setAnalysisCompetitors] = useState<CompetitorResult[]>([]);
+  // State for API analysis loading and error
+  const [isAnalysisLoading, setIsAnalysisLoading] = useState<boolean>(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  // --- End New State ---
 
   const truncateText = (text: string, maxLength: number = 300) => {
     if (text.length <= maxLength) return text;
@@ -1261,6 +1301,44 @@ export default function CompetitorAdDashboard() {
   }, [showOverallEngagement, competitors, competitorDataCache, hasLoadedInitialData]);
   
   
+  // --- New Handler for Analysis Form Submission ---
+  const handleStartAnalysis = async (formData: NewAnalysisFormData) => {
+    console.log("Starting analysis with data:", formData);
+    // Intentionally do nothing here for now
+    
+    setIsAnalysisLoading(true); // Use correct state setter
+    setAnalysisError(null); // Use correct state setter
+    setAnalysisCompetitors([]); // Clear previous results
+ 
+    try {
+      const response = await fetch('/api/jina-search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || `HTTP error! status: ${response.status}`);
+      }
+
+      console.log("Analysis successful, received competitors:", result.competitors);
+      setAnalysisCompetitors(result.competitors || []); // Ensure it's an array
+
+    } catch (error: any) {
+      console.error("Analysis failed:", error);
+      setAnalysisError(error.message || "Failed to fetch competitor analysis."); // Use correct state setter
+    } finally {
+      setIsAnalysisLoading(false);
+    }
+  
+  };
+  // --- End New Handler ---
+  
+  
   return (
     <div className="flex flex-col h-screen max-h-screen bg-gray-50">
       {/* Header */}
@@ -1586,7 +1664,7 @@ export default function CompetitorAdDashboard() {
           {activeSection === "new-analysis" && (
             <div className="flex-1 p-6 overflow-auto">
               <h2 className="text-2xl font-bold mb-6">New Competitor Analysis</h2>
-              <NewAnalysisForm />
+              <NewAnalysisForm onSubmitAnalysis={handleStartAnalysis} isLoading={isAnalysisLoading} />
             </div>
           )}
 
@@ -1594,7 +1672,11 @@ export default function CompetitorAdDashboard() {
           {activeSection === "competitors" && (
             <div className="flex-1 p-6 overflow-auto">
               <h2 className="text-2xl font-bold mb-6">Competitor Analysis</h2>
-              <CompetitorTable />
+              <CompetitorTable
+                initialCompetitors={analysisCompetitors}
+                isLoading={isAnalysisLoading} // Use analysis loading state
+                error={analysisError} // Use analysis error state
+              />
             </div>
           )}
 
@@ -2628,46 +2710,6 @@ export default function CompetitorAdDashboard() {
                             No inactive ads found for this competitor.
                           </div>
                         )}
-
-                      {/* Inactive Ads Analysis Section
-                  {!isLoadingAds && !adError && getFilteredAds('Inactive').length > 0 && activeCompetitor !== null && competitors[activeCompetitor] && (
-                    <div className={`mb-4 bg-gray-50 p-4 rounded-lg border border-gray-200`}>
-                      <h3 className="font-medium mb-2 text-gray-800">Inactive Ads Analysis</h3>
-                      <p className="text-sm text-gray-700 mb-3">
-                        Analysis of inactive ads for {competitors[activeCompetitor].name}
-                </p>
-                <div className="grid grid-cols-3 gap-4 text-sm">
-                  <div className="bg-white p-3 rounded-lg">
-                          <div className="text-gray-600">Inactive Ads Count</div>
-                          <div className="font-medium">
-                            {getFilteredAds('Inactive').length} ads
-                          </div>
-                  </div>
-                  <div className="bg-white p-3 rounded-lg">
-                          <div className="text-gray-600">Last Active Date</div>
-                          <div className="font-medium">
-                            {(() => {
-                              const inactiveAds = getFilteredAds('Inactive');
-                              if (inactiveAds.length === 0) return 'N/A';
-                              const latestDate = new Date(Math.max(...inactiveAds.map(ad => new Date(ad.datePosted).getTime())));
-                              return latestDate.toLocaleDateString();
-                            })()}
-                          </div>
-                  </div>
-                  <div className="bg-white p-3 rounded-lg">
-                          <div className="text-gray-600">Media Usage</div>
-                          <div className="font-medium">
-                            {(() => {
-                              const inactiveAds = getFilteredAds('Inactive');
-                              const withMedia = inactiveAds.filter(ad => ad.mediaUrls.length > 0).length;
-                              const percentage = Math.round((withMedia / inactiveAds.length) * 100) || 0;
-                              return `${percentage}% with media`;
-                            })()}
-                  </div>
-                </div>
-              </div>
-                    </div>
-                  )} */}
 
                       {/* Sort and display inactive ads */}
                       {!isLoadingAds && !adError && activeAds.length > 0 && (

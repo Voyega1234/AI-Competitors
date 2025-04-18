@@ -43,11 +43,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 
-type Competitor = {
+export type Competitor = {
   id: string
   name: string
-  website: string
+  website: string | null
   services: string[]
   features: string[]
   pricing: string
@@ -76,229 +77,18 @@ type Competitor = {
   usp: string
   socialMetrics: {
     followers: number
-    engagement: string
   }
+  facebookUrl: string | null
 }
 
-const data: Competitor[] = [
-  {
-    id: "1",
-    name: "FoodPanda Thailand",
-    website: "https://foodpanda.co.th",
-    services: ["Food Delivery", "Grocery Delivery", "Subscription Plan", "Restaurant Partnerships", "Corporate Orders"],
-    features: ["Food Delivery", "Grocery Delivery", "Subscription Plan"],
-    pricing: "15% Commission",
-    strengths: [
-      "Wide Restaurant Network",
-      "Fast Delivery",
-      "User-friendly App",
-      "Strong Brand Recognition",
-      "Extensive Coverage",
-    ],
-    weaknesses: [
-      "Higher Fees",
-      "Limited Rural Coverage",
-      "Customer Service Issues",
-      "Delivery Delays During Peak Hours",
-    ],
-    specialty: "Widest selection of restaurants with exclusive partnerships",
-    targetAudience: "Urban professionals, 25-40, middle to upper income, tech-savvy consumers in major Thai cities",
-    brandTone: "Friendly, vibrant, and approachable with playful marketing",
-    brandPerception: {
-      positive: "Reliable service, good restaurant selection, fast delivery (4.2/5 on Google Play)",
-      negative: "High fees, order mistakes, delayed deliveries (complaints on Trustpilot)",
-    },
-    marketShare: "32% of Thai food delivery market",
-    complaints: [
-      "High delivery fees",
-      "Long wait times during peak hours",
-      "Order accuracy issues",
-      "Limited customer service",
-    ],
-    adThemes: ["Convenience", "Time-saving", "Variety of choices", "Special promotions"],
-    seo: {
-      domainAuthority: 76,
-      backlinks: 15800,
-      organicTraffic: "1.2M monthly visits",
-    },
-    websiteQuality: {
-      uxScore: 85,
-      loadingSpeed: "2.3 seconds",
-      mobileResponsiveness: "Excellent",
-    },
-    usp: "Widest selection of restaurants in Thailand",
-    socialMetrics: {
-      followers: 1200000,
-      engagement: "High",
-    },
-  },
-  {
-    id: "2",
-    name: "Grab Food Thailand",
-    website: "https://grab.com/th/food",
-    services: [
-      "Food Delivery",
-      "Ride Sharing",
-      "Grocery Delivery",
-      "Package Delivery",
-      "Financial Services",
-      "Hotel Bookings",
-    ],
-    features: ["Food Delivery", "Ride Sharing", "Loyalty Program"],
-    pricing: "20% Commission",
-    strengths: [
-      "Super App Integration",
-      "Loyalty Program",
-      "Driver Network",
-      "Payment System Integration",
-      "Brand Trust",
-    ],
-    weaknesses: ["Customer Service", "Peak Hour Delays", "Higher Prices", "App Stability Issues"],
-    specialty: "Super-app ecosystem with integrated services and payment solutions",
-    targetAudience: "Urban and suburban residents, 20-45, middle income, smartphone users across Thailand",
-    brandTone: "Professional, reliable, and solution-oriented with consistent messaging",
-    brandPerception: {
-      positive: "Convenient all-in-one app, reliable service, good loyalty program (4.5/5 on App Store)",
-      negative: "Expensive, inconsistent service quality, driver issues (3.2/5 on Trustpilot)",
-    },
-    marketShare: "28% of Thai food delivery market",
-    complaints: ["Surge pricing", "Driver cancellations", "App glitches", "Payment issues"],
-    adThemes: ["Ecosystem integration", "Rewards", "Reliability", "Local partnerships"],
-    seo: {
-      domainAuthority: 82,
-      backlinks: 24600,
-      organicTraffic: "1.8M monthly visits",
-    },
-    websiteQuality: {
-      uxScore: 88,
-      loadingSpeed: "1.9 seconds",
-      mobileResponsiveness: "Excellent",
-    },
-    usp: "Integrated with transportation and payment services",
-    socialMetrics: {
-      followers: 980000,
-      engagement: "Medium",
-    },
-  },
-  {
-    id: "3",
-    name: "Line Man",
-    website: "https://lineman.line.me",
-    services: ["Food Delivery", "Messenger Service", "Taxi Service", "Parcel Delivery", "Grocery Shopping"],
-    features: ["Food Delivery", "Messenger Service", "Taxi Service"],
-    pricing: "18% Commission",
-    strengths: ["Line App Integration", "Local Brand Recognition", "Promotions", "User Interface", "Payment Options"],
-    weaknesses: ["Limited Restaurant Selection", "App Performance", "Coverage Areas", "Customer Support Response Time"],
-    specialty: "Integration with Line messaging platform and social features",
-    targetAudience: "Line app users, 18-35, urban dwellers, tech-savvy consumers in major Thai cities",
-    brandTone: "Casual, friendly, and emoji-rich communication style",
-    brandPerception: {
-      positive: "Seamless Line integration, good promotions, familiar interface (4.3/5 on Google Play)",
-      negative: "Limited coverage, slower delivery times, fewer restaurant options (complaints on social media)",
-    },
-    marketShare: "22% of Thai food delivery market",
-    complaints: ["Limited delivery zones", "App crashes", "Order tracking issues", "Fewer restaurant options"],
-    adThemes: ["Line ecosystem", "Social connectivity", "Thai-centric service", "Special discounts"],
-    seo: {
-      domainAuthority: 74,
-      backlinks: 12300,
-      organicTraffic: "950K monthly visits",
-    },
-    websiteQuality: {
-      uxScore: 82,
-      loadingSpeed: "2.5 seconds",
-      mobileResponsiveness: "Very Good",
-    },
-    usp: "Integrated with Line messaging platform",
-    socialMetrics: {
-      followers: 850000,
-      engagement: "High",
-    },
-  },
-  {
-    id: "4",
-    name: "Robinhood",
-    website: "https://robinhood.co.th",
-    services: ["Food Delivery", "Ride Hailing", "Travel Booking", "Mart Delivery", "Express Delivery"],
-    features: ["Food Delivery", "Zero Commission", "Local Focus"],
-    pricing: "0% Commission",
-    strengths: ["No Commission Fees", "Local Support", "SCB Banking Integration", "Merchant-friendly", "Thai-owned"],
-    weaknesses: ["Smaller Network", "Limited Features", "Geographic Coverage", "App Stability"],
-    specialty: "Zero-commission model supporting local restaurants and merchants",
-    targetAudience: "Value-conscious consumers, 25-50, SCB bank customers, supporters of local businesses",
-    brandTone: "Supportive, community-focused, and socially responsible",
-    brandPerception: {
-      positive: "Supporting local businesses, no commission fees, good value (4.1/5 on App Store)",
-      negative: "Smaller selection, limited coverage areas, longer wait times (3.5/5 on Google Play)",
-    },
-    marketShare: "12% of Thai food delivery market",
-    complaints: [
-      "Limited restaurant options",
-      "Longer delivery times",
-      "Smaller delivery radius",
-      "Driver availability",
-    ],
-    adThemes: ["Supporting local businesses", "Zero commission", "Thai ownership", "Community focus"],
-    seo: {
-      domainAuthority: 65,
-      backlinks: 8400,
-      organicTraffic: "420K monthly visits",
-    },
-    websiteQuality: {
-      uxScore: 78,
-      loadingSpeed: "2.8 seconds",
-      mobileResponsiveness: "Good",
-    },
-    usp: "Zero commission fees for restaurants",
-    socialMetrics: {
-      followers: 320000,
-      engagement: "Medium",
-    },
-  },
-  {
-    id: "5",
-    name: "Get Thailand",
-    website: "https://get.co.th",
-    services: ["Food Delivery", "Ride Hailing", "Parcel Delivery", "Grocery Delivery", "Premium Services"],
-    features: ["Food Delivery", "Ride Hailing", "Parcel Delivery"],
-    pricing: "25% Commission",
-    strengths: [
-      "Premium Service",
-      "Fast Delivery",
-      "Quality Restaurants",
-      "Customer Service",
-      "Exclusive Partnerships",
-    ],
-    weaknesses: ["Higher Prices", "Limited Coverage", "Smaller User Base", "Fewer Promotions"],
-    specialty: "Premium food delivery experience with higher-end restaurants",
-    targetAudience: "Affluent professionals, 30-55, high-income earners, expatriates in Bangkok and tourist areas",
-    brandTone: "Sophisticated, premium, and quality-focused communication",
-    brandPerception: {
-      positive: "High-quality service, premium restaurants, reliable delivery (4.4/5 on App Store)",
-      negative: "Expensive, limited coverage, fewer options outside Bangkok (complaints on forums)",
-    },
-    marketShare: "6% of Thai food delivery market",
-    complaints: ["High prices", "Limited geographic coverage", "Fewer budget options", "Exclusive focus"],
-    adThemes: ["Premium experience", "Quality assurance", "Curated selection", "Reliability"],
-    seo: {
-      domainAuthority: 58,
-      backlinks: 5200,
-      organicTraffic: "280K monthly visits",
-    },
-    websiteQuality: {
-      uxScore: 90,
-      loadingSpeed: "1.7 seconds",
-      mobileResponsiveness: "Excellent",
-    },
-    usp: "Premium food delivery experience",
-    socialMetrics: {
-      followers: 210000,
-      engagement: "Low",
-    },
-  },
-]
+// Define props for the component
+interface CompetitorTableProps {
+  initialCompetitors: Competitor[]; // Fetched data from parent
+  isLoading: boolean;
+  error: string | null;
+}
 
-export function CompetitorTable() {
+export function CompetitorTable({ initialCompetitors, isLoading, error }: CompetitorTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({
@@ -320,7 +110,7 @@ export function CompetitorTable() {
     column: string
     value: any
   } | null>(null)
-  const [competitors, setCompetitors] = React.useState<Competitor[]>(data)
+  const [competitors, setCompetitors] = React.useState<Competitor[]>(initialCompetitors)
 
   // Function to handle editing a cell
   const handleEdit = (id: string, column: string, value: any) => {
@@ -337,10 +127,11 @@ export function CompetitorTable() {
         // Handle nested properties
         if (column.includes(".")) {
           const [parent, child] = column.split(".")
+          const parentValue = competitor[parent as keyof Competitor]
           return {
             ...competitor,
             [parent]: {
-              ...competitor[parent as keyof Competitor],
+              ...(typeof parentValue === 'object' && parentValue !== null ? parentValue : {}),
               [child]: value,
             },
           }
@@ -374,8 +165,8 @@ export function CompetitorTable() {
 
   // Define columns with edit functionality
   const columns: ColumnDef<Competitor>[] = [
-    {
-      accessorKey: "name",
+      {
+        accessorKey: "name",
       header: "Competitor",
       cell: ({ row }) => {
         const value = row.getValue("name") as string
@@ -384,17 +175,17 @@ export function CompetitorTable() {
         if (editingCell && editingCell.id === id && editingCell.column === "name") {
           return (
             <div className="flex items-center gap-2">
-              <Input
+                  <Input
                 value={editingCell.value}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-8 w-[180px]"
               />
               <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                <Save className="h-4 w-4" />
-              </Button>
+                    <Save className="h-4 w-4" />
+                  </Button>
               <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                <X className="h-4 w-4" />
-              </Button>
+                    <X className="h-4 w-4" />
+                  </Button>
             </div>
           )
         }
@@ -402,21 +193,21 @@ export function CompetitorTable() {
         return (
           <div className="flex items-center gap-2">
             <span className="font-medium">{value}</span>
-            <Button
-              variant="ghost"
+                  <Button
+                    variant="ghost"
               size="icon"
               onClick={() => handleEdit(id, "name", value)}
               className="h-6 w-6 opacity-0 group-hover:opacity-100"
-            >
+                  >
               <Edit className="h-3 w-3" />
-            </Button>
-          </div>
-        )
+                  </Button>
+            </div>
+          )
+        },
       },
-    },
-    {
-      accessorKey: "website",
-      header: "Website",
+      {
+        accessorKey: "website",
+        header: "Website",
       cell: ({ row }) => {
         const value = row.getValue("website") as string
         const id = row.original.id
@@ -424,17 +215,17 @@ export function CompetitorTable() {
         if (editingCell && editingCell.id === id && editingCell.column === "website") {
           return (
             <div className="flex items-center gap-2">
-              <Input
+                  <Input
                 value={editingCell.value}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-8 w-[180px]"
               />
               <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                <Save className="h-4 w-4" />
-              </Button>
+                    <Save className="h-4 w-4" />
+                  </Button>
               <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                <X className="h-4 w-4" />
-              </Button>
+                    <X className="h-4 w-4" />
+                  </Button>
             </div>
           )
         }
@@ -442,28 +233,28 @@ export function CompetitorTable() {
         return (
           <div className="flex items-center gap-2">
             <a
-              href={value}
+              href={value ? value : undefined}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center text-blue-600 hover:underline"
             >
               Visit <ExternalLink className="ml-1 h-3 w-3" />
             </a>
-            <Button
-              variant="ghost"
+                  <Button
+                    variant="ghost"
               size="icon"
               onClick={() => handleEdit(id, "website", value)}
               className="h-6 w-6 opacity-0 group-hover:opacity-100"
-            >
+                  >
               <Edit className="h-3 w-3" />
-            </Button>
-          </div>
-        )
+                  </Button>
+            </div>
+          )
+        },
       },
-    },
-    {
-      accessorKey: "services",
-      header: "Services",
+      {
+        accessorKey: "services",
+        header: "Services",
       cell: ({ row }) => {
         const services = row.getValue("services") as string[]
         const id = row.original.id
@@ -471,18 +262,18 @@ export function CompetitorTable() {
         if (editingCell && editingCell.id === id && editingCell.column === "services") {
           return (
             <div className="flex items-center gap-2">
-              <Textarea
+                  <Textarea
                 value={Array.isArray(editingCell.value) ? editingCell.value.join(", ") : editingCell.value}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-20 w-[200px] text-xs"
               />
               <div className="flex flex-col gap-1">
                 <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                  <Save className="h-4 w-4" />
-                </Button>
+                    <Save className="h-4 w-4" />
+                  </Button>
                 <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                  <X className="h-4 w-4" />
-                </Button>
+                    <X className="h-4 w-4" />
+                  </Button>
               </div>
             </div>
           )
@@ -497,46 +288,46 @@ export function CompetitorTable() {
                 </Badge>
               ))}
               {services.length > 3 && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
                       <Badge variant="outline" className="text-xs cursor-help">
                         +{services.length - 3} more
                       </Badge>
-                    </TooltipTrigger>
+                      </TooltipTrigger>
                     <TooltipContent className="w-[200px]">
                       <ul className="list-disc pl-4 text-xs">
                         {services.slice(3).map((service, i) => (
                           <li key={i}>{service}</li>
-                        ))}
-                      </ul>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                          ))}
+                        </ul>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
               )}
             </div>
-            <Button
-              variant="ghost"
+                  <Button
+                    variant="ghost"
               size="icon"
               onClick={() => handleEdit(id, "services", services)}
               className="h-6 w-6 opacity-0 group-hover:opacity-100"
-            >
+                  >
               <Edit className="h-3 w-3" />
-            </Button>
-          </div>
-        )
+                  </Button>
+            </div>
+          )
+        },
       },
-    },
-    {
-      accessorKey: "pricing",
-      header: ({ column }) => {
-        return (
+      {
+        accessorKey: "pricing",
+        header: ({ column }) => {
+          return (
           <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
-            Pricing
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        )
-      },
+              Pricing
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            </Button>
+          )
+        },
       cell: ({ row }) => {
         const value = row.getValue("pricing") as string
         const id = row.original.id
@@ -544,17 +335,17 @@ export function CompetitorTable() {
         if (editingCell && editingCell.id === id && editingCell.column === "pricing") {
           return (
             <div className="flex items-center gap-2">
-              <Input
+                  <Input
                 value={editingCell.value}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-8 w-[120px]"
               />
               <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                <Save className="h-4 w-4" />
-              </Button>
+                    <Save className="h-4 w-4" />
+                  </Button>
               <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                <X className="h-4 w-4" />
-              </Button>
+                    <X className="h-4 w-4" />
+                  </Button>
             </div>
           )
         }
@@ -562,21 +353,21 @@ export function CompetitorTable() {
         return (
           <div className="flex items-center gap-2">
             <span>{value}</span>
-            <Button
-              variant="ghost"
+                  <Button
+                    variant="ghost"
               size="icon"
               onClick={() => handleEdit(id, "pricing", value)}
               className="h-6 w-6 opacity-0 group-hover:opacity-100"
-            >
+                  >
               <Edit className="h-3 w-3" />
-            </Button>
-          </div>
-        )
+                  </Button>
+            </div>
+          )
+        },
       },
-    },
-    {
-      accessorKey: "strengths",
-      header: "Strengths",
+      {
+        accessorKey: "strengths",
+        header: "Strengths",
       cell: ({ row }) => {
         const strengths = row.getValue("strengths") as string[]
         const id = row.original.id
@@ -584,18 +375,18 @@ export function CompetitorTable() {
         if (editingCell && editingCell.id === id && editingCell.column === "strengths") {
           return (
             <div className="flex items-center gap-2">
-              <Textarea
+                  <Textarea
                 value={Array.isArray(editingCell.value) ? editingCell.value.join(", ") : editingCell.value}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-20 w-[200px] text-xs"
               />
               <div className="flex flex-col gap-1">
                 <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                  <Save className="h-4 w-4" />
-                </Button>
+                    <Save className="h-4 w-4" />
+                  </Button>
                 <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                  <X className="h-4 w-4" />
-                </Button>
+                    <X className="h-4 w-4" />
+                  </Button>
               </div>
             </div>
           )
@@ -626,21 +417,21 @@ export function CompetitorTable() {
                 </li>
               )}
             </ul>
-            <Button
-              variant="ghost"
+                  <Button
+                    variant="ghost"
               size="icon"
               onClick={() => handleEdit(id, "strengths", strengths)}
               className="h-6 w-6 opacity-0 group-hover:opacity-100"
-            >
+                  >
               <Edit className="h-3 w-3" />
-            </Button>
-          </div>
-        )
+                  </Button>
+            </div>
+          )
+        },
       },
-    },
-    {
-      accessorKey: "weaknesses",
-      header: "Weaknesses",
+      {
+        accessorKey: "weaknesses",
+        header: "Weaknesses",
       cell: ({ row }) => {
         const weaknesses = row.getValue("weaknesses") as string[]
         const id = row.original.id
@@ -648,18 +439,18 @@ export function CompetitorTable() {
         if (editingCell && editingCell.id === id && editingCell.column === "weaknesses") {
           return (
             <div className="flex items-center gap-2">
-              <Textarea
+                  <Textarea
                 value={Array.isArray(editingCell.value) ? editingCell.value.join(", ") : editingCell.value}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-20 w-[200px] text-xs"
               />
               <div className="flex flex-col gap-1">
                 <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                  <Save className="h-4 w-4" />
-                </Button>
+                    <Save className="h-4 w-4" />
+                  </Button>
                 <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                  <X className="h-4 w-4" />
-                </Button>
+                    <X className="h-4 w-4" />
+                  </Button>
               </div>
             </div>
           )
@@ -690,21 +481,21 @@ export function CompetitorTable() {
                 </li>
               )}
             </ul>
-            <Button
-              variant="ghost"
+                  <Button
+                    variant="ghost"
               size="icon"
               onClick={() => handleEdit(id, "weaknesses", weaknesses)}
               className="h-6 w-6 opacity-0 group-hover:opacity-100"
-            >
+                  >
               <Edit className="h-3 w-3" />
-            </Button>
-          </div>
-        )
+                  </Button>
+            </div>
+          )
+        },
       },
-    },
-    {
-      accessorKey: "specialty",
-      header: "Specialty",
+      {
+        accessorKey: "specialty",
+        header: "Specialty",
       cell: ({ row }) => {
         const value = row.getValue("specialty") as string
         const id = row.original.id
@@ -712,18 +503,18 @@ export function CompetitorTable() {
         if (editingCell && editingCell.id === id && editingCell.column === "specialty") {
           return (
             <div className="flex items-center gap-2">
-              <Textarea
+                  <Textarea
                 value={editingCell.value}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-20 w-[200px] text-xs"
               />
               <div className="flex flex-col gap-1">
                 <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                  <Save className="h-4 w-4" />
-                </Button>
+                    <Save className="h-4 w-4" />
+                  </Button>
                 <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                  <X className="h-4 w-4" />
-                </Button>
+                    <X className="h-4 w-4" />
+                  </Button>
               </div>
             </div>
           )
@@ -732,21 +523,21 @@ export function CompetitorTable() {
         return (
           <div className="flex items-center gap-2">
             <div className="max-w-[200px] text-sm">{value}</div>
-            <Button
-              variant="ghost"
+                  <Button
+                    variant="ghost"
               size="icon"
               onClick={() => handleEdit(id, "specialty", value)}
               className="h-6 w-6 opacity-0 group-hover:opacity-100"
-            >
+                  >
               <Edit className="h-3 w-3" />
-            </Button>
-          </div>
-        )
+                  </Button>
+            </div>
+          )
+        },
       },
-    },
-    {
-      accessorKey: "targetAudience",
-      header: "Target Audience",
+      {
+        accessorKey: "targetAudience",
+        header: "Target Audience",
       cell: ({ row }) => {
         const value = row.getValue("targetAudience") as string
         const id = row.original.id
@@ -754,18 +545,18 @@ export function CompetitorTable() {
         if (editingCell && editingCell.id === id && editingCell.column === "targetAudience") {
           return (
             <div className="flex items-center gap-2">
-              <Textarea
+                  <Textarea
                 value={editingCell.value}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-20 w-[200px] text-xs"
               />
               <div className="flex flex-col gap-1">
                 <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                  <Save className="h-4 w-4" />
-                </Button>
+                    <Save className="h-4 w-4" />
+                  </Button>
                 <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                  <X className="h-4 w-4" />
-                </Button>
+                    <X className="h-4 w-4" />
+                  </Button>
               </div>
             </div>
           )
@@ -774,21 +565,21 @@ export function CompetitorTable() {
         return (
           <div className="flex items-center gap-2">
             <div className="max-w-[200px] text-sm">{value}</div>
-            <Button
-              variant="ghost"
+                  <Button
+                    variant="ghost"
               size="icon"
               onClick={() => handleEdit(id, "targetAudience", value)}
               className="h-6 w-6 opacity-0 group-hover:opacity-100"
-            >
+                  >
               <Edit className="h-3 w-3" />
-            </Button>
-          </div>
-        )
+                  </Button>
+            </div>
+          )
+        },
       },
-    },
-    {
-      accessorKey: "brandTone",
-      header: "Brand Tone",
+      {
+        accessorKey: "brandTone",
+        header: "Brand Tone",
       cell: ({ row }) => {
         const value = row.getValue("brandTone") as string
         const id = row.original.id
@@ -796,18 +587,18 @@ export function CompetitorTable() {
         if (editingCell && editingCell.id === id && editingCell.column === "brandTone") {
           return (
             <div className="flex items-center gap-2">
-              <Textarea
+                  <Textarea
                 value={editingCell.value}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-20 w-[200px] text-xs"
               />
               <div className="flex flex-col gap-1">
                 <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                  <Save className="h-4 w-4" />
-                </Button>
+                    <Save className="h-4 w-4" />
+                  </Button>
                 <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                  <X className="h-4 w-4" />
-                </Button>
+                    <X className="h-4 w-4" />
+                  </Button>
               </div>
             </div>
           )
@@ -816,21 +607,21 @@ export function CompetitorTable() {
         return (
           <div className="flex items-center gap-2">
             <div className="max-w-[200px] text-sm">{value}</div>
-            <Button
-              variant="ghost"
+                  <Button
+                    variant="ghost"
               size="icon"
               onClick={() => handleEdit(id, "brandTone", value)}
               className="h-6 w-6 opacity-0 group-hover:opacity-100"
-            >
+                  >
               <Edit className="h-3 w-3" />
-            </Button>
-          </div>
-        )
+                  </Button>
+            </div>
+          )
+        },
       },
-    },
-    {
-      accessorKey: "brandPerception",
-      header: "Brand Perception",
+      {
+        accessorKey: "brandPerception",
+        header: "Brand Perception",
       cell: ({ row }) => {
         const perception = row.getValue("brandPerception") as { positive: string; negative: string }
         const id = row.original.id
@@ -838,7 +629,7 @@ export function CompetitorTable() {
         if (editingCell && editingCell.id === id && editingCell.column === "brandPerception.positive") {
           return (
             <div className="flex items-center gap-2">
-              <Textarea
+                  <Textarea
                 value={editingCell.value}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-20 w-[200px] text-xs"
@@ -865,11 +656,11 @@ export function CompetitorTable() {
               />
               <div className="flex flex-col gap-1">
                 <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                  <Save className="h-4 w-4" />
-                </Button>
+                    <Save className="h-4 w-4" />
+                  </Button>
                 <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                  <X className="h-4 w-4" />
-                </Button>
+                    <X className="h-4 w-4" />
+                  </Button>
               </div>
             </div>
           )
@@ -877,38 +668,38 @@ export function CompetitorTable() {
 
         return (
           <div className="grid gap-2">
-            <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2">
               <div className="text-xs font-medium text-green-600">Positive:</div>
-              <Button
-                variant="ghost"
+                      <Button
+                        variant="ghost"
                 size="icon"
                 onClick={() => handleEdit(id, "brandPerception.positive", perception.positive)}
                 className="h-6 w-6 opacity-0 group-hover:opacity-100"
-              >
+                      >
                 <Edit className="h-3 w-3" />
-              </Button>
-            </div>
+                      </Button>
+                    </div>
             <div className="text-xs max-w-[200px]">{perception.positive}</div>
 
-            <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2">
               <div className="text-xs font-medium text-red-600">Negative:</div>
-              <Button
-                variant="ghost"
+                      <Button
+                        variant="ghost"
                 size="icon"
                 onClick={() => handleEdit(id, "brandPerception.negative", perception.negative)}
                 className="h-6 w-6 opacity-0 group-hover:opacity-100"
-              >
+                      >
                 <Edit className="h-3 w-3" />
-              </Button>
-            </div>
+                      </Button>
+                    </div>
             <div className="text-xs max-w-[200px]">{perception.negative}</div>
-          </div>
-        )
+            </div>
+          )
+        },
       },
-    },
-    {
-      accessorKey: "marketShare",
-      header: "Market Share",
+      {
+        accessorKey: "marketShare",
+        header: "Market Share",
       cell: ({ row }) => {
         const value = row.getValue("marketShare") as string
         const id = row.original.id
@@ -916,17 +707,17 @@ export function CompetitorTable() {
         if (editingCell && editingCell.id === id && editingCell.column === "marketShare") {
           return (
             <div className="flex items-center gap-2">
-              <Input
+                  <Input
                 value={editingCell.value}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-8 w-[120px]"
               />
               <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                <Save className="h-4 w-4" />
-              </Button>
+                    <Save className="h-4 w-4" />
+                  </Button>
               <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                <X className="h-4 w-4" />
-              </Button>
+                    <X className="h-4 w-4" />
+                  </Button>
             </div>
           )
         }
@@ -934,20 +725,20 @@ export function CompetitorTable() {
         return (
           <div className="flex items-center gap-2">
             <span>{value}</span>
-            <Button
-              variant="ghost"
+                  <Button
+                    variant="ghost"
               size="icon"
               onClick={() => handleEdit(id, "marketShare", value)}
               className="h-6 w-6 opacity-0 group-hover:opacity-100"
-            >
+                  >
               <Edit className="h-3 w-3" />
-            </Button>
-          </div>
-        )
+                  </Button>
+            </div>
+          )
+        },
       },
-    },
-    {
-      accessorKey: "complaints",
+      {
+        accessorKey: "complaints",
       header: "Common Complaints",
       cell: ({ row }) => {
         const complaints = row.getValue("complaints") as string[]
@@ -956,18 +747,18 @@ export function CompetitorTable() {
         if (editingCell && editingCell.id === id && editingCell.column === "complaints") {
           return (
             <div className="flex items-center gap-2">
-              <Textarea
+                  <Textarea
                 value={Array.isArray(editingCell.value) ? editingCell.value.join(", ") : editingCell.value}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-20 w-[200px] text-xs"
               />
               <div className="flex flex-col gap-1">
                 <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                  <Save className="h-4 w-4" />
-                </Button>
+                    <Save className="h-4 w-4" />
+                  </Button>
                 <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                  <X className="h-4 w-4" />
-                </Button>
+                    <X className="h-4 w-4" />
+                  </Button>
               </div>
             </div>
           )
@@ -998,21 +789,21 @@ export function CompetitorTable() {
                 </li>
               )}
             </ul>
-            <Button
-              variant="ghost"
+                  <Button
+                    variant="ghost"
               size="icon"
               onClick={() => handleEdit(id, "complaints", complaints)}
               className="h-6 w-6 opacity-0 group-hover:opacity-100"
-            >
+                  >
               <Edit className="h-3 w-3" />
-            </Button>
-          </div>
-        )
+                  </Button>
+            </div>
+          )
+        },
       },
-    },
-    {
-      accessorKey: "adThemes",
-      header: "Ad Themes",
+      {
+        accessorKey: "adThemes",
+        header: "Ad Themes",
       cell: ({ row }) => {
         const adThemes = row.getValue("adThemes") as string[]
         const id = row.original.id
@@ -1020,46 +811,46 @@ export function CompetitorTable() {
         if (editingCell && editingCell.id === id && editingCell.column === "adThemes") {
           return (
             <div className="flex items-center gap-2">
-              <Textarea
+                  <Textarea
                 value={Array.isArray(editingCell.value) ? editingCell.value.join(", ") : editingCell.value}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-20 w-[200px] text-xs"
               />
               <div className="flex flex-col gap-1">
                 <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                  <Save className="h-4 w-4" />
-                </Button>
+                    <Save className="h-4 w-4" />
+                  </Button>
                 <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                  <X className="h-4 w-4" />
-                </Button>
+                    <X className="h-4 w-4" />
+                  </Button>
               </div>
             </div>
           )
         }
 
         return (
-          <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2">
             <div className="flex flex-wrap gap-1 max-w-[200px]">
               {adThemes.map((theme, i) => (
                 <Badge key={i} variant="secondary" className="text-xs">
                   {theme}
                 </Badge>
-              ))}
-            </div>
-            <Button
-              variant="ghost"
+                    ))}
+                  </div>
+                  <Button
+                    variant="ghost"
               size="icon"
               onClick={() => handleEdit(id, "adThemes", adThemes)}
               className="h-6 w-6 opacity-0 group-hover:opacity-100"
-            >
+                  >
               <Edit className="h-3 w-3" />
-            </Button>
-          </div>
-        )
+                  </Button>
+            </div>
+          )
+        },
       },
-    },
-    {
-      accessorKey: "seo",
+      {
+        accessorKey: "seo",
       header: "SEO Performance",
       cell: ({ row }) => {
         const seo = row.getValue("seo") as { domainAuthority: number; backlinks: number; organicTraffic: string }
@@ -1068,8 +859,8 @@ export function CompetitorTable() {
         if (editingCell && editingCell.id === id && editingCell.column === "seo.domainAuthority") {
           return (
             <div className="flex items-center gap-2">
-              <Input
-                type="number"
+                  <Input
+                    type="number"
                 value={editingCell.value}
                 onChange={(e) => setEditingCell({ ...editingCell, value: Number.parseInt(e.target.value) })}
                 className="h-8 w-[80px]"
@@ -1094,11 +885,11 @@ export function CompetitorTable() {
                 className="h-8 w-[80px]"
               />
               <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                <Save className="h-4 w-4" />
-              </Button>
+                    <Save className="h-4 w-4" />
+                  </Button>
               <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                <X className="h-4 w-4" />
-              </Button>
+                    <X className="h-4 w-4" />
+                  </Button>
             </div>
           )
         }
@@ -1123,55 +914,55 @@ export function CompetitorTable() {
 
         return (
           <div className="grid gap-1 text-xs max-w-[200px]">
-            <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between">
               <span>Domain Authority:</span>
               <div className="flex items-center gap-1">
                 <span className="font-medium">{seo.domainAuthority}/100</span>
-                <Button
-                  variant="ghost"
+                      <Button
+                        variant="ghost"
                   size="icon"
                   onClick={() => handleEdit(id, "seo.domainAuthority", seo.domainAuthority)}
                   className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                >
+                      >
                   <Edit className="h-3 w-3" />
-                </Button>
+                      </Button>
               </div>
-            </div>
-            <div className="flex items-center justify-between">
+                    </div>
+                    <div className="flex items-center justify-between">
               <span>Backlinks:</span>
               <div className="flex items-center gap-1">
                 <span className="font-medium">{seo.backlinks.toLocaleString()}</span>
-                <Button
-                  variant="ghost"
+                      <Button
+                        variant="ghost"
                   size="icon"
                   onClick={() => handleEdit(id, "seo.backlinks", seo.backlinks)}
                   className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                >
+                      >
                   <Edit className="h-3 w-3" />
-                </Button>
+                      </Button>
               </div>
-            </div>
-            <div className="flex items-center justify-between">
+                    </div>
+                    <div className="flex items-center justify-between">
               <span>Organic Traffic:</span>
               <div className="flex items-center gap-1">
                 <span className="font-medium">{seo.organicTraffic}</span>
-                <Button
-                  variant="ghost"
+                      <Button
+                        variant="ghost"
                   size="icon"
                   onClick={() => handleEdit(id, "seo.organicTraffic", seo.organicTraffic)}
                   className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                >
+                      >
                   <Edit className="h-3 w-3" />
-                </Button>
-              </div>
+                      </Button>
+                    </div>
+                  </div>
             </div>
-          </div>
-        )
+          )
+        },
       },
-    },
-    {
-      accessorKey: "websiteQuality",
-      header: "Website Quality",
+      {
+        accessorKey: "websiteQuality",
+        header: "Website Quality",
       cell: ({ row }) => {
         const quality = row.getValue("websiteQuality") as {
           uxScore: number
@@ -1183,8 +974,8 @@ export function CompetitorTable() {
         if (editingCell && editingCell.id === id && editingCell.column === "websiteQuality.uxScore") {
           return (
             <div className="flex items-center gap-2">
-              <Input
-                type="number"
+                  <Input
+                    type="number"
                 value={editingCell.value}
                 onChange={(e) => setEditingCell({ ...editingCell, value: Number.parseInt(e.target.value) })}
                 className="h-8 w-[80px]"
@@ -1208,11 +999,11 @@ export function CompetitorTable() {
                 className="h-8 w-[120px]"
               />
               <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                <Save className="h-4 w-4" />
-              </Button>
+                    <Save className="h-4 w-4" />
+                  </Button>
               <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                <X className="h-4 w-4" />
-              </Button>
+                    <X className="h-4 w-4" />
+                  </Button>
             </div>
           )
         }
@@ -1237,53 +1028,53 @@ export function CompetitorTable() {
 
         return (
           <div className="grid gap-1 text-xs max-w-[200px]">
-            <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between">
               <span>UX Score:</span>
               <div className="flex items-center gap-1">
                 <span className="font-medium">{quality.uxScore}/100</span>
-                <Button
-                  variant="ghost"
+                      <Button
+                        variant="ghost"
                   size="icon"
                   onClick={() => handleEdit(id, "websiteQuality.uxScore", quality.uxScore)}
                   className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                >
+                      >
                   <Edit className="h-3 w-3" />
-                </Button>
+                      </Button>
               </div>
-            </div>
-            <div className="flex items-center justify-between">
+                    </div>
+                    <div className="flex items-center justify-between">
               <span>Loading Speed:</span>
               <div className="flex items-center gap-1">
                 <span className="font-medium">{quality.loadingSpeed}</span>
-                <Button
-                  variant="ghost"
+                      <Button
+                        variant="ghost"
                   size="icon"
                   onClick={() => handleEdit(id, "websiteQuality.loadingSpeed", quality.loadingSpeed)}
                   className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                >
+                      >
                   <Edit className="h-3 w-3" />
-                </Button>
+                      </Button>
               </div>
-            </div>
-            <div className="flex items-center justify-between">
+                    </div>
+                    <div className="flex items-center justify-between">
               <span>Mobile:</span>
               <div className="flex items-center gap-1">
                 <span className="font-medium">{quality.mobileResponsiveness}</span>
-                <Button
-                  variant="ghost"
+                      <Button
+                        variant="ghost"
                   size="icon"
                   onClick={() => handleEdit(id, "websiteQuality.mobileResponsiveness", quality.mobileResponsiveness)}
                   className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                >
+                      >
                   <Edit className="h-3 w-3" />
-                </Button>
-              </div>
+                      </Button>
+                    </div>
+                  </div>
             </div>
-          </div>
-        )
+          )
+        },
       },
-    },
-    {
+      {
       accessorKey: "socialMetrics",
       header: ({ column }) => {
         return (
@@ -1294,8 +1085,9 @@ export function CompetitorTable() {
         )
       },
       cell: ({ row }) => {
-        const metrics = row.getValue("socialMetrics") as { followers: number; engagement: string }
+        const metrics = row.getValue("socialMetrics") as { followers: number; }
         const id = row.original.id
+        const facebookUrl = row.original.facebookUrl;
 
         if (editingCell && editingCell.id === id && editingCell.column === "socialMetrics.followers") {
           return (
@@ -1307,29 +1099,11 @@ export function CompetitorTable() {
                 className="h-8 w-[120px]"
               />
               <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                <Save className="h-4 w-4" />
-              </Button>
+                    <Save className="h-4 w-4" />
+                  </Button>
               <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )
-        }
-
-        if (editingCell && editingCell.id === id && editingCell.column === "socialMetrics.engagement") {
-          return (
-            <div className="flex items-center gap-2">
-              <Input
-                value={editingCell.value}
-                onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
-                className="h-8 w-[120px]"
-              />
-              <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                <Save className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                <X className="h-4 w-4" />
-              </Button>
+                    <X className="h-4 w-4" />
+                  </Button>
             </div>
           )
         }
@@ -1338,26 +1112,27 @@ export function CompetitorTable() {
           <div className="grid gap-1">
             <div className="flex items-center gap-1">
               <span>{metrics.followers.toLocaleString()} followers</span>
-              <Button
-                variant="ghost"
+                      <Button
+                        variant="ghost"
                 size="icon"
                 onClick={() => handleEdit(id, "socialMetrics.followers", metrics.followers)}
                 className="h-6 w-6 opacity-0 group-hover:opacity-100"
-              >
+                      >
                 <Edit className="h-3 w-3" />
-              </Button>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-muted-foreground">{metrics.engagement} engagement</span>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => handleEdit(id, "socialMetrics.engagement", metrics.engagement)}
-                className="h-6 w-6 opacity-0 group-hover:opacity-100"
-              >
-                <Edit className="h-3 w-3" />
-              </Button>
-            </div>
+                      </Button>
+                    </div>
+            {facebookUrl && (
+              <div className="flex items-center gap-1">
+                <a
+                  href={facebookUrl ?? undefined}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center text-xs text-blue-600 hover:underline"
+                >
+                  Visit Facebook <ExternalLink className="ml-1 h-3 w-3" />
+                </a>
+              </div>
+            )}
           </div>
         )
       },
@@ -1366,12 +1141,12 @@ export function CompetitorTable() {
         const metricsB = rowB.getValue("socialMetrics") as { followers: number }
         return metricsA.followers - metricsB.followers
       },
-    },
-    {
-      id: "actions",
-      cell: ({ row }) => {
-        const competitor = row.original
-        return (
+      },
+      {
+        id: "actions",
+        cell: ({ row }) => {
+          const competitor = row.original
+          return (
           <Dialog>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -1417,7 +1192,7 @@ export function CompetitorTable() {
                           <div className="flex justify-between">
                             <span className="font-medium">Website:</span>
                             <a
-                              href={competitor.website}
+                              href={competitor.website ? competitor.website : undefined}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-blue-600 hover:underline flex items-center"
@@ -1529,36 +1304,19 @@ export function CompetitorTable() {
                           <span className="font-medium">Followers:</span>
                           <span>{competitor.socialMetrics.followers.toLocaleString()}</span>
                         </div>
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">Engagement Level:</span>
-                          <span>{competitor.socialMetrics.engagement}</span>
-                        </div>
-                        <div>
-                          <h4 className="font-medium">Engagement Metrics</h4>
-                          <div className="space-y-2 mt-2">
-                            <div>
-                              <div className="flex items-center justify-between text-sm">
-                                <span>Post Engagement</span>
-                                <span>78%</span>
-                              </div>
-                              <Progress value={78} className="h-2 mt-1" />
-                            </div>
-                            <div>
-                              <div className="flex items-center justify-between text-sm">
-                                <span>Comment Rate</span>
-                                <span>45%</span>
-                              </div>
-                              <Progress value={45} className="h-2 mt-1" />
-                            </div>
-                            <div>
-                              <div className="flex items-center justify-between text-sm">
-                                <span>Share Rate</span>
-                                <span>32%</span>
-                              </div>
-                              <Progress value={32} className="h-2 mt-1" />
-                            </div>
+                        {competitor.facebookUrl && (
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium">Facebook:</span>
+                            <a
+                              href={competitor.facebookUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline"
+                            >
+                              Visit Page
+                            </a>
                           </div>
-                        </div>
+                        )}
                       </div>
                     </div>
                   </TabsContent>
@@ -1740,9 +1498,9 @@ export function CompetitorTable() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        )
+          )
+        },
       },
-    },
   ]
 
   const table = useReactTable({
@@ -1793,38 +1551,38 @@ export function CompetitorTable() {
         </DropdownMenu>
       </div>
       <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => {
-                  return (
-                    <TableHead key={header.id}>
+          <Table>
+            <TableHeader>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => {
+                    return (
+                      <TableHead key={header.id}>
                       {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                    </TableHead>
-                  )
-                })}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} data-state={row.getIsSelected() && "selected"} className="group">
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
-                  ))}
+                      </TableHead>
+                    )
+                  })}
                 </TableRow>
-              ))
-            ) : (
-              <TableRow>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {table.getRowModel().rows?.length ? (
+                table.getRowModel().rows.map((row) => (
+                <TableRow key={row.id} data-state={row.getIsSelected() && "selected"} className="group">
+                    {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
                 <TableCell colSpan={columns.length} className="h-24 text-center">
-                  No results.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+                    No results.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
       </div>
       <div className="flex items-center justify-end space-x-2 py-4">
         <div className="text-sm text-muted-foreground">
@@ -1836,7 +1594,7 @@ export function CompetitorTable() {
         <Button variant="outline" size="sm" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>
           Next
         </Button>
-      </div>
+        </div>
     </div>
   )
 }

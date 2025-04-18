@@ -1,0 +1,405 @@
+[
+  {
+    "id": "6ff004b2-0958-4bf2-9191-25cef3d8e9da",
+    "name": "Hua Seng Heng",
+    "website": "https://www.huasengheng.com/",
+    "facebookUrl": "https://www.facebook.com/huasengheng",
+    "services": [
+      "Traditional gold shop",
+      "Gold bars and jewelry",
+      "Hua Seng Heng USD Gold Trade app for trading gold in USD (99.99% purity)"
+    ],
+    "features": [
+      "Trading gold in USD",
+      "Partnerships with major lenders"
+    ],
+    "pricing": "Real-time gold prices based on global market rates. Spread between buying and selling prices. Potential fees for storage or delivery.",
+    "strengths": [
+      "Established brand with a long history and strong reputation",
+      "Physical presence with multiple locations across Thailand",
+      "USD gold trading option, providing a hedge against Thai Baht volatility"
+    ],
+    "weaknesses": [
+      "Limited tech integration compared to pure online platforms",
+      "Potential for higher transaction costs compared to online platforms due to spreads and other fees",
+      "Limited investment options beyond gold"
+    ],
+    "specialty": "Trusted name in gold trading, offering a blend of traditional service and modern technology",
+    "targetAudience": [
+      "Older generations who trust traditional gold shops",
+      "High-net-worth individuals seeking to diversify their portfolios and hedge against currency fluctuations",
+      "Tech-savvy investors interested in USD-denominated gold trading"
+    ],
+    "brandTone": "Positive brand image due to its long history, reliability, and reputation for quality",
+    "brandPerception": {
+      "positive": "Long history, reliability, reputation for quality",
+      "negative": "N/A"
+    },
+    "marketShare": "Leading player in the Thai gold market with a significant market share, particularly in the traditional gold segment",
+    "complaints": [
+      "Issues with the app's usability and occasional delays in transactions"
+    ],
+    "adThemes": [
+      "Trust, tradition, hedging against currency risk, and the convenience of online trading"
+    ],
+    "seo": {
+      "domainAuthority": 40,
+      "backlinks": 1100,
+      "organicTraffic": 17200
+    },
+    "websiteQuality": {
+      "uxScore": 65,
+      "loadingSpeed": 4.2,
+      "mobileResponsiveness": "Yes"
+    },
+    "usp": "Trusted name in gold trading, offering a blend of traditional service and modern technology",
+    "socialMetrics": {
+      "followers": 254644
+    }
+  },
+  {
+    "id": "ffcc8dc7-6789-429a-8199-fb8be6c56e87",
+    "name": "MTS Gold",
+    "website": "https://mtscapital.co.th/en/why-us",
+    "facebookUrl": "https://www.facebook.com/MTSGOLDFUTURES/",
+    "services": [
+      "24-hour gold trading services with a real-time trading platform (MTS Gold Online)",
+      "Gold futures trading on the Thailand Futures Exchange (TFEX)",
+      "Margin trading with leverage",
+      "Gold bullion trading"
+    ],
+    "features": [
+      "Real-time trading platform",
+      "Gold futures trading",
+      "Margin trading"
+    ],
+    "pricing": "Real-time gold prices and futures contracts. Commissions on each trade. Margin requirements for futures trading. Spreads on gold bullion trading.",
+    "strengths": [
+      "24-hour trading, allowing investors to react to global market movements",
+      "Gold futures trading, providing opportunities for leveraged gains",
+      "Established player in the Thai gold market with a strong reputation"
+    ],
+    "weaknesses": [
+      "High risk associated with futures trading and leverage",
+      "Requires specialized knowledge of financial markets and trading strategies",
+      "May not be suitable for passive investors or those with a low-risk tolerance"
+    ],
+    "specialty": "Leader in real-time gold trading and gold futures, catering to active traders",
+    "targetAudience": [
+      "Active gold traders with experience in financial markets",
+      "Individuals interested in derivatives trading and leveraged investments",
+      "Experienced traders with a high-risk tolerance and those familiar with futures contracts"
+    ],
+    "brandTone": "Generally positive due to their experience and market position. Some negative reviews related to the complexity of futures trading.",
+    "brandPerception": {
+      "positive": "Experience and market position",
+      "negative": "Complexity of futures trading"
+    },
+    "marketShare": "Significant market share in the gold futures trading segment",
+    "complaints": [
+      "High risk of futures trading and margin calls"
+    ],
+    "adThemes": [
+      "Real-time trading, opportunity, expertise in gold futures, and potential for high returns"
+    ],
+    "seo": {
+      "domainAuthority": 27,
+      "backlinks": 130,
+      "organicTraffic": 2100
+    },
+    "websiteQuality": {
+      "uxScore": 58,
+      "loadingSpeed": 3.8,
+      "mobileResponsiveness": "Yes"
+    },
+    "usp": "Leader in real-time gold trading and gold futures, catering to active traders",
+    "socialMetrics": {
+      "followers": 11937
+    }
+  },
+  {
+    "id": "a9564b06-19ec-46be-8a42-5a4e803077be",
+    "name": "Gold Now",
+    "website": null,
+    "facebookUrl": "https://www.facebook.com/Goldnow.th/",
+    "services": [
+      "Mobile application for buying, selling, and saving gold",
+      "Gold saving program"
+    ],
+    "features": [
+      "Minimum purchase starts at 0.1 grams",
+      "Real-time gold prices and trading tools"
+    ],
+    "pricing": "Real-time gold prices based on global market rates. Spread between buying and selling prices. Fees for withdrawals and other services.",
+    "strengths": [
+      "Low entry point, making it accessible to investors with limited capital",
+      "Gold saving program, encouraging regular savings in gold",
+      "Reputable brand name (Hua Seng Heng)"
+    ],
+    "weaknesses": [
+      "Limited to gold investments; no diversification options",
+      "May not offer personalized advice or financial planning services",
+      "Potential for higher transaction costs compared to direct gold trading platforms"
+    ],
+    "specialty": "Accessible gold investment and savings, catering to first-time investors",
+    "targetAudience": [
+      "Retail investors, particularly young professionals and first-time investors",
+      "Those looking for an accessible and convenient way to save in gold",
+      "Individuals seeking a low-risk investment option"
+    ],
+    "brandTone": "Positive brand image due to the Hua Seng Heng name and focus on accessibility",
+    "brandPerception": {
+      "positive": "Hua Seng Heng name and focus on accessibility",
+      "negative": "N/A"
+    },
+    "marketShare": "Growing market share in the retail gold investment segment",
+    "complaints": [
+      "Issues with the app's stability and occasional delays in order execution"
+    ],
+    "adThemes": [
+      "Accessibility, savings, the trusted Hua Seng Heng name, and ease of use"
+    ],
+    "seo": {
+      "domainAuthority": 0,
+      "backlinks": 0,
+      "organicTraffic": "N/A"
+    },
+    "websiteQuality": {
+      "uxScore": 0,
+      "loadingSpeed": "N/A",
+      "mobileResponsiveness": "N/A"
+    },
+    "usp": "Accessible gold investment and savings, catering to first-time investors",
+    "socialMetrics": {
+      "followers": 62835
+    }
+  },
+  {
+    "id": "f98ef422-40f2-41c8-9c44-e85d58e1a0fc",
+    "name": "Gold Wallet",
+    "website": null,
+    "facebookUrl": null,
+    "services": [
+      "Buying, selling, and withdrawing 99.99% gold bars"
+    ],
+    "features": [
+      "Partners with multiple gold shops",
+      "Real-time gold prices from partnered gold shops",
+      "Allows users to withdraw physical gold bars"
+    ],
+    "pricing": "Real-time gold prices from partnered gold shops. Spread between buying and selling prices. Fees for withdrawals and other services may apply.",
+    "strengths": [
+      "Convenience and accessibility through the widely used Paotang app",
+      "Access to multiple gold shops, providing users with a variety of options",
+      "Allows users to withdraw physical gold bars, appealing to those who prefer to hold physical assets"
+    ],
+    "weaknesses": [
+      "Limited to gold bars; no diversification options",
+      "No advisory services or financial planning tools",
+      "Reliance on the Paotang app, which may not appeal to all investors"
+    ],
+    "specialty": "Accessible gold trading within a widely used app, backed by a trusted bank",
+    "targetAudience": [
+      "General public, particularly users of the Paotang app",
+      "Individuals looking for a convenient and accessible way to invest in gold bars",
+      "Those who prefer to hold physical gold"
+    ],
+    "brandTone": "Generally positive due to the Paotang app's association with government initiatives and Krungthai Bank's reputation",
+    "brandPerception": {
+      "positive": "Paotang app's association with government initiatives and Krungthai Bank's reputation",
+      "negative": "N/A"
+    },
+    "marketShare": "Growing market share due to the popularity of the Paotang app",
+    "complaints": [
+      "Issues with the app's functionality and occasional delays in withdrawals"
+    ],
+    "adThemes": [
+      "Convenience, accessibility, security, and the backing of Krungthai Bank"
+    ],
+    "seo": {
+      "domainAuthority": 0,
+      "backlinks": 0,
+      "organicTraffic": "N/A"
+    },
+    "websiteQuality": {
+      "uxScore": 0,
+      "loadingSpeed": "N/A",
+      "mobileResponsiveness": "N/A"
+    },
+    "usp": "Accessible gold trading within a widely used app, backed by a trusted bank",
+    "socialMetrics": {
+      "followers": 0
+    }
+  },
+  {
+    "id": "aa0edb40-515a-419c-b75c-850e117de462",
+    "name": "Finnomena",
+    "website": "https://www.finnomena.com",
+    "facebookUrl": "https://www.facebook.com/Finnomena/",
+    "services": [
+      "Investment advisory services",
+      "Access to a wide range of mutual funds, including gold funds",
+      "Robo-advisory platform for automated portfolio management",
+      "Financial education and investment insights"
+    ],
+    "features": [
+      "Personalized financial planning",
+      "Automated portfolio management"
+    ],
+    "pricing": "Management fees based on the total assets under management (AUM). Expense ratios for mutual funds. No commissions on trades.",
+    "strengths": [
+      "Financial planning and investment advisory services",
+      "Access to a wide range of investment products, including gold funds",
+      "Robo-advisory platform for automated portfolio management"
+    ],
+    "weaknesses": [
+      "Indirect gold exposure through mutual funds; does not offer direct gold trading",
+      "May not appeal to investors who want direct control over their gold investments",
+      "Fees may be higher than those of direct gold trading platforms"
+    ],
+    "specialty": "Investment advisory and financial planning for Thai investors, with a focus on diversification",
+    "targetAudience": [
+      "Thai investors seeking financial advice and diversified investment options",
+      "Tech-savvy individuals looking for a convenient and automated way to invest",
+      "Those who prefer a managed investment solution"
+    ],
+    "brandTone": "Positive brand image due to their focus on financial literacy and providing accessible investment solutions",
+    "brandPerception": {
+      "positive": "Focus on financial literacy and providing accessible investment solutions",
+      "negative": "N/A"
+    },
+    "marketShare": "Significant market share in the robo-advisory and mutual fund investment segment",
+    "complaints": [
+      "Issues with the platform's complexity and the performance of certain mutual funds"
+    ],
+    "adThemes": [
+      "Financial planning, investment expertise, security, and diversification"
+    ],
+    "seo": {
+      "domainAuthority": 45,
+      "backlinks": 4200,
+      "organicTraffic": 50200
+    },
+    "websiteQuality": {
+      "uxScore": 72,
+      "loadingSpeed": 3.5,
+      "mobileResponsiveness": "Yes"
+    },
+    "usp": "Investment advisory and financial planning for Thai investors, with a focus on diversification",
+    "socialMetrics": {
+      "followers": 385978
+    }
+  },
+  {
+    "id": "a4344345-93eb-4173-8825-6c8192d467b0",
+    "name": "Classic Ausiris",
+    "website": "https://www.ausiris.co.th/",
+    "facebookUrl": "https://www.facebook.com/AusirisTH/",
+    "services": [
+      "Gold investment advisory services",
+      "Gold trading platform",
+      "Gold futures trading"
+    ],
+    "features": [
+      "Market analysis and research"
+    ],
+    "pricing": "Commissions on gold trades. Fees for advisory services. Margin requirements for futures trading.",
+    "strengths": [
+      "Investment advisory services tailored to gold investments",
+      "Gold futures trading platform",
+      "Market analysis and research to support investment decisions"
+    ],
+    "weaknesses": [
+      "May not offer the same level of automation as robo-advisors",
+      "Focus primarily on gold, limiting diversification options",
+      "May require a higher level of investment knowledge"
+    ],
+    "specialty": "Gold investment expertise and advisory services",
+    "targetAudience": [
+      "Investors seeking financial advice on gold investments",
+      "Active gold traders",
+      "Individuals interested in gold futures trading"
+    ],
+    "brandTone": "Positive brand image due to their expertise and focus on gold investments",
+    "brandPerception": {
+      "positive": "Expertise and focus on gold investments",
+      "negative": "N/A"
+    },
+    "marketShare": "Significant market share in the gold investment advisory segment",
+    "complaints": [],
+    "adThemes": [
+      "Expertise in gold investments, market analysis, and potential for returns"
+    ],
+    "seo": {
+      "domainAuthority": 30,
+      "backlinks": 550,
+      "organicTraffic": 5800
+    },
+    "websiteQuality": {
+      "uxScore": 60,
+      "loadingSpeed": 4,
+      "mobileResponsiveness": "Yes"
+    },
+    "usp": "Gold investment expertise and advisory services",
+    "socialMetrics": {
+      "followers": 98832
+    }
+  },
+  {
+    "id": "074965cd-bba2-4565-a0ce-71a2d6014bca",
+    "name": "Jitta Wealth",
+    "website": "https://jitta.com/wealth",
+    "facebookUrl": "https://www.facebook.com/JittaWealth/",
+    "services": [
+      "Robo-advisor platform offering globally diversified ETF portfolios",
+      "Financial planning tools and investment insights"
+    ],
+    "features": [
+      "Utilizes Jitta Ranking, a proprietary stock analysis methodology, to select ETFs",
+      "Automated portfolio rebalancing"
+    ],
+    "pricing": "Management fees based on the total assets under management (AUM). No commissions on trades. ETF expense ratios.",
+    "strengths": [
+      "Globally diversified ETF portfolios",
+      "Proprietary Jitta Ranking methodology for ETF selection",
+      "Automated portfolio rebalancing"
+    ],
+    "weaknesses": [
+      "Does not offer direct gold exposure",
+      "May not appeal to investors seeking active trading strategies",
+      "Relatively new player in the Thai robo-advisory market"
+    ],
+    "specialty": "Data-driven robo-advisory platform for long-term, diversified ETF investing",
+    "targetAudience": [
+      "Tech-savvy investors seeking diversified ETF portfolios",
+      "Individuals looking for a long-term, passive investment strategy",
+      "Those who prefer a robo-advisory solution with a data-driven approach"
+    ],
+    "brandTone": "Positive brand image due to their focus on data-driven investing and transparency",
+    "brandPerception": {
+      "positive": "Focus on data-driven investing and transparency",
+      "negative": "N/A"
+    },
+    "marketShare": "Growing market share in the robo-advisory segment",
+    "complaints": [
+      "Issues with the platform's limited customization options"
+    ],
+    "adThemes": [
+      "Data-driven investing, diversification, long-term growth, and transparency"
+    ],
+    "seo": {
+      "domainAuthority": 50,
+      "backlinks": 6800,
+      "organicTraffic": 75500
+    },
+    "websiteQuality": {
+      "uxScore": 75,
+      "loadingSpeed": 3.2,
+      "mobileResponsiveness": "Yes"
+    },
+    "usp": "Data-driven robo-advisory platform for long-term, diversified ETF investing",
+    "socialMetrics": {
+      "followers": 138253
+    }
+  }
+]
