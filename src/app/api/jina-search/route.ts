@@ -94,6 +94,13 @@ function ensureAbsoluteUrl(url: string | null | undefined): string | null {
   }
   // Trim whitespace
   url = url.trim();
+  // Decode URI components like %20
+  try {
+    url = decodeURI(url);
+  } catch (e) {
+    // Log decoding error but proceed with the original URL if decoding fails
+    console.warn(`[ensureAbsoluteUrl] Failed to decode URL: ${url}`, e);
+  }
   // Check if it already has a protocol
   if (url.startsWith('http://') || url.startsWith('https://')) {
     return url;
