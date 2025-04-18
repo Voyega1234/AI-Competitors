@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
+import { PrismaClient } from '@/generated/prisma'; // Import Prisma Client from generated path
+
+// Initialize Prisma Client outside the handler
+const prisma = new PrismaClient();
 
 // Mark the route as dynamic
 export const dynamic = 'force-dynamic';
@@ -235,6 +239,28 @@ Present the findings as a comprehensive text report.
       const websiteQuality = comp.websiteQuality || { uxScore: null, loadingSpeed: null, mobileResponsiveness: null };
       const socialMetrics = comp.socialMetrics || { followers: null };
 
+      // Process targetAudience specifically to ensure it's a string
+      let finalTargetAudience: string;
+      if (typeof comp.targetAudience === 'string' && comp.targetAudience) {
+        finalTargetAudience = comp.targetAudience;
+      } else if (Array.isArray(comp.targetAudience)) {
+        // Join array elements, filtering out any empty/null values first
+        finalTargetAudience = (comp.targetAudience as string[]).filter(Boolean).join(', ') || 'N/A';
+      } else {
+        finalTargetAudience = 'N/A'; // Fallback for null, undefined, or other unexpected types
+      }
+
+      // Helper function to process potentially array string fields
+      const processStringOrArrayField = (fieldValue: string | string[] | null | undefined): string => {
+        if (typeof fieldValue === 'string' && fieldValue) {
+          return fieldValue;
+        } else if (Array.isArray(fieldValue)) {
+          return (fieldValue as string[]).filter(Boolean).join(', ') || 'N/A';
+        } else {
+          return 'N/A';
+        }
+      };
+
       return {
         id: uuidv4(), // Generate unique ID
         name: comp.name || 'Unknown Competitor',
@@ -243,32 +269,32 @@ Present the findings as a comprehensive text report.
         services: comp.services || [],
         serviceCategories: comp.serviceCategories || [],
         features: comp.features || [],
-        pricing: comp.pricing || 'N/A',
+        pricing: processStringOrArrayField(comp.pricing),
         strengths: comp.strengths || [],
         weaknesses: comp.weaknesses || [],
-        specialty: comp.specialty || 'N/A',
-        targetAudience: comp.targetAudience || 'N/A',
-        brandTone: comp.brandTone || 'N/A',
-        brandPerception: { // Ensure structure and non-null strings
-          positive: perception.positive || 'N/A',
-          negative: perception.negative || 'N/A'
+        specialty: processStringOrArrayField(comp.specialty),
+        targetAudience: finalTargetAudience,
+        brandTone: processStringOrArrayField(comp.brandTone),
+        brandPerception: {
+          positive: processStringOrArrayField(perception.positive),
+          negative: processStringOrArrayField(perception.negative)
         },
-        marketShare: comp.marketShare || 'N/A',
+        marketShare: processStringOrArrayField(comp.marketShare),
         complaints: comp.complaints || [],
         adThemes: comp.adThemes || [],
         seo: { 
-          domainAuthority: seo.domainAuthority ?? 0, 
-          backlinks: seo.backlinks ?? 0, 
-          organicTraffic: seo.organicTraffic || 'N/A' 
+          domainAuthority: parseInt(String(seo.domainAuthority ?? '0'), 10) || 0, 
+          backlinks: parseInt(String(seo.backlinks ?? '0'), 10) || 0, 
+          organicTraffic: String(seo.organicTraffic ?? 'N/A') 
         },
         websiteQuality: { 
-          uxScore: websiteQuality.uxScore ?? 0, 
-          loadingSpeed: websiteQuality.loadingSpeed || 'N/A', 
-          mobileResponsiveness: websiteQuality.mobileResponsiveness || 'N/A' 
+          uxScore: parseInt(String(websiteQuality.uxScore ?? '0'), 10) || 0, 
+          loadingSpeed: processStringOrArrayField(websiteQuality.loadingSpeed),
+          mobileResponsiveness: processStringOrArrayField(websiteQuality.mobileResponsiveness)
         },
-        usp: comp.usp || 'N/A',
+        usp: processStringOrArrayField(comp.usp),
         socialMetrics: { 
-          followers: socialMetrics.followers ?? 0, 
+          followers: parseInt(String(socialMetrics.followers ?? '0'), 10) || 0, 
         }
       };
     }).filter(comp => comp.name !== 'Unknown Competitor'); // Filter out fundamentally broken entries
@@ -281,16 +307,66 @@ Present the findings as a comprehensive text report.
       competitors: processedCompetitors
     };
 
-    // --- Save the combined result to a JSON file ---
+    // --- Save the combined result to the Database ---
     try {
-      const filePath = path.join(process.cwd(), 'public', 'jina-analysis-result.json');
-      // Save the finalResult object (input + competitors)
-      fs.writeFileSync(filePath, JSON.stringify(finalResult, null, 2));
-      console.log(`[jina-search] Successfully saved analysis results (including input) to ${filePath}`);
-    } catch (writeError: any) {
-      console.error('[jina-search] Failed to save analysis result to file:', writeError);
+      // Create the AnalysisRun record and connect the Competitor records
+      const savedAnalysis = await prisma.analysisRun.create({
+        data: {
+          // Map fields from analysisInput
+          clientName: analysisInput.clientName,
+          clientWebsiteUrl: analysisInput.clientWebsiteUrl,
+          clientFacebookUrl: analysisInput.clientFacebookUrl,
+          market: analysisInput.market,
+          productFocus: analysisInput.productFocus,
+          additionalInfo: analysisInput.additionalInfo,
+          timestamp: new Date(analysisInput.timestamp), // Ensure it's a Date object
+          // Create nested competitors using the correct relation field name
+          Competitor: { // Use uppercase 'C' as defined in schema
+            create: processedCompetitors.map(comp => ({
+              // Map fields from FinalCompetitor to the Competitor model
+              id: comp.id, // Use the pre-generated UUID
+              name: comp.name,
+              website: comp.website,
+              facebookUrl: comp.facebookUrl,
+              services: comp.services,
+              serviceCategories: comp.serviceCategories,
+              features: comp.features,
+              pricing: comp.pricing,
+              strengths: comp.strengths,
+              weaknesses: comp.weaknesses,
+              specialty: comp.specialty,
+              targetAudience: comp.targetAudience,
+              brandTone: comp.brandTone,
+              positivePerception: comp.brandPerception.positive, // Flattened
+              negativePerception: comp.brandPerception.negative, // Flattened
+              marketShare: comp.marketShare,
+              complaints: comp.complaints,
+              adThemes: comp.adThemes,
+              domainAuthority: comp.seo.domainAuthority, 
+              backlinks: comp.seo.backlinks,             
+              organicTraffic: comp.seo.organicTraffic,     
+              uxScore: comp.websiteQuality.uxScore,         
+              loadingSpeed: comp.websiteQuality.loadingSpeed, 
+              mobileResponsiveness: comp.websiteQuality.mobileResponsiveness, 
+              usp: comp.usp,
+              followers: comp.socialMetrics.followers       
+            }))
+          }
+        },
+        // Include the created competitors in the response (optional, but good for confirmation)
+        include: {
+          Competitor: true, // Use uppercase 'C' as defined in schema
+        },
+      });
+      console.log(`[jina-search] Successfully saved analysis results (ID: ${savedAnalysis.id}) to database.`);
+
+    } catch (dbError: any) {
+      console.error('[jina-search] Failed to save analysis result to database:', dbError);
+      // Optionally, you could decide if a DB error should fail the whole request
+      // For now, we log it but still return success to the user if Jina/Gemini worked
+      // return NextResponse.json({ success: false, error: 'Failed to save analysis results.' }, { status: 500 });
     }
-    // --- End file saving ---
+    // --- End database saving ---
 
     return NextResponse.json({ 
       success: true,
