@@ -261,13 +261,25 @@ Present the findings as a comprehensive text report.
         }
       };
 
+      // --- Post-process Service Categories ---
+      let cleanedServiceCategories: string[] = [];
+      if (comp.serviceCategories && Array.isArray(comp.serviceCategories)) {
+        const normalizedCategories = comp.serviceCategories
+          .map(category => typeof category === 'string' ? category.trim().toLowerCase() : null) // Trim, lowercase, handle non-strings
+          .filter((category): category is string => category !== null && category !== ''); // Filter out nulls/empty strings
+        
+        // Remove duplicates using a Set
+        cleanedServiceCategories = Array.from(new Set(normalizedCategories));
+      }
+      // --- End Post-processing ---
+
       return {
         id: uuidv4(), // Generate unique ID
         name: comp.name || 'Unknown Competitor',
         website: ensureAbsoluteUrl(comp.website),
         facebookUrl: ensureAbsoluteUrl(comp.facebookUrl),
         services: comp.services || [],
-        serviceCategories: comp.serviceCategories || [],
+        serviceCategories: cleanedServiceCategories,
         features: comp.features || [],
         pricing: processStringOrArrayField(comp.pricing),
         strengths: comp.strengths || [],
@@ -299,7 +311,7 @@ Present the findings as a comprehensive text report.
       };
     }).filter(comp => comp.name !== 'Unknown Competitor'); // Filter out fundamentally broken entries
 
-    console.log(`[jina-search] Processed ${processedCompetitors.length} competitors via Gemini.`);
+    console.log(`[jina-search] Processed ${processedCompetitors.length} competitors via Gemini (with category cleaning).`);
 
     // --- Create the final result object including input ---
     const finalResult: AnalysisResult = {

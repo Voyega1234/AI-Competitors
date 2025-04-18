@@ -45,8 +45,9 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Label } from "@/components/ui/label"
+import { cn } from "@/lib/utils"
 
 export type Competitor = {
   id: string
@@ -122,6 +123,10 @@ export function CompetitorTable({ initialCompetitors }: CompetitorTableProps) {
   const [isLoadingTable, setIsLoadingTable] = useState<boolean>(false)
   const [tableError, setTableError] = useState<string | null>(null)
 
+  // --- State for Service Category Filtering ---
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null);
+
   useEffect(() => {
     const fetchClientNames = async () => {
       try {
@@ -161,6 +166,31 @@ export function CompetitorTable({ initialCompetitors }: CompetitorTableProps) {
 
     fetchProductFocuses()
   }, [selectedClientName])
+
+  useEffect(() => {
+    if (!competitors || competitors.length === 0) {
+      setAvailableCategories([]);
+      return;
+    }
+
+    const allCategories = new Set<string>();
+    competitors.forEach(competitor => {
+      if (competitor.services && Array.isArray(competitor.services)) {
+          competitor.services.forEach(service => {
+            if (service) {
+                 allCategories.add(service.trim().toLowerCase());
+            }
+          });
+      }
+    });
+
+    const sortedCategories = Array.from(allCategories).sort();
+    setAvailableCategories(sortedCategories);
+
+    // Reset category filter when main competitor list changes
+    setSelectedCategoryFilter(null);
+
+  }, [competitors]); // Re-run whenever the main competitor list changes
 
   const handleSearch = async () => {
     if (!selectedClientName || !selectedProductFocus) {
@@ -270,6 +300,18 @@ export function CompetitorTable({ initialCompetitors }: CompetitorTableProps) {
   const handleCancel = () => {
     setEditingCell(null)
   }
+
+  // --- Create Filtered Competitor List ---
+  const filteredCompetitors = useMemo(() => {
+    if (!selectedCategoryFilter) {
+      return competitors; // No filter applied
+    }
+    return competitors.filter(competitor =>
+      competitor.services?.some(service => 
+          service.trim().toLowerCase() === selectedCategoryFilter
+      )
+    );
+  }, [competitors, selectedCategoryFilter]); // Recalculate when these change
 
   const columns: ColumnDef<Competitor>[] = [
     {
@@ -1605,7 +1647,7 @@ export function CompetitorTable({ initialCompetitors }: CompetitorTableProps) {
   ]
 
   const table = useReactTable({
-    data: competitors,
+    data: filteredCompetitors,
     columns,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
@@ -1708,7 +1750,29 @@ export function CompetitorTable({ initialCompetitors }: CompetitorTableProps) {
         </div>
       </div>
 
-      <div className="rounded-md border">
+      <div className="flex flex-wrap gap-2 py-4 border-t border-b">
+        <Button
+          variant={selectedCategoryFilter === null ? "secondary" : "outline"}
+          size="sm"
+          className="h-8"
+          onClick={() => setSelectedCategoryFilter(null)}
+         >
+           All Competitors
+         </Button>
+        {availableCategories.map(category => (
+           <Button
+              key={category}
+              variant={selectedCategoryFilter === category ? "secondary" : "outline"}
+              size="sm"
+              className="h-8"
+              onClick={() => setSelectedCategoryFilter(category)}
+            >
+              {category}
+            </Button>
+        ))}
+      </div>
+
+      <div className="rounded-md border mt-4">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -1750,7 +1814,10 @@ export function CompetitorTable({ initialCompetitors }: CompetitorTableProps) {
             ) : (
               <TableRow>
                 <TableCell colSpan={columns.length} className="h-24 text-center">
-                  No results found for the selected analysis.
+                  {selectedCategoryFilter 
+                      ? `No competitors found for category: ${selectedCategoryFilter}`
+                      : "No results found for the selected analysis."
+                  }
                 </TableCell>
               </TableRow>
             )}
