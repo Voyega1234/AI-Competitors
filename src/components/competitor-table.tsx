@@ -44,12 +44,18 @@ import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useState, useEffect } from "react"
+import { Label } from "@/components/ui/label"
 
 export type Competitor = {
   id: string
+  analysisRunId: string
   name: string
   website: string | null
+  facebookUrl: string | null
   services: string[]
+  serviceCategories: string[]
   features: string[]
   pricing: string
   strengths: string[]
@@ -57,52 +63,47 @@ export type Competitor = {
   specialty: string
   targetAudience: string
   brandTone: string
-  brandPerception: {
-    positive: string
-    negative: string
-  }
+  positivePerception: string
+  negativePerception: string
   marketShare: string
   complaints: string[]
   adThemes: string[]
-  seo: {
-    domainAuthority: number
-    backlinks: number
-    organicTraffic: string
-  }
-  websiteQuality: {
-    uxScore: number
-    loadingSpeed: string
-    mobileResponsiveness: string
-  }
+  domainAuthority: number
+  backlinks: number
+  organicTraffic: string
+  uxScore: number
+  loadingSpeed: string
+  mobileResponsiveness: string
   usp: string
-  socialMetrics: {
-    followers: number
-  }
-  facebookUrl: string | null
+  followers: number
 }
 
-// Define props for the component
 interface CompetitorTableProps {
-  initialCompetitors: Competitor[]; // Fetched data from parent
-  isLoading: boolean;
-  error: string | null;
+  initialCompetitors: Competitor[];
 }
 
-export function CompetitorTable({ initialCompetitors, isLoading, error }: CompetitorTableProps) {
+export function CompetitorTable({ initialCompetitors }: CompetitorTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({
+    positivePerception: false,
+    negativePerception: false,
+    domainAuthority: false,
+    backlinks: false,
+    organicTraffic: false,
+    uxScore: false,
+    loadingSpeed: false,
+    mobileResponsiveness: false,
+    usp: false,
+    serviceCategories: false,
     strengths: false,
     weaknesses: false,
     specialty: false,
     targetAudience: false,
     brandTone: false,
-    brandPerception: false,
     marketShare: false,
     complaints: false,
     adThemes: false,
-    seo: false,
-    websiteQuality: false,
   })
   const [rowSelection, setRowSelection] = React.useState({})
   const [editingCell, setEditingCell] = React.useState<{
@@ -110,44 +111,152 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
     column: string
     value: any
   } | null>(null)
+
   const [competitors, setCompetitors] = React.useState<Competitor[]>(initialCompetitors)
 
-  // Function to handle editing a cell
+  const [clientNames, setClientNames] = useState<string[]>([])
+  const [productFocuses, setProductFocuses] = useState<string[]>([])
+  const [selectedClientName, setSelectedClientName] = useState<string | null>(null)
+  const [selectedProductFocus, setSelectedProductFocus] = useState<string | null>(null)
+
+  const [isLoadingTable, setIsLoadingTable] = useState<boolean>(false)
+  const [tableError, setTableError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchClientNames = async () => {
+      try {
+        const response = await fetch('/api/clients')
+        if (!response.ok) throw new Error('Failed to fetch client names')
+        const data = await response.json()
+        setClientNames(data.clients || [])
+      } catch (error) {
+        console.error("Error fetching client names:", error)
+        setTableError("Could not load client list.")
+      }
+    }
+    fetchClientNames()
+  }, [])
+
+  useEffect(() => {
+    if (!selectedClientName) {
+      setProductFocuses([])
+      setSelectedProductFocus(null)
+      return
+    }
+
+    const fetchProductFocuses = async () => {
+      try {
+        const response = await fetch(`/api/products?clientName=${encodeURIComponent(selectedClientName)}`)
+        if (!response.ok) throw new Error('Failed to fetch product focuses')
+        const data = await response.json()
+        setProductFocuses(data.products || [])
+        setSelectedProductFocus(null)
+      } catch (error) {
+        console.error("Error fetching product focuses:", error)
+        setTableError(`Could not load products for ${selectedClientName}.`)
+        setProductFocuses([])
+        setSelectedProductFocus(null)
+      }
+    }
+
+    fetchProductFocuses()
+  }, [selectedClientName])
+
+  const handleSearch = async () => {
+    if (!selectedClientName || !selectedProductFocus) {
+      setTableError("Please select both a client and a product focus.")
+      return
+    }
+
+    setIsLoadingTable(true)
+    setTableError(null)
+    setCompetitors([])
+
+    try {
+      const productFocusForQuery = selectedProductFocus === 'placeholder-for-empty' ? null : selectedProductFocus
+
+      const queryParams = new URLSearchParams({
+        clientName: selectedClientName,
+      })
+      if (productFocusForQuery !== null) {
+        queryParams.set('productFocus', productFocusForQuery)
+      }
+
+      const runResponse = await fetch(`/api/analysis-run?${queryParams.toString()}`)
+
+      if (!runResponse.ok) {
+        if (runResponse.status === 404) {
+          throw new Error(`No analysis run found for ${selectedClientName} - ${productFocusForQuery ?? 'N/A'}.`)
+        } else {
+          throw new Error('Failed to find analysis run')
+        }
+      }
+      const runData = await runResponse.json()
+      const runId = runData.id
+
+      if (!runId) {
+        throw new Error(`Analysis run ID missing for ${selectedClientName} - ${productFocusForQuery ?? 'N/A'}.`)
+      }
+
+      const competitorsResponse = await fetch(`/api/competitors?runId=${runId}`)
+      if (!competitorsResponse.ok) {
+        throw new Error(`Failed to fetch competitors for run ${runId}`)
+      }
+      const competitorsData = await competitorsResponse.json()
+      setCompetitors(competitorsData.competitors || [])
+
+    } catch (error) {
+      console.error("Error during search:", error)
+      setTableError(error instanceof Error ? error.message : 'An unknown error occurred during search')
+      setCompetitors([])
+    } finally {
+      setIsLoadingTable(false)
+    }
+  }
+
   const handleEdit = (id: string, column: string, value: any) => {
     setEditingCell({ id, column, value })
   }
 
-  // Function to save edited cell
   const handleSave = () => {
     if (!editingCell) return
 
     const { id, column, value } = editingCell
+
+    // Define keys that are expected to be string arrays
+    const arrayKeys: (keyof Competitor)[] = [
+        'services', 'serviceCategories', 'features', 'strengths', 
+        'weaknesses', 'complaints', 'adThemes'
+    ];
+
     const updatedCompetitors = competitors.map((competitor) => {
       if (competitor.id === id) {
-        // Handle nested properties
-        if (column.includes(".")) {
-          const [parent, child] = column.split(".")
-          const parentValue = competitor[parent as keyof Competitor]
-          return {
-            ...competitor,
-            [parent]: {
-              ...(typeof parentValue === 'object' && parentValue !== null ? parentValue : {}),
-              [child]: value,
-            },
-          }
+        // Get the original value type for comparison
+        const originalValue = competitor[column as keyof Competitor];
+
+        // Specific handling for array types
+        if (arrayKeys.includes(column as keyof Competitor)) {
+             // Ensure value is treated as a string before splitting, handle potential null/undefined from input
+            const stringValue = typeof value === 'string' ? value : String(value ?? '');
+            return {
+                 ...competitor,
+                [column]: stringValue.split(",").map((item) => item.trim()).filter(item => item !== ''), // Split and remove empty strings
+            }
         }
-        // Handle array properties
-        else if (Array.isArray(competitor[column as keyof Competitor])) {
-          return {
-            ...competitor,
-            [column]: typeof value === "string" ? value.split(",").map((item) => item.trim()) : value,
-          }
+        // Handle number properties that might come from input fields
+        else if (typeof originalValue === 'number') {
+           const numValue = Number(value); // Attempt conversion
+           return {
+               ...competitor,
+               // Use converted number if valid, otherwise revert to original value to prevent saving NaN
+               [column]: !isNaN(numValue) ? numValue : originalValue
+           }
         }
-        // Handle regular properties
+        // Handle other properties (string, boolean, null)
         else {
           return {
             ...competitor,
-            [column]: value,
+            [column]: value, // Assign directly
           }
         }
       }
@@ -158,15 +267,13 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
     setEditingCell(null)
   }
 
-  // Function to cancel editing
   const handleCancel = () => {
     setEditingCell(null)
   }
 
-  // Define columns with edit functionality
   const columns: ColumnDef<Competitor>[] = [
-      {
-        accessorKey: "name",
+    {
+      accessorKey: "name",
       header: "Competitor",
       cell: ({ row }) => {
         const value = row.getValue("name") as string
@@ -175,39 +282,39 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
         if (editingCell && editingCell.id === id && editingCell.column === "name") {
           return (
             <div className="flex items-center gap-2">
-                  <Input
+              <Input
                 value={editingCell.value}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-8 w-[180px]"
               />
               <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                    <Save className="h-4 w-4" />
-                  </Button>
+                <Save className="h-4 w-4" />
+              </Button>
               <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                    <X className="h-4 w-4" />
-                  </Button>
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           )
         }
 
         return (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 group">
             <span className="font-medium">{value}</span>
-                  <Button
-                    variant="ghost"
+            <Button
+              variant="ghost"
               size="icon"
               onClick={() => handleEdit(id, "name", value)}
               className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                  >
+            >
               <Edit className="h-3 w-3" />
-                  </Button>
-            </div>
-          )
-        },
+            </Button>
+          </div>
+        )
       },
-      {
-        accessorKey: "website",
-        header: "Website",
+    },
+    {
+      accessorKey: "website",
+      header: "Website",
       cell: ({ row }) => {
         const value = row.getValue("website") as string
         const id = row.original.id
@@ -215,23 +322,23 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
         if (editingCell && editingCell.id === id && editingCell.column === "website") {
           return (
             <div className="flex items-center gap-2">
-                  <Input
+              <Input
                 value={editingCell.value}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-8 w-[180px]"
               />
               <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                    <Save className="h-4 w-4" />
-                  </Button>
+                <Save className="h-4 w-4" />
+              </Button>
               <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                    <X className="h-4 w-4" />
-                  </Button>
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           )
         }
 
         return (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 group">
             <a
               href={value ? value : undefined}
               target="_blank"
@@ -240,21 +347,21 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
             >
               Visit <ExternalLink className="ml-1 h-3 w-3" />
             </a>
-                  <Button
-                    variant="ghost"
+            <Button
+              variant="ghost"
               size="icon"
               onClick={() => handleEdit(id, "website", value)}
               className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                  >
+            >
               <Edit className="h-3 w-3" />
-                  </Button>
-            </div>
-          )
-        },
+            </Button>
+          </div>
+        )
       },
-      {
-        accessorKey: "services",
-        header: "Services",
+    },
+    {
+      accessorKey: "services",
+      header: "Services",
       cell: ({ row }) => {
         const services = row.getValue("services") as string[]
         const id = row.original.id
@@ -262,25 +369,25 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
         if (editingCell && editingCell.id === id && editingCell.column === "services") {
           return (
             <div className="flex items-center gap-2">
-                  <Textarea
-                value={Array.isArray(editingCell.value) ? editingCell.value.join(", ") : editingCell.value}
+              <Textarea
+                value={Array.isArray(editingCell.value) ? editingCell.value.join(", ") : String(editingCell.value)}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-20 w-[200px] text-xs"
               />
               <div className="flex flex-col gap-1">
                 <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                    <Save className="h-4 w-4" />
-                  </Button>
+                  <Save className="h-4 w-4" />
+                </Button>
                 <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                    <X className="h-4 w-4" />
-                  </Button>
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           )
         }
 
         return (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 group">
             <div className="flex flex-wrap gap-1 max-w-[200px]">
               {services.slice(0, 3).map((service, i) => (
                 <Badge key={i} variant="outline" className="text-xs">
@@ -288,46 +395,46 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
                 </Badge>
               ))}
               {services.length > 3 && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
                       <Badge variant="outline" className="text-xs cursor-help">
                         +{services.length - 3} more
                       </Badge>
-                      </TooltipTrigger>
+                    </TooltipTrigger>
                     <TooltipContent className="w-[200px]">
                       <ul className="list-disc pl-4 text-xs">
                         {services.slice(3).map((service, i) => (
                           <li key={i}>{service}</li>
-                          ))}
-                        </ul>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                        ))}
+                      </ul>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
             </div>
-                  <Button
-                    variant="ghost"
+            <Button
+              variant="ghost"
               size="icon"
               onClick={() => handleEdit(id, "services", services)}
               className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                  >
+            >
               <Edit className="h-3 w-3" />
-                  </Button>
-            </div>
-          )
-        },
-      },
-      {
-        accessorKey: "pricing",
-        header: ({ column }) => {
-          return (
-          <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
-              Pricing
-              <ArrowUpDown className="ml-2 h-4 w-4" />
             </Button>
-          )
-        },
+          </div>
+        )
+      },
+    },
+    {
+      accessorKey: "pricing",
+      header: ({ column }) => {
+        return (
+          <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
+            Pricing
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        )
+      },
       cell: ({ row }) => {
         const value = row.getValue("pricing") as string
         const id = row.original.id
@@ -335,39 +442,39 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
         if (editingCell && editingCell.id === id && editingCell.column === "pricing") {
           return (
             <div className="flex items-center gap-2">
-                  <Input
+              <Input
                 value={editingCell.value}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-8 w-[120px]"
               />
               <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                    <Save className="h-4 w-4" />
-                  </Button>
+                <Save className="h-4 w-4" />
+              </Button>
               <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                    <X className="h-4 w-4" />
-                  </Button>
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           )
         }
 
         return (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 group">
             <span>{value}</span>
-                  <Button
-                    variant="ghost"
+            <Button
+              variant="ghost"
               size="icon"
               onClick={() => handleEdit(id, "pricing", value)}
               className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                  >
+            >
               <Edit className="h-3 w-3" />
-                  </Button>
-            </div>
-          )
-        },
+            </Button>
+          </div>
+        )
       },
-      {
-        accessorKey: "strengths",
-        header: "Strengths",
+    },
+    {
+      accessorKey: "strengths",
+      header: "Strengths",
       cell: ({ row }) => {
         const strengths = row.getValue("strengths") as string[]
         const id = row.original.id
@@ -375,25 +482,25 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
         if (editingCell && editingCell.id === id && editingCell.column === "strengths") {
           return (
             <div className="flex items-center gap-2">
-                  <Textarea
-                value={Array.isArray(editingCell.value) ? editingCell.value.join(", ") : editingCell.value}
+              <Textarea
+                value={Array.isArray(editingCell.value) ? editingCell.value.join(", ") : String(editingCell.value)}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-20 w-[200px] text-xs"
               />
               <div className="flex flex-col gap-1">
                 <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                    <Save className="h-4 w-4" />
-                  </Button>
+                  <Save className="h-4 w-4" />
+                </Button>
                 <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                    <X className="h-4 w-4" />
-                  </Button>
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           )
         }
 
         return (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 group">
             <ul className="list-disc pl-4 text-xs max-w-[200px]">
               {strengths.slice(0, 3).map((strength, i) => (
                 <li key={i}>{strength}</li>
@@ -417,21 +524,21 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
                 </li>
               )}
             </ul>
-                  <Button
-                    variant="ghost"
+            <Button
+              variant="ghost"
               size="icon"
               onClick={() => handleEdit(id, "strengths", strengths)}
               className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                  >
+            >
               <Edit className="h-3 w-3" />
-                  </Button>
-            </div>
-          )
-        },
+            </Button>
+          </div>
+        )
       },
-      {
-        accessorKey: "weaknesses",
-        header: "Weaknesses",
+    },
+    {
+      accessorKey: "weaknesses",
+      header: "Weaknesses",
       cell: ({ row }) => {
         const weaknesses = row.getValue("weaknesses") as string[]
         const id = row.original.id
@@ -439,25 +546,25 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
         if (editingCell && editingCell.id === id && editingCell.column === "weaknesses") {
           return (
             <div className="flex items-center gap-2">
-                  <Textarea
-                value={Array.isArray(editingCell.value) ? editingCell.value.join(", ") : editingCell.value}
+              <Textarea
+                value={Array.isArray(editingCell.value) ? editingCell.value.join(", ") : String(editingCell.value)}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-20 w-[200px] text-xs"
               />
               <div className="flex flex-col gap-1">
                 <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                    <Save className="h-4 w-4" />
-                  </Button>
+                  <Save className="h-4 w-4" />
+                </Button>
                 <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                    <X className="h-4 w-4" />
-                  </Button>
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           )
         }
 
         return (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 group">
             <ul className="list-disc pl-4 text-xs max-w-[200px]">
               {weaknesses.slice(0, 3).map((weakness, i) => (
                 <li key={i}>{weakness}</li>
@@ -481,21 +588,21 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
                 </li>
               )}
             </ul>
-                  <Button
-                    variant="ghost"
+            <Button
+              variant="ghost"
               size="icon"
               onClick={() => handleEdit(id, "weaknesses", weaknesses)}
               className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                  >
+            >
               <Edit className="h-3 w-3" />
-                  </Button>
-            </div>
-          )
-        },
+            </Button>
+          </div>
+        )
       },
-      {
-        accessorKey: "specialty",
-        header: "Specialty",
+    },
+    {
+      accessorKey: "specialty",
+      header: "Specialty",
       cell: ({ row }) => {
         const value = row.getValue("specialty") as string
         const id = row.original.id
@@ -503,133 +610,7 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
         if (editingCell && editingCell.id === id && editingCell.column === "specialty") {
           return (
             <div className="flex items-center gap-2">
-                  <Textarea
-                value={editingCell.value}
-                onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
-                className="h-20 w-[200px] text-xs"
-              />
-              <div className="flex flex-col gap-1">
-                <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                    <Save className="h-4 w-4" />
-                  </Button>
-                <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                    <X className="h-4 w-4" />
-                  </Button>
-              </div>
-            </div>
-          )
-        }
-
-        return (
-          <div className="flex items-center gap-2">
-            <div className="max-w-[200px] text-sm">{value}</div>
-                  <Button
-                    variant="ghost"
-              size="icon"
-              onClick={() => handleEdit(id, "specialty", value)}
-              className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                  >
-              <Edit className="h-3 w-3" />
-                  </Button>
-            </div>
-          )
-        },
-      },
-      {
-        accessorKey: "targetAudience",
-        header: "Target Audience",
-      cell: ({ row }) => {
-        const value = row.getValue("targetAudience") as string
-        const id = row.original.id
-
-        if (editingCell && editingCell.id === id && editingCell.column === "targetAudience") {
-          return (
-            <div className="flex items-center gap-2">
-                  <Textarea
-                value={editingCell.value}
-                onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
-                className="h-20 w-[200px] text-xs"
-              />
-              <div className="flex flex-col gap-1">
-                <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                    <Save className="h-4 w-4" />
-                  </Button>
-                <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                    <X className="h-4 w-4" />
-                  </Button>
-              </div>
-            </div>
-          )
-        }
-
-        return (
-          <div className="flex items-center gap-2">
-            <div className="max-w-[200px] text-sm">{value}</div>
-                  <Button
-                    variant="ghost"
-              size="icon"
-              onClick={() => handleEdit(id, "targetAudience", value)}
-              className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                  >
-              <Edit className="h-3 w-3" />
-                  </Button>
-            </div>
-          )
-        },
-      },
-      {
-        accessorKey: "brandTone",
-        header: "Brand Tone",
-      cell: ({ row }) => {
-        const value = row.getValue("brandTone") as string
-        const id = row.original.id
-
-        if (editingCell && editingCell.id === id && editingCell.column === "brandTone") {
-          return (
-            <div className="flex items-center gap-2">
-                  <Textarea
-                value={editingCell.value}
-                onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
-                className="h-20 w-[200px] text-xs"
-              />
-              <div className="flex flex-col gap-1">
-                <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                    <Save className="h-4 w-4" />
-                  </Button>
-                <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                    <X className="h-4 w-4" />
-                  </Button>
-              </div>
-            </div>
-          )
-        }
-
-        return (
-          <div className="flex items-center gap-2">
-            <div className="max-w-[200px] text-sm">{value}</div>
-                  <Button
-                    variant="ghost"
-              size="icon"
-              onClick={() => handleEdit(id, "brandTone", value)}
-              className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                  >
-              <Edit className="h-3 w-3" />
-                  </Button>
-            </div>
-          )
-        },
-      },
-      {
-        accessorKey: "brandPerception",
-        header: "Brand Perception",
-      cell: ({ row }) => {
-        const perception = row.getValue("brandPerception") as { positive: string; negative: string }
-        const id = row.original.id
-
-        if (editingCell && editingCell.id === id && editingCell.column === "brandPerception.positive") {
-          return (
-            <div className="flex items-center gap-2">
-                  <Textarea
+              <Textarea
                 value={editingCell.value}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-20 w-[200px] text-xs"
@@ -646,7 +627,29 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
           )
         }
 
-        if (editingCell && editingCell.id === id && editingCell.column === "brandPerception.negative") {
+        return (
+          <div className="flex items-center gap-2 group">
+            <div className="max-w-[200px] text-sm">{value}</div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => handleEdit(id, "specialty", value)}
+              className="h-6 w-6 opacity-0 group-hover:opacity-100"
+            >
+              <Edit className="h-3 w-3" />
+            </Button>
+          </div>
+        )
+      },
+    },
+    {
+      accessorKey: "targetAudience",
+      header: "Target Audience",
+      cell: ({ row }) => {
+        const value = row.getValue("targetAudience") as string
+        const id = row.original.id
+
+        if (editingCell && editingCell.id === id && editingCell.column === "targetAudience") {
           return (
             <div className="flex items-center gap-2">
               <Textarea
@@ -656,50 +659,158 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
               />
               <div className="flex flex-col gap-1">
                 <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                    <Save className="h-4 w-4" />
-                  </Button>
+                  <Save className="h-4 w-4" />
+                </Button>
                 <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                    <X className="h-4 w-4" />
-                  </Button>
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           )
         }
 
         return (
-          <div className="grid gap-2">
-                    <div className="flex items-center gap-2">
-              <div className="text-xs font-medium text-green-600">Positive:</div>
-                      <Button
-                        variant="ghost"
-                size="icon"
-                onClick={() => handleEdit(id, "brandPerception.positive", perception.positive)}
-                className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                      >
-                <Edit className="h-3 w-3" />
-                      </Button>
-                    </div>
-            <div className="text-xs max-w-[200px]">{perception.positive}</div>
+          <div className="flex items-center gap-2 group">
+            <div className="max-w-[200px] text-sm">{value}</div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => handleEdit(id, "targetAudience", value)}
+              className="h-6 w-6 opacity-0 group-hover:opacity-100"
+            >
+              <Edit className="h-3 w-3" />
+            </Button>
+          </div>
+        )
+      },
+    },
+    {
+      accessorKey: "brandTone",
+      header: "Brand Tone",
+      cell: ({ row }) => {
+        const value = row.getValue("brandTone") as string
+        const id = row.original.id
 
-                    <div className="flex items-center gap-2">
-              <div className="text-xs font-medium text-red-600">Negative:</div>
-                      <Button
-                        variant="ghost"
-                size="icon"
-                onClick={() => handleEdit(id, "brandPerception.negative", perception.negative)}
-                className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                      >
-                <Edit className="h-3 w-3" />
-                      </Button>
-                    </div>
-            <div className="text-xs max-w-[200px]">{perception.negative}</div>
+        if (editingCell && editingCell.id === id && editingCell.column === "brandTone") {
+          return (
+            <div className="flex items-center gap-2">
+              <Textarea
+                value={editingCell.value}
+                onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
+                className="h-20 w-[200px] text-xs"
+              />
+              <div className="flex flex-col gap-1">
+                <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
+                  <Save className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           )
-        },
+        }
+
+        return (
+          <div className="flex items-center gap-2 group">
+            <div className="max-w-[200px] text-sm">{value}</div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => handleEdit(id, "brandTone", value)}
+              className="h-6 w-6 opacity-0 group-hover:opacity-100"
+            >
+              <Edit className="h-3 w-3" />
+            </Button>
+          </div>
+        )
       },
-      {
-        accessorKey: "marketShare",
-        header: "Market Share",
+    },
+    {
+      accessorKey: "positivePerception",
+      header: "Positive Perception",
+      cell: ({ row }) => {
+        const value = row.getValue("positivePerception") as string
+        const id = row.original.id
+
+        if (editingCell && editingCell.id === id && editingCell.column === "positivePerception") {
+          return (
+            <div className="flex items-center gap-2">
+              <Textarea
+                value={editingCell.value}
+                onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
+                className="h-20 w-[200px] text-xs"
+              />
+              <div className="flex flex-col gap-1">
+                <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
+                  <Save className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )
+        }
+        return (
+          <div className="flex items-start gap-2 group">
+            <div className="text-xs max-w-[200px]">{value}</div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => handleEdit(id, "positivePerception", value)}
+              className="h-6 w-6 opacity-0 group-hover:opacity-100 flex-shrink-0"
+            >
+              <Edit className="h-3 w-3" />
+            </Button>
+          </div>
+        )
+      },
+    },
+    {
+      accessorKey: "negativePerception",
+      header: "Negative Perception",
+      cell: ({ row }) => {
+        const value = row.getValue("negativePerception") as string
+        const id = row.original.id
+
+        if (editingCell && editingCell.id === id && editingCell.column === "negativePerception") {
+          return (
+            <div className="flex items-center gap-2">
+              <Textarea
+                value={editingCell.value}
+                onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
+                className="h-20 w-[200px] text-xs"
+              />
+              <div className="flex flex-col gap-1">
+                <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
+                  <Save className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )
+        }
+        return (
+          <div className="flex items-start gap-2 group">
+            <div className="text-xs max-w-[200px]">{value}</div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => handleEdit(id, "negativePerception", value)}
+              className="h-6 w-6 opacity-0 group-hover:opacity-100 flex-shrink-0"
+            >
+              <Edit className="h-3 w-3" />
+            </Button>
+          </div>
+        )
+      },
+    },
+    {
+      accessorKey: "marketShare",
+      header: "Market Share",
       cell: ({ row }) => {
         const value = row.getValue("marketShare") as string
         const id = row.original.id
@@ -707,38 +818,38 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
         if (editingCell && editingCell.id === id && editingCell.column === "marketShare") {
           return (
             <div className="flex items-center gap-2">
-                  <Input
+              <Input
                 value={editingCell.value}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-8 w-[120px]"
               />
               <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                    <Save className="h-4 w-4" />
-                  </Button>
+                <Save className="h-4 w-4" />
+              </Button>
               <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                    <X className="h-4 w-4" />
-                  </Button>
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           )
         }
 
         return (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 group">
             <span>{value}</span>
-                  <Button
-                    variant="ghost"
+            <Button
+              variant="ghost"
               size="icon"
               onClick={() => handleEdit(id, "marketShare", value)}
               className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                  >
+            >
               <Edit className="h-3 w-3" />
-                  </Button>
-            </div>
-          )
-        },
+            </Button>
+          </div>
+        )
       },
-      {
-        accessorKey: "complaints",
+    },
+    {
+      accessorKey: "complaints",
       header: "Common Complaints",
       cell: ({ row }) => {
         const complaints = row.getValue("complaints") as string[]
@@ -747,25 +858,25 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
         if (editingCell && editingCell.id === id && editingCell.column === "complaints") {
           return (
             <div className="flex items-center gap-2">
-                  <Textarea
-                value={Array.isArray(editingCell.value) ? editingCell.value.join(", ") : editingCell.value}
+              <Textarea
+                value={Array.isArray(editingCell.value) ? editingCell.value.join(", ") : String(editingCell.value)}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-20 w-[200px] text-xs"
               />
               <div className="flex flex-col gap-1">
                 <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                    <Save className="h-4 w-4" />
-                  </Button>
+                  <Save className="h-4 w-4" />
+                </Button>
                 <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                    <X className="h-4 w-4" />
-                  </Button>
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           )
         }
 
         return (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 group">
             <ul className="list-disc pl-4 text-xs max-w-[200px]">
               {complaints.slice(0, 3).map((complaint, i) => (
                 <li key={i}>{complaint}</li>
@@ -789,21 +900,21 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
                 </li>
               )}
             </ul>
-                  <Button
-                    variant="ghost"
+            <Button
+              variant="ghost"
               size="icon"
               onClick={() => handleEdit(id, "complaints", complaints)}
               className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                  >
+            >
               <Edit className="h-3 w-3" />
-                  </Button>
-            </div>
-          )
-        },
+            </Button>
+          </div>
+        )
       },
-      {
-        accessorKey: "adThemes",
-        header: "Ad Themes",
+    },
+    {
+      accessorKey: "adThemes",
+      header: "Ad Themes",
       cell: ({ row }) => {
         const adThemes = row.getValue("adThemes") as string[]
         const id = row.original.id
@@ -811,96 +922,58 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
         if (editingCell && editingCell.id === id && editingCell.column === "adThemes") {
           return (
             <div className="flex items-center gap-2">
-                  <Textarea
-                value={Array.isArray(editingCell.value) ? editingCell.value.join(", ") : editingCell.value}
+              <Textarea
+                value={Array.isArray(editingCell.value) ? editingCell.value.join(", ") : String(editingCell.value)}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-20 w-[200px] text-xs"
               />
               <div className="flex flex-col gap-1">
                 <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                    <Save className="h-4 w-4" />
-                  </Button>
+                  <Save className="h-4 w-4" />
+                </Button>
                 <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                    <X className="h-4 w-4" />
-                  </Button>
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           )
         }
 
         return (
-                  <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 group">
             <div className="flex flex-wrap gap-1 max-w-[200px]">
               {adThemes.map((theme, i) => (
                 <Badge key={i} variant="secondary" className="text-xs">
                   {theme}
                 </Badge>
-                    ))}
-                  </div>
-                  <Button
-                    variant="ghost"
+              ))}
+            </div>
+            <Button
+              variant="ghost"
               size="icon"
               onClick={() => handleEdit(id, "adThemes", adThemes)}
               className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                  >
+            >
               <Edit className="h-3 w-3" />
-                  </Button>
-            </div>
-          )
-        },
+            </Button>
+          </div>
+        )
       },
-      {
-        accessorKey: "seo",
-      header: "SEO Performance",
+    },
+    {
+      accessorKey: "domainAuthority",
+      header: "Domain Authority",
       cell: ({ row }) => {
-        const seo = row.getValue("seo") as { domainAuthority: number; backlinks: number; organicTraffic: string }
+        const value = row.getValue("domainAuthority") as number
         const id = row.original.id
-
-        if (editingCell && editingCell.id === id && editingCell.column === "seo.domainAuthority") {
-          return (
-            <div className="flex items-center gap-2">
-                  <Input
-                    type="number"
-                value={editingCell.value}
-                onChange={(e) => setEditingCell({ ...editingCell, value: Number.parseInt(e.target.value) })}
-                className="h-8 w-[80px]"
-              />
-              <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                <Save className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )
-        }
-
-        if (editingCell && editingCell.id === id && editingCell.column === "seo.backlinks") {
+        if (editingCell && editingCell.id === id && editingCell.column === "domainAuthority") {
           return (
             <div className="flex items-center gap-2">
               <Input
                 type="number"
                 value={editingCell.value}
-                onChange={(e) => setEditingCell({ ...editingCell, value: Number.parseInt(e.target.value) })}
-                className="h-8 w-[80px]"
-              />
-              <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                    <Save className="h-4 w-4" />
-                  </Button>
-              <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                    <X className="h-4 w-4" />
-                  </Button>
-            </div>
-          )
-        }
-
-        if (editingCell && editingCell.id === id && editingCell.column === "seo.organicTraffic") {
-          return (
-            <div className="flex items-center gap-2">
-              <Input
-                value={editingCell.value}
                 onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
-                className="h-8 w-[120px]"
+                className="h-8 w-[80px]"
               />
               <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
                 <Save className="h-4 w-4" />
@@ -911,73 +984,29 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
             </div>
           )
         }
-
         return (
-          <div className="grid gap-1 text-xs max-w-[200px]">
-                    <div className="flex items-center justify-between">
-              <span>Domain Authority:</span>
-              <div className="flex items-center gap-1">
-                <span className="font-medium">{seo.domainAuthority}/100</span>
-                      <Button
-                        variant="ghost"
-                  size="icon"
-                  onClick={() => handleEdit(id, "seo.domainAuthority", seo.domainAuthority)}
-                  className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                      >
-                  <Edit className="h-3 w-3" />
-                      </Button>
-              </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-              <span>Backlinks:</span>
-              <div className="flex items-center gap-1">
-                <span className="font-medium">{seo.backlinks.toLocaleString()}</span>
-                      <Button
-                        variant="ghost"
-                  size="icon"
-                  onClick={() => handleEdit(id, "seo.backlinks", seo.backlinks)}
-                  className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                      >
-                  <Edit className="h-3 w-3" />
-                      </Button>
-              </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-              <span>Organic Traffic:</span>
-              <div className="flex items-center gap-1">
-                <span className="font-medium">{seo.organicTraffic}</span>
-                      <Button
-                        variant="ghost"
-                  size="icon"
-                  onClick={() => handleEdit(id, "seo.organicTraffic", seo.organicTraffic)}
-                  className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                      >
-                  <Edit className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-            </div>
-          )
-        },
+          <div className="flex items-center gap-2 group">
+            <span className="font-medium">{value}/100</span>
+            <Button variant="ghost" size="icon" onClick={() => handleEdit(id, "domainAuthority", value)} className="h-6 w-6 opacity-0 group-hover:opacity-100">
+              <Edit className="h-3 w-3" />
+            </Button>
+          </div>
+        )
       },
-      {
-        accessorKey: "websiteQuality",
-        header: "Website Quality",
+    },
+    {
+      accessorKey: "backlinks",
+      header: "Backlinks",
       cell: ({ row }) => {
-        const quality = row.getValue("websiteQuality") as {
-          uxScore: number
-          loadingSpeed: string
-          mobileResponsiveness: string
-        }
+        const value = row.getValue("backlinks") as number
         const id = row.original.id
-
-        if (editingCell && editingCell.id === id && editingCell.column === "websiteQuality.uxScore") {
+        if (editingCell && editingCell.id === id && editingCell.column === "backlinks") {
           return (
             <div className="flex items-center gap-2">
-                  <Input
-                    type="number"
+              <Input
+                type="number"
                 value={editingCell.value}
-                onChange={(e) => setEditingCell({ ...editingCell, value: Number.parseInt(e.target.value) })}
+                onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-8 w-[80px]"
               />
               <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
@@ -989,26 +1018,23 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
             </div>
           )
         }
-
-        if (editingCell && editingCell.id === id && editingCell.column === "websiteQuality.loadingSpeed") {
-          return (
-            <div className="flex items-center gap-2">
-              <Input
-                value={editingCell.value}
-                onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
-                className="h-8 w-[120px]"
-              />
-              <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                    <Save className="h-4 w-4" />
-                  </Button>
-              <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                    <X className="h-4 w-4" />
-                  </Button>
-            </div>
-          )
-        }
-
-        if (editingCell && editingCell.id === id && editingCell.column === "websiteQuality.mobileResponsiveness") {
+        return (
+          <div className="flex items-center gap-2 group">
+            <span className="font-medium">{value.toLocaleString()}</span>
+            <Button variant="ghost" size="icon" onClick={() => handleEdit(id, "backlinks", value)} className="h-6 w-6 opacity-0 group-hover:opacity-100">
+              <Edit className="h-3 w-3" />
+            </Button>
+          </div>
+        )
+      },
+    },
+    {
+      accessorKey: "organicTraffic",
+      header: "Organic Traffic",
+      cell: ({ row }) => {
+        const value = row.getValue("organicTraffic") as string
+        const id = row.original.id
+        if (editingCell && editingCell.id === id && editingCell.column === "organicTraffic") {
           return (
             <div className="flex items-center gap-2">
               <Input
@@ -1025,102 +1051,167 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
             </div>
           )
         }
-
         return (
-          <div className="grid gap-1 text-xs max-w-[200px]">
-                    <div className="flex items-center justify-between">
-              <span>UX Score:</span>
-              <div className="flex items-center gap-1">
-                <span className="font-medium">{quality.uxScore}/100</span>
-                      <Button
-                        variant="ghost"
-                  size="icon"
-                  onClick={() => handleEdit(id, "websiteQuality.uxScore", quality.uxScore)}
-                  className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                      >
-                  <Edit className="h-3 w-3" />
-                      </Button>
-              </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-              <span>Loading Speed:</span>
-              <div className="flex items-center gap-1">
-                <span className="font-medium">{quality.loadingSpeed}</span>
-                      <Button
-                        variant="ghost"
-                  size="icon"
-                  onClick={() => handleEdit(id, "websiteQuality.loadingSpeed", quality.loadingSpeed)}
-                  className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                      >
-                  <Edit className="h-3 w-3" />
-                      </Button>
-              </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-              <span>Mobile:</span>
-              <div className="flex items-center gap-1">
-                <span className="font-medium">{quality.mobileResponsiveness}</span>
-                      <Button
-                        variant="ghost"
-                  size="icon"
-                  onClick={() => handleEdit(id, "websiteQuality.mobileResponsiveness", quality.mobileResponsiveness)}
-                  className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                      >
-                  <Edit className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
+          <div className="flex items-center gap-2 group">
+            <span className="font-medium">{value}</span>
+            <Button variant="ghost" size="icon" onClick={() => handleEdit(id, "organicTraffic", value)} className="h-6 w-6 opacity-0 group-hover:opacity-100">
+              <Edit className="h-3 w-3" />
+            </Button>
+          </div>
+        )
+      },
+    },
+    {
+      accessorKey: "uxScore",
+      header: "UX Score",
+      cell: ({ row }) => {
+        const value = row.getValue("uxScore") as number
+        const id = row.original.id
+        if (editingCell && editingCell.id === id && editingCell.column === "uxScore") {
+          return (
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                value={editingCell.value}
+                onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
+                className="h-8 w-[80px]"
+              />
+              <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
+                <Save className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           )
-        },
+        }
+        return (
+          <div className="flex items-center gap-2 group">
+            <span className="font-medium">{value}/100</span>
+            <Button variant="ghost" size="icon" onClick={() => handleEdit(id, "uxScore", value)} className="h-6 w-6 opacity-0 group-hover:opacity-100">
+              <Edit className="h-3 w-3" />
+            </Button>
+          </div>
+        )
       },
-      {
-      accessorKey: "socialMetrics",
+    },
+    {
+      accessorKey: "loadingSpeed",
+      header: "Loading Speed",
+      cell: ({ row }) => {
+        const value = row.getValue("loadingSpeed") as string
+        const id = row.original.id
+        if (editingCell && editingCell.id === id && editingCell.column === "loadingSpeed") {
+          return (
+            <div className="flex items-center gap-2">
+              <Input
+                value={editingCell.value}
+                onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
+                className="h-8 w-[120px]"
+              />
+              <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
+                <Save className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          )
+        }
+        return (
+          <div className="flex items-center gap-2 group">
+            <span className="font-medium">{value}</span>
+            <Button variant="ghost" size="icon" onClick={() => handleEdit(id, "loadingSpeed", value)} className="h-6 w-6 opacity-0 group-hover:opacity-100">
+              <Edit className="h-3 w-3" />
+            </Button>
+          </div>
+        )
+      },
+    },
+    {
+      accessorKey: "mobileResponsiveness",
+      header: "Mobile Resp.",
+      cell: ({ row }) => {
+        const value = row.getValue("mobileResponsiveness") as string
+        const id = row.original.id
+        if (editingCell && editingCell.id === id && editingCell.column === "mobileResponsiveness") {
+          return (
+            <div className="flex items-center gap-2">
+              <Input
+                value={editingCell.value}
+                onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
+                className="h-8 w-[120px]"
+              />
+              <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
+                <Save className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          )
+        }
+        return (
+          <div className="flex items-center gap-2 group">
+            <span className="font-medium">{value}</span>
+            <Button variant="ghost" size="icon" onClick={() => handleEdit(id, "mobileResponsiveness", value)} className="h-6 w-6 opacity-0 group-hover:opacity-100">
+              <Edit className="h-3 w-3" />
+            </Button>
+          </div>
+        )
+      },
+    },
+    {
+      accessorKey: "followers",
       header: ({ column }) => {
         return (
           <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
-            Social Metrics
+            Followers
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         )
       },
       cell: ({ row }) => {
-        const metrics = row.getValue("socialMetrics") as { followers: number; }
-        const id = row.original.id
+        const followers = row.getValue("followers") as number | undefined | null;
         const facebookUrl = row.original.facebookUrl;
+        const id = row.original.id;
 
-        if (editingCell && editingCell.id === id && editingCell.column === "socialMetrics.followers") {
+        const displayFollowers = typeof followers === 'number' && !isNaN(followers)
+             ? followers.toLocaleString()
+             : '0';
+
+        if (editingCell && editingCell.id === id && editingCell.column === "followers") {
           return (
             <div className="flex items-center gap-2">
               <Input
                 type="number"
                 value={editingCell.value}
-                onChange={(e) => setEditingCell({ ...editingCell, value: Number.parseInt(e.target.value) })}
+                onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                 className="h-8 w-[120px]"
               />
               <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                    <Save className="h-4 w-4" />
-                  </Button>
+                <Save className="h-4 w-4" />
+              </Button>
               <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                    <X className="h-4 w-4" />
-                  </Button>
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           )
         }
 
         return (
-          <div className="grid gap-1">
+          <div className="grid gap-1 group">
             <div className="flex items-center gap-1">
-              <span>{metrics.followers.toLocaleString()} followers</span>
-                      <Button
-                        variant="ghost"
+              <span>{displayFollowers} followers</span>
+              <Button
+                variant="ghost"
                 size="icon"
-                onClick={() => handleEdit(id, "socialMetrics.followers", metrics.followers)}
+                onClick={() => handleEdit(id, "followers", typeof followers === 'number' ? followers : 0)}
                 className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                      >
+              >
                 <Edit className="h-3 w-3" />
-                      </Button>
-                    </div>
+              </Button>
+            </div>
             {facebookUrl && (
               <div className="flex items-center gap-1">
                 <a
@@ -1137,16 +1228,16 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
         )
       },
       sortingFn: (rowA, rowB) => {
-        const metricsA = rowA.getValue("socialMetrics") as { followers: number }
-        const metricsB = rowB.getValue("socialMetrics") as { followers: number }
-        return metricsA.followers - metricsB.followers
+        const followersA = rowA.getValue("followers") as number
+        const followersB = rowB.getValue("followers") as number
+        return followersA - followersB
       },
-      },
-      {
-        id: "actions",
-        cell: ({ row }) => {
-          const competitor = row.original
-          return (
+    },
+    {
+      id: "actions",
+      cell: ({ row }) => {
+        const competitor = row.original
+        return (
           <Dialog>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -1302,7 +1393,12 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
                       <div className="grid gap-4 mt-2">
                         <div className="flex items-center justify-between">
                           <span className="font-medium">Followers:</span>
-                          <span>{competitor.socialMetrics.followers.toLocaleString()}</span>
+                          <span>
+                            {typeof competitor.followers === 'number' && !isNaN(competitor.followers)
+                                ? competitor.followers.toLocaleString()
+                                : '0'
+                            }
+                          </span>
                         </div>
                         {competitor.facebookUrl && (
                           <div className="flex items-center justify-between">
@@ -1327,22 +1423,27 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
                       <div className="grid gap-4 mt-2">
                         <div className="flex items-center justify-between">
                           <span className="font-medium">Domain Authority:</span>
-                          <span>{competitor.seo.domainAuthority}/100</span>
+                          <span>{competitor.domainAuthority ?? 0}/100</span>
                         </div>
                         <div>
                           <div className="flex items-center justify-between text-sm">
                             <span>Domain Authority Score</span>
-                            <span>{competitor.seo.domainAuthority}/100</span>
+                            <span>{competitor.domainAuthority ?? 0}/100</span>
                           </div>
-                          <Progress value={competitor.seo.domainAuthority} className="h-2 mt-1" />
+                          <Progress value={competitor.domainAuthority ?? 0} className="h-2 mt-1" />
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="font-medium">Backlinks:</span>
-                          <span>{competitor.seo.backlinks.toLocaleString()}</span>
+                          <span>
+                            {typeof competitor.backlinks === 'number' && !isNaN(competitor.backlinks)
+                                ? competitor.backlinks.toLocaleString()
+                                : '0'
+                            }
+                          </span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="font-medium">Organic Traffic:</span>
-                          <span>{competitor.seo.organicTraffic}</span>
+                          <span>{competitor.organicTraffic ?? 'N/A'}</span>
                         </div>
                       </div>
                     </div>
@@ -1355,17 +1456,17 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
                         <div>
                           <div className="flex items-center justify-between text-sm">
                             <span>UX/UI Score</span>
-                            <span>{competitor.websiteQuality.uxScore}/100</span>
+                            <span>{competitor.uxScore ?? 0}/100</span>
                           </div>
-                          <Progress value={competitor.websiteQuality.uxScore} className="h-2 mt-1" />
+                          <Progress value={competitor.uxScore ?? 0} className="h-2 mt-1" />
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="font-medium">Loading Speed:</span>
-                          <span>{competitor.websiteQuality.loadingSpeed}</span>
+                          <span>{competitor.loadingSpeed ?? 'N/A'}</span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="font-medium">Mobile Responsiveness:</span>
-                          <span>{competitor.websiteQuality.mobileResponsiveness}</span>
+                          <span>{competitor.mobileResponsiveness ?? 'N/A'}</span>
                         </div>
                       </div>
                     </div>
@@ -1401,11 +1502,11 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
                       <div className="grid grid-cols-2 gap-4 mt-2">
                         <div>
                           <h4 className="font-medium text-green-600">Positive Perception</h4>
-                          <p className="mt-1 text-sm">{competitor.brandPerception.positive}</p>
+                          <p className="mt-1 text-sm">{competitor.positivePerception}</p>
                         </div>
                         <div>
                           <h4 className="font-medium text-red-600">Negative Perception</h4>
-                          <p className="mt-1 text-sm">{competitor.brandPerception.negative}</p>
+                          <p className="mt-1 text-sm">{competitor.negativePerception}</p>
                         </div>
                       </div>
                     </div>
@@ -1498,9 +1599,9 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
               </DialogFooter>
             </DialogContent>
           </Dialog>
-          )
-        },
+        )
       },
+    },
   ]
 
   const table = useReactTable({
@@ -1520,73 +1621,145 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
       columnVisibility,
       rowSelection,
     },
+    autoResetPageIndex: true,
   })
 
   return (
     <div className="w-full">
-      <div className="flex items-center py-4 justify-end">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="ml-auto">
-              Columns <ChevronDown className="ml-2 h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-[200px]">
-            {table
-              .getAllColumns()
-              .filter((column) => column.getCanHide())
-              .map((column) => {
-                return (
-                  <DropdownMenuCheckboxItem
-                    key={column.id}
-                    className="capitalize"
-                    checked={column.getIsVisible()}
-                    onCheckedChange={(value) => column.toggleVisibility(!!value)}
-                  >
-                    {column.id}
-                  </DropdownMenuCheckboxItem>
-                )
-              })}
-          </DropdownMenuContent>
-        </DropdownMenu>
+      <div className="flex items-end justify-between py-4 gap-2 flex-wrap">
+        <div className="flex items-end gap-2 flex-wrap">
+          <div className="grid gap-1.5">
+            <Label htmlFor="client-select" className="text-sm font-medium">Select Client</Label>
+            <Select
+              value={selectedClientName ?? ""}
+              onValueChange={(value) => setSelectedClientName(value || null)}
+            >
+              <SelectTrigger className="h-9 w-[250px]" id="client-select">
+                <SelectValue placeholder="Select Client..." />
+              </SelectTrigger>
+              <SelectContent>
+                {clientNames.length > 0 ? (
+                  clientNames.map(name => (
+                    <SelectItem key={name} value={name}>{name}</SelectItem>
+                  ))
+                ) : (
+                  <SelectItem value="loading-clients" disabled>Loading clients...</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid gap-1.5">
+            <Label htmlFor="product-select" className="text-sm font-medium">Select Product</Label>
+            <Select
+              value={selectedProductFocus ?? ""}
+              onValueChange={(value) => setSelectedProductFocus(value || null)}
+              disabled={!selectedClientName || productFocuses.length === 0}
+            >
+              <SelectTrigger className="h-9 w-[250px]" id="product-select">
+                <SelectValue placeholder={!selectedClientName ? "Select client first" : "Select Product Focus..."} />
+              </SelectTrigger>
+              <SelectContent>
+                {selectedClientName && productFocuses.length > 0 ? (
+                  productFocuses.map(focus => (
+                    <SelectItem key={focus} value={focus || "placeholder-for-empty"}>{focus || "N/A"}</SelectItem>
+                  ))
+                ) : selectedClientName ? (
+                  <SelectItem value="loading-products" disabled>Loading products...</SelectItem>
+                ) : null}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Button
+            onClick={handleSearch}
+            disabled={!selectedClientName || !selectedProductFocus || isLoadingTable}
+            className="h-9"
+          >
+            {isLoadingTable ? "Loading..." : "Search"}
+          </Button>
+        </div>
+
+        <div className="flex-shrink-0">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="h-9">
+                Columns <ChevronDown className="ml-2 h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-[200px]">
+              {table
+                .getAllColumns()
+                .filter((column) => column.getCanHide())
+                .map((column) => {
+                  return (
+                    <DropdownMenuCheckboxItem
+                      key={column.id}
+                      className="capitalize"
+                      checked={column.getIsVisible()}
+                      onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                    >
+                      {column.id.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+                    </DropdownMenuCheckboxItem>
+                  )
+                })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
+
       <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => {
-                    return (
-                      <TableHead key={header.id}>
+        <Table>
+          <TableHeader>
+            {table.getHeaderGroups().map((headerGroup) => (
+              <TableRow key={headerGroup.id}>
+                {headerGroup.headers.map((header) => {
+                  return (
+                    <TableHead key={header.id}>
                       {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                      </TableHead>
-                    )
-                  })}
-                </TableRow>
-              ))}
-            </TableHeader>
-            <TableBody>
-              {table.getRowModel().rows?.length ? (
-                table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} data-state={row.getIsSelected() && "selected"} className="group">
-                    {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
+                    </TableHead>
+                  )
+                })}
+              </TableRow>
+            ))}
+          </TableHeader>
+          <TableBody>
+            {isLoadingTable ? (
+              <TableRow>
                 <TableCell colSpan={columns.length} className="h-24 text-center">
-                    No results.
-                  </TableCell>
+                  <div className="flex justify-center items-center gap-2">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-900"></div>
+                    Loading competitors...
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : tableError ? (
+              <TableRow>
+                <TableCell colSpan={columns.length} className="h-24 text-center text-red-600">
+                  Error loading data: {tableError}
+                </TableCell>
+              </TableRow>
+            ) : table.getRowModel().rows?.length ? (
+              table.getRowModel().rows.map((row) => (
+                <TableRow key={row.id} data-state={row.getIsSelected() && "selected"} className="group">
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
+                  ))}
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={columns.length} className="h-24 text-center">
+                  No results found for the selected analysis.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </div>
       <div className="flex items-center justify-end space-x-2 py-4">
         <div className="text-sm text-muted-foreground">
-          Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+          Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount() > 0 ? table.getPageCount() : 1}
         </div>
         <Button variant="outline" size="sm" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>
           Previous
@@ -1594,7 +1767,7 @@ export function CompetitorTable({ initialCompetitors, isLoading, error }: Compet
         <Button variant="outline" size="sm" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>
           Next
         </Button>
-        </div>
+      </div>
     </div>
   )
 }
