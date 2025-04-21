@@ -1,7 +1,9 @@
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Bookmark, Share2, Loader2, AlertTriangle, BrainCircuit } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Bookmark, Share2, Loader2, AlertTriangle, BrainCircuit, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useState, useEffect } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -17,6 +19,12 @@ interface Recommendation {
   impact: string;
   competitiveGap?: string | null;
   tags?: string[] | null;
+  purpose_th?: string;
+  target_audience_th?: string;
+  context_th?: string;
+  constraints_th?: string;
+  competitors_th?: string;
+  untapped_potential_th?: string;
 }
 
 export function RecommendationCards() {
@@ -25,6 +33,8 @@ export function RecommendationCards() {
   const [recommendations, setRecommendations] = useState<Recommendation[] | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false); // Combined loading state
   const [error, setError] = useState<string | null>(null);
+  // --- State for Dialog ---
+  const [selectedRecommendation, setSelectedRecommendation] = useState<Recommendation | null>(null);
 
   // --- State for Client/Product Selection ---
   const [clientNames, setClientNames] = useState<string[]>([]);
@@ -143,6 +153,8 @@ export function RecommendationCards() {
     setIsLoading(true);
     setError(null);
     setRecommendations(null); // Clear previous results
+    // Reset selected recommendation when generating new ones
+    setSelectedRecommendation(null);
 
     try {
       console.log(`Fetching recommendations for runId: ${selectedRunId}`);
@@ -165,11 +177,16 @@ export function RecommendationCards() {
     }
   };
 
+  // Handler to set the selected recommendation for the dialog
+  const handleCardClick = (recommendation: Recommendation) => {
+    setSelectedRecommendation(recommendation);
+  };
 
   return (
-    <div>
-      {/* --- Selection UI --- */}
-       <div className="flex flex-col gap-4 p-4 border rounded-lg mb-6 bg-muted/40">
+    <Dialog>
+      <div>
+        {/* --- Selection UI --- */}
+         <div className="flex flex-col gap-4 p-4 border rounded-lg mb-6 bg-muted/40">
            <div className="flex items-end gap-2 flex-wrap">
              {/* Client Selector */}
              <div className="grid gap-1.5">
@@ -246,88 +263,178 @@ export function RecommendationCards() {
            </div>
          </div>
 
-      {/* --- Display Area --- */}
-      {/* Loading State */}
-      {isLoading && (
-        <div className="flex justify-center items-center p-10 border rounded-lg min-h-[200px]">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          <span className="ml-3 text-muted-foreground">Generating recommendations...</span>
-        </div>
-      )}
-
-      {/* Error State */}
-      {error && !isLoading && (
-         <div className="flex flex-col justify-center items-center p-10 border border-destructive bg-destructive/10 rounded-lg min-h-[200px] text-destructive">
-           <AlertTriangle className="h-8 w-8 mb-2" />
-           <p className="font-semibold mb-1">Error Generating Recommendations</p>
-           <p className="text-sm text-center">{error}</p>
-         </div>
-       )}
-
-      {/* No Recommendations or Initial State */}
-      {!isLoading && !error && (!recommendations || recommendations.length === 0) && (
-         <div className="flex justify-center items-center p-10 border rounded-lg min-h-[200px]">
-           <p className="text-muted-foreground">Select a Client/Product and click "Generate Ideas".</p>
-         </div>
-       )}
-
-      {/* Display Recommendations */}
-      {!isLoading && !error && recommendations && recommendations.length > 0 && (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {recommendations.map((recommendation, index) => (
-              // Use index as key if no stable ID is provided by API yet
-              <Card key={recommendation.id || `rec-${index}`} className="flex flex-col">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                      {recommendation.category ?? 'Uncategorized'}
-                    </Badge>
-                    <Badge
-                      variant="outline"
-                      // Use cn for conditional classes based on impact
-                      className={cn(
-                        "bg-blue-50 text-blue-700 border-blue-200", // Default (Medium/Low/Other)
-                        recommendation.impact?.toLowerCase() === "high" && "bg-orange-50 text-orange-700 border-orange-200",
-                        recommendation.impact?.toLowerCase() === "medium" && "bg-yellow-50 text-yellow-700 border-yellow-200", // Example for Medium
-                        recommendation.impact?.toLowerCase() === "low" && "bg-gray-50 text-gray-700 border-gray-200" // Example for Low
-                      )}
-                    >
-                      {recommendation.impact ?? 'N/A'} Impact
-                    </Badge>
-                  </div>
-                  <CardTitle className="mt-4 text-xl">{recommendation.title ?? 'Untitled Recommendation'}</CardTitle>
-                  {recommendation.competitiveGap && (
-                      <CardDescription className="text-sm text-muted-foreground">
-                        Based on gap: {recommendation.competitiveGap}
-                      </CardDescription>
-                  )}
-                </CardHeader>
-                <CardContent className="flex-1">
-                  <p className="text-sm">{recommendation.description ?? 'No description provided.'}</p>
-                  {(recommendation.tags && recommendation.tags.length > 0) && (
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {recommendation.tags.map((tag) => (
-                          <Badge key={tag} variant="secondary" className="text-xs">
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
-                  )}
-                </CardContent>
-                <CardFooter className="flex justify-between">
-                  <Button variant="ghost" size="sm">
-                    <Bookmark className="mr-2 h-4 w-4" />
-                    Save
-                  </Button>
-                  <Button variant="ghost" size="sm">
-                    <Share2 className="mr-2 h-4 w-4" />
-                    Share
-                  </Button>
-                </CardFooter>
-              </Card>
-            ))}
+        {/* --- Display Area --- */}
+        {/* Loading State */}
+        {isLoading && (
+          <div className="flex justify-center items-center p-10 border rounded-lg min-h-[200px]">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <span className="ml-3 text-muted-foreground">Generating recommendations...</span>
           </div>
-       )}
-    </div>
+        )}
+
+        {/* Error State */}
+        {error && !isLoading && (
+           <div className="flex flex-col justify-center items-center p-10 border border-destructive bg-destructive/10 rounded-lg min-h-[200px] text-destructive">
+             <AlertTriangle className="h-8 w-8 mb-2" />
+             <p className="font-semibold mb-1">Error Generating Recommendations</p>
+             <p className="text-sm text-center">{error}</p>
+           </div>
+         )}
+
+        {/* No Recommendations or Initial State */}
+        {!isLoading && !error && (!recommendations || recommendations.length === 0) && (
+           <div className="flex justify-center items-center p-10 border rounded-lg min-h-[200px]">
+             <p className="text-muted-foreground">Select a Client/Product and click "Generate Ideas".</p>
+           </div>
+         )}
+
+        {/* Display Recommendations */}
+        {!isLoading && !error && recommendations && recommendations.length > 0 && (
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {recommendations.map((recommendation, index) => (
+                // Use index as key if no stable ID is provided by API yet
+                <DialogTrigger key={recommendation.id || `rec-${index}`} asChild onClick={() => handleCardClick(recommendation)}>
+                   <Card className="flex flex-col cursor-pointer hover:shadow-md transition-shadow">
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                          {recommendation.category ?? 'Uncategorized'}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          // Use cn for conditional classes based on impact
+                          className={cn(
+                            "bg-blue-50 text-blue-700 border-blue-200", // Default (Medium/Low/Other)
+                            recommendation.impact?.toLowerCase() === "high" && "bg-orange-50 text-orange-700 border-orange-200",
+                            recommendation.impact?.toLowerCase() === "medium" && "bg-yellow-50 text-yellow-700 border-yellow-200", // Example for Medium
+                            recommendation.impact?.toLowerCase() === "low" && "bg-gray-50 text-gray-700 border-gray-200" // Example for Low
+                          )}
+                        >
+                          {recommendation.impact ?? 'N/A'} Impact
+                        </Badge>
+                      </div>
+                      <CardTitle className="mt-4 text-xl">{recommendation.title ?? 'Untitled Recommendation'}</CardTitle>
+                      {recommendation.competitiveGap && (
+                          <CardDescription className="text-sm text-muted-foreground">
+                            Based on gap: {recommendation.competitiveGap}
+                          </CardDescription>
+                      )}
+                    </CardHeader>
+                    <CardContent className="flex-1">
+                      {/* Show truncated description on card */}
+                      <p className="text-sm line-clamp-3">{recommendation.description ?? 'No description provided.'}</p>
+                      {(recommendation.tags && recommendation.tags.length > 0) && (
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {recommendation.tags.map((tag) => (
+                              <Badge key={tag} variant="secondary" className="text-xs">
+                                {tag}
+                              </Badge>
+                            ))}
+                          </div>
+                      )}
+                    </CardContent>
+                    {/* Footer might not be needed if card is just a trigger */}
+                    {/* <CardFooter className="flex justify-between"> ... </CardFooter> */}
+                  </Card>
+                 </DialogTrigger>
+              ))}
+            </div>
+         )}
+      </div>
+
+       {/* Dialog Content - Rendered conditionally when a recommendation is selected */}
+      {selectedRecommendation && (
+        <DialogContent className="sm:max-w-2xl">
+           <DialogHeader>
+             <DialogTitle className="text-2xl">{selectedRecommendation.title}</DialogTitle>
+              {/* Display Category and Impact here too */}
+              <div className="flex items-center gap-4 pt-2">
+                 <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                   {selectedRecommendation.category ?? 'Uncategorized'}
+                 </Badge>
+                 <Badge
+                   variant="outline"
+                   className={cn(
+                     "bg-blue-50 text-blue-700 border-blue-200",
+                     selectedRecommendation.impact?.toLowerCase() === "high" && "bg-orange-50 text-orange-700 border-orange-200",
+                     selectedRecommendation.impact?.toLowerCase() === "medium" && "bg-yellow-50 text-yellow-700 border-yellow-200",
+                     selectedRecommendation.impact?.toLowerCase() === "low" && "bg-gray-50 text-gray-700 border-gray-200"
+                   )}
+                 >
+                   {selectedRecommendation.impact ?? 'N/A'} Impact
+                 </Badge>
+               </div>
+             <DialogDescription className="pt-1">
+               {selectedRecommendation.competitiveGap ? `Addresses competitive gap: ${selectedRecommendation.competitiveGap}` : 'General recommendation.'}
+             </DialogDescription>
+           </DialogHeader>
+
+          {/* Use ScrollArea for potentially long content */}
+           <ScrollArea className="max-h-[60vh] pr-6">
+             <div className="grid gap-4 py-4">
+                 {/* Full Description */}
+                <div>
+                   <h4 className="font-semibold mb-1 text-base">รายละเอียดแนวคิด (Description)</h4>
+                   <p className="text-sm text-muted-foreground">{selectedRecommendation.description}</p>
+                </div>
+
+               {/* --- New Thai Sections --- */}
+                <div className="space-y-3">
+                   <h4 className="font-semibold text-base border-t pt-3">การวิเคราะห์เชิงกลยุทธ์ (Strategic Analysis)</h4>
+                   <div className="text-sm">
+                     <p className="font-medium">1. รู้เป้าหมาย (Purpose)</p>
+                     <p className="text-muted-foreground pl-4">{selectedRecommendation.purpose_th || 'ไม่มีข้อมูล'}</p>
+                   </div>
+                   <div className="text-sm">
+                     <p className="font-medium">2. รู้คนฟัง/คนใช้ (Target Audience)</p>
+                     <p className="text-muted-foreground pl-4">{selectedRecommendation.target_audience_th || 'ไม่มีข้อมูล'}</p>
+                   </div>
+                   <div className="text-sm">
+                     <p className="font-medium">3. รู้บริบท (Context)</p>
+                     <p className="text-muted-foreground pl-4">{selectedRecommendation.context_th || 'ไม่มีข้อมูล'}</p>
+                   </div>
+                   <div className="text-sm">
+                     <p className="font-medium">4. รู้ข้อจำกัด (Constraints)</p>
+                     <p className="text-muted-foreground pl-4">{selectedRecommendation.constraints_th || 'ไม่มีข้อมูล'}</p>
+                   </div>
+                   <div className="text-sm">
+                     <p className="font-medium">5. รู้ว่าใครทำอะไรไปแล้ว (Competitors / Benchmarks)</p>
+                     <p className="text-muted-foreground pl-4">{selectedRecommendation.competitors_th || 'ไม่มีข้อมูล'}</p>
+                   </div>
+                   <div className="text-sm">
+                     <p className="font-medium">6. รู้ว่าอะไร "ยังไม่มีใครกล้าทำ" (Untapped Potential)</p>
+                     <p className="text-muted-foreground pl-4">{selectedRecommendation.untapped_potential_th || 'ไม่มีข้อมูล'}</p>
+                   </div>
+                 </div>
+
+                {/* Tags */}
+                 {(selectedRecommendation.tags && selectedRecommendation.tags.length > 0) && (
+                   <div>
+                     <h4 className="font-semibold mb-2 text-base border-t pt-3">คำค้นที่เกี่ยวข้อง (Tags)</h4>
+                     <div className="flex flex-wrap gap-2">
+                       {selectedRecommendation.tags.map((tag) => (
+                         <Badge key={tag} variant="secondary" className="text-xs">
+                           {tag}
+                         </Badge>
+                       ))}
+                     </div>
+                   </div>
+                 )}
+             </div>
+           </ScrollArea>
+
+          <DialogFooter className="sm:justify-end gap-2">
+             <Button variant="secondary">
+                <Bookmark className="mr-2 h-4 w-4" /> Save Idea
+              </Button>
+             <DialogClose asChild>
+               <Button type="button" variant="outline">
+                 Close
+               </Button>
+             </DialogClose>
+           </DialogFooter>
+         </DialogContent>
+      )}
+    </Dialog>
   )
 }

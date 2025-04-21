@@ -1,10 +1,12 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from 'next/link'; // Import Link
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import EngagementDashboard from "./EngagementDashboard";
+import { Button } from "@/components/ui/button"; // Import Button
 import {
   Eye,
   Clock,
@@ -16,6 +18,7 @@ import {
   Send,
   ArrowLeft,
   User,
+  Home // Import Home icon
 } from "lucide-react";
 import { Competitor } from "@/types";
 import { llmService } from "@/lib/llm-service";
@@ -309,7 +312,7 @@ export default function CompetitorAdDashboard() {
   const [isNotDataFromTheCurrentWeekSoNewFetchingIsNeeded, setIsNotDataFromTheCurrentWeekSoNewFetchingIsNeeded] = useState(false);
   const [expandedOrganicPosts, setExpandedOrganicPosts] = useState(false);
   // Add state to track which section is active
-  const [activeSection, setActiveSection] = useState<string | null>(null);
+  // const [activeSection, setActiveSection] = useState<string | null>(null); // REMOVED
 
   // --- New State for Analysis ---
   const [analysisCompetitors, setAnalysisCompetitors] = useState<CompetitorResult[]>([]);
@@ -804,7 +807,7 @@ export default function CompetitorAdDashboard() {
     if (index >= 0 && index < competitors.length) {
       setActiveCompetitor(index);
       setShowOverallEngagement(false);
-      setActiveSection(null); // Reset active section when competitor is selected
+      // Reset active section when competitor is selected
       const cachedData = competitorDataCache[index];
       if (cachedData) {
         setActiveAds(cachedData.ads || []);
@@ -1343,9 +1346,17 @@ export default function CompetitorAdDashboard() {
     <div className="flex flex-col h-screen max-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b p-4 flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <Eye className="h-6 w-6 text-blue-600" />
-          <h1 className="text-xl font-bold">Competitor Ad Intelligence</h1>
+        <div className="flex items-center space-x-4"> {/* Increased spacing */}
+          <Link href="/home" passHref>
+            <Button variant="outline" size="icon" className="h-8 w-8">
+              <Home className="h-4 w-4" />
+              <span className="sr-only">Home</span>
+            </Button>
+          </Link>
+          <div className="flex items-center space-x-2">
+            <Eye className="h-6 w-6 text-blue-600" />
+            <h1 className="text-xl font-bold">Competitor Ad Intelligence</h1>
+          </div>
         </div>
         <div className="flex items-center space-x-4">
           {!showOverallEngagement && (
@@ -1524,75 +1535,6 @@ export default function CompetitorAdDashboard() {
                   )}
               </div>
             </div>
-
-            {/* New Analysis Section */}
-            <div className="space-y-3 mt-4">
-              <h3 className="text-sm font-medium text-gray-700 mb-2">
-                New Analysis
-              </h3>
-              <div className="space-y-1">
-                <button
-                  className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center justify-between transition-colors ${
-                    activeSection === "new-analysis"
-                      ? "bg-blue-50 text-blue-700 font-medium"
-                      : "text-gray-700 hover:bg-gray-50"
-                  }`}
-                  onClick={() => {
-                    setActiveCompetitor(null);
-                    setShowOverallEngagement(false);
-                    setActiveSection("new-analysis");
-                  }}
-                >
-                  <span>Start New Analysis</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Competitors Section */}
-            <div className="space-y-3 mt-4">
-              <h3 className="text-sm font-medium text-gray-700 mb-2">
-                Competitors
-              </h3>
-              <div className="space-y-1">
-                <button
-                  className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center justify-between transition-colors ${
-                    activeSection === "competitors"
-                      ? "bg-blue-50 text-blue-700 font-medium"
-                      : "text-gray-700 hover:bg-gray-50"
-                  }`}
-                  onClick={() => {
-                    setActiveCompetitor(null);
-                    setShowOverallEngagement(false);
-                    setActiveSection("competitors");
-                  }}
-                >
-                  <span>View Competitors</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Recommendations Section */}
-            <div className="space-y-3 mt-4">
-              <h3 className="text-sm font-medium text-gray-700 mb-2">
-                Recommendations
-              </h3>
-              <div className="space-y-1">
-                <button
-                  className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center justify-between transition-colors ${
-                    activeSection === "recommendations"
-                      ? "bg-blue-50 text-blue-700 font-medium"
-                      : "text-gray-700 hover:bg-gray-50"
-                  }`}
-                  onClick={() => {
-                    setActiveCompetitor(null);
-                    setShowOverallEngagement(false);
-                    setActiveSection("recommendations");
-                  }}
-                >
-                  <span>View Recommendations</span>
-                </button>
-              </div>
-            </div>
           </div>
 
           {/* Overall Engagement */}
@@ -1606,7 +1548,7 @@ export default function CompetitorAdDashboard() {
                 if (hasLoadedInitialData) {
                   setActiveCompetitor(null);
                   setShowOverallEngagement(true);
-                  setActiveSection(null); // Reset active section
+                  // setActiveSection(null); // REMOVE THIS LINE
                 }
               }}
               disabled={!hasLoadedInitialData}
@@ -1660,36 +1602,8 @@ export default function CompetitorAdDashboard() {
             </div>
           )}
 
-          {/* New Analysis Form */}
-          {activeSection === "new-analysis" && (
-            <div className="flex-1 p-6 overflow-auto">
-              <h2 className="text-2xl font-bold mb-6">New Competitor Analysis</h2>
-              <NewAnalysisForm onSubmitAnalysis={handleStartAnalysis} isLoading={isAnalysisLoading} />
-            </div>
-          )}
-
-          {/* Competitors Table */}
-          {activeSection === "competitors" && (
-            <div className="flex-1 p-6 overflow-auto">
-              <h2 className="text-2xl font-bold mb-6">Competitor Analysis</h2>
-              <CompetitorTable
-                initialCompetitors={analysisCompetitors}
-                isLoading={isAnalysisLoading} // Use analysis loading state
-                error={analysisError} // Use analysis error state
-              />
-            </div>
-          )}
-
-          {/* Recommendations View */}
-          {activeSection === "recommendations" && (
-            <div className="flex-1 p-6 overflow-auto">
-              <h2 className="text-2xl font-bold mb-6">Recommendations</h2>
-              <RecommendationCards />
-            </div>
-          )}
-
           {/* Competitor data content */}
-          {activeCompetitor !== null && hasLoadedInitialData && !activeSection && (
+          {((activeCompetitor !== null && hasLoadedInitialData) || showOverallEngagement) && (
             <>
               {/* Competitor header */}
               {mounted &&

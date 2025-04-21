@@ -186,6 +186,8 @@ Please research and provide detailed information about each competitor, includin
 *   Website Quality metrics (UX Score, Loading Speed, Mobile Responsiveness).
 *   Social Media details (Follower count).
 
+For any metrics or data points provided (market share, followers, etc.), please include when this data was collected or reported.
+
 Present the findings as a comprehensive text report.
     `; // End of template literal
     // --- End Query Generation ---
@@ -196,7 +198,7 @@ Present the findings as a comprehensive text report.
       model: "jina-deepsearch-v1",
       messages: [{ role: "user", content: query }],
       stream: false,
-      reasoning_effort: "low", // Keep low to potentially reduce Jina complexity
+      reasoning_effort: "high",
       max_attempts: 1,
       no_direct_answer: true
     };
@@ -412,7 +414,7 @@ async function parseWithGemini(
   ].join(", ");
 
   const prompt = `
-You are an expert marketing analyst. Analyze the following text report about ${clientName} and its competitors, focusing on products/services like: ${productFocus || 'general offerings'}. Generate a VALID JSON object summarizing the key findings for the competitors found, structured exactly as specified below.
+You are an expert marketing analyst. Analyze the following text report about ${clientName} and its competitors, focusing on products/services like: ${productFocus || 'general offerings'}. PRIORITIZE the most recent information available. Generate a VALID JSON object summarizing the key findings for the competitors found, structured exactly as specified below.
 
 **Input Text Report:**
 \`\`\`text
@@ -421,12 +423,15 @@ ${rawContent}
 
 **Analysis & Structuring Instructions:**
 1.  **Identify Competitors:** For each competitor, extract all available information for the fields in the JSON structure.
-2.  **Extract Services:** List the specific services mentioned for each competitor in the \`services\` array.
+2.  **Extract Services:** From the text about each competitor, carefully identify ONLY their specific product or service offerings. Include:
+    * Specific named products or services (e.g., "Gold Savings Account", "Robo-advisor Platform")
+    * Concrete service types (e.g., "Investment Advisory", "Commodity Trading")
+    * Distinct product categories (e.g., "Physical Gold", "ETFs")
+    DO NOT include general descriptions, marketing claims, or features. Each service should be 1-4 words maximum and represent something a customer could specifically purchase or sign up for.
 3.  **Categorize Services:** Based *only* on the extracted \`services\` list for a competitor, assign one or more relevant categories from the suggested list below (or generate a similar, appropriate category if none fit perfectly) and put them in the \`serviceCategories\` array. Aim for 1-3 concise categories per competitor. Suggested Categories: [${serviceCategoryExamples}].
 4.  **Prioritize Focus:** When extracting services and assigning categories, give priority to those related to the client's focus: ${productFocus || 'general offerings'}.
-5.  **Handle Facebook URL:** Extract the Facebook Page URL (\`facebookUrl\`) only if it is clearly present and appears to be a valid URL format in the text report. Otherwise, use \`null\`.
-6.  **Handle Missing Data:** For other fields, use \`null\` if the information is not found. For array fields (\`services\`, \`serviceCategories\`, \`features\`, etc.), use an empty array \`[]\` if no items are found. For nested objects (\`brandPerception\`, etc.), use \`null\` if the entire object's data is missing, otherwise include the object with \`null\` for its missing inner fields.
-7.  **Collect Competitors:** Create a JSON object for each competitor and collect them in the main \`competitors\` array.
+5.  **Handle Missing Data:** For other fields, use \`null\` if the information is not found. For array fields (\`services\`, \`serviceCategories\`, \`features\`, etc.), use an empty array \`[]\` if no items are found. For nested objects (\`brandPerception\`, etc.), use \`null\` if the entire object's data is missing, otherwise include the object with \`null\` for its missing inner fields.
+6.  **Collect Competitors:** Create a JSON object for each competitor and collect them in the main \`competitors\` array.
 
 **Output Format & JSON Validity RULES:**
 *   **Return ONLY the single, valid JSON object.** No explanations, intro text, or markdown formatting (like \`\`\`json\`).
@@ -480,14 +485,18 @@ ${rawContent}
 
   try {
     console.log('[jina-search] Sending request to Gemini API (with categorization)');
-    const geminiResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent', {
+    const geminiResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
+        // Enable Grounding with Google Search [[reference]](https://ai.google.dev/gemini-api/docs/grounding?lang=rest)
+        tools: [{
+            "google_search": {}
+        }],
         generationConfig: {
           response_mime_type: "application/json",
-          temperature: 0.2
+          temperature: 0.3 // Slightly increased for better discovery with grounding
         }
       })
     });

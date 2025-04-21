@@ -7,10 +7,17 @@ const prisma = new PrismaClient();
 interface GeneratedRecommendation {
     title: string;
     description: string;
-    category: string; // e.g., Campaign, Promotion, Content, Feature, Initiative
-    impact: string;   // e.g., High, Medium, Low
-    competitiveGap?: string;
-    tags?: string[];
+    category: string;
+    impact: string;
+    competitiveGap?: string | null;
+    tags?: string[] | null;
+    // --- Thai Strategic Analysis Fields ---
+    purpose_th: string;       // ๑. รู้เป้าหมาย
+    target_audience_th: string; // ๒. รู้คนฟัง/คนใช้
+    context_th: string;         // ๓. รู้บริบท
+    constraints_th: string;     // ๔. รู้ข้อจำกัด
+    competitors_th: string;     // ๕. รู้ว่าใครทำอะไรไปแล้ว
+    untapped_potential_th: string; // ๖. รู้ว่าอะไร "ยังไม่มีใครกล้าทำ"
 }
 
 // Expected structure from the Gemini JSON response
@@ -114,47 +121,62 @@ export async function GET(request: NextRequest) {
     const competitorSummary = summarizeCompetitors(competitorsData);
     console.log("Competitor Summary:", competitorSummary);
 
+    // Define the JSON structure example separately to avoid linter issues
+    const jsonStructureExample = `{
+      "recommendations": [
+        {
+          "title": "ชื่อข้อเสนอแนะ (ภาษาไทย)",
+          "description": "คำอธิบายโดยละเอียดเกี่ยวกับข้อเสนอแนะและเหตุผลตามการวิเคราะห์คู่แข่ง (ภาษาไทย)",
+          "category": "แคมเปญ", "impact": "สูง",
+          "competitiveGap": "ช่องว่างทางการแข่งขันที่ระบุ (ภาษาไทย)",
+          "tags": ["คำหลัก1", "คำหลัก2"],
+          "purpose_th": "วิเคราะห์เป้าหมายหลัก... (ภาษาไทย)",
+          "target_audience_th": "ระบุกลุ่มเป้าหมาย... (ภาษาไทย)",
+          "context_th": "อธิบายสถานการณ์... (ภาษาไทย)",
+          "constraints_th": "ระบุข้อจำกัด... (ภาษาไทย)",
+          "competitors_th": "เปรียบเทียบกับคู่แข่ง... (ภาษาไทย)",
+          "untapped_potential_th": "เสนอแนะมุมมอง... (ภาษาไทย)"
+        }
+        // ... more recommendation objects
+      ]
+    }`;
+
     // 3. Construct Gemini Prompt
-    const prompt = `
-You are an expert marketing and business strategist. Analyze the following client information and competitor summary to generate actionable recommendations.
-
-**Client Information:**
-*   Name: ${clientInfo.clientName}
-*   Market: ${clientInfo.market}
-*   Product Focus: ${clientInfo.productFocus}
-
-**Competitor Landscape Summary:**
-${competitorSummary}
-
-**Task:**
-Based ONLY on the information provided above, generate 5-7 diverse and actionable recommendations for ${clientInfo.clientName} to gain a competitive advantage in the ${clientInfo.market} market, specifically considering their focus on ${clientInfo.productFocus}.
-
-**Recommendations should cover areas like:** Campaigns, Promotions, Content Strategy, New Features, Service Improvements, or Strategic Initiatives.
-
-**Output Format Requirements:**
-*   Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting (like \`\`\`json\`).
-*   The JSON object MUST strictly follow the structure below.
-*   Use "High", "Medium", or "Low" for the impact field.
-*   Provide a concise "competitiveGap" string identifying the specific opportunity the recommendation addresses (optional, use null if not applicable).
-*   Include 2-3 relevant keyword strings in the "tags" array.
-
-**Required JSON Structure:**
-\`\`\`json
-{
-  "recommendations": [
-    {
-      "title": "Recommendation Title",
-      "description": "Detailed description of the recommendation and its rationale based on the competitor analysis.",
-      "category": "Campaign", // e.g., Promotion, Feature, Content, Initiative, Service Improvement
-      "impact": "High", // High, Medium, or Low
-      "competitiveGap": "Specific gap addressed (e.g., Pricing Strategy, Service Offering)", // or null
-      "tags": ["keyword1", "keyword2"]
-    }
-    // ... more recommendation objects
-  ]
-}
-\`\`\`
-`;
+    const prompt = `\
+    You are an expert marketing and business strategist fluent **exclusively in Thai**. Analyze the following client information and competitor summary (provided in English) to generate actionable recommendations **entirely in Thai**. \
+\
+    \*\*Client Information (Context):\*\*\
+    \*   Name: ${clientInfo.clientName}\
+    \*   Market: ${clientInfo.market}\
+    \*   Product Focus: ${clientInfo.productFocus}\
+\
+    \*\*Competitor Landscape Summary (Context):\*\*\
+    ${competitorSummary}\
+\
+    \*\*Task:\*\*\
+    1.  Generate 5-7 diverse and actionable recommendations for ${clientInfo.clientName} to gain a competitive advantage in the ${clientInfo.market} market, specifically considering their focus on ${clientInfo.productFocus}. \*\*ALL OUTPUT MUST BE IN THAI.\*\*\
+    2.  **Leverage your Google Search tool:** Find 1-2 relevant successful case studies or creative ideas from other businesses (globally or in ${clientInfo.market}) with a similar product focus (${clientInfo.productFocus}). \
+    3.  **Incorporate Search Insights:** Use the findings from your search to inspire and enhance the recommendations and analysis you provide. Make the ideas more creative and grounded in real-world examples.\
+    4.  For EACH recommendation, perform a concise \*\*yet insightful and specific\*\* strategic analysis covering the points below, \*\*also in Thai\*\*. \
+    5.  Recommendations should cover areas like: แคมเปญ, โปรโมชั่น, กลยุทธ์เนื้อหา, ฟีเจอร์ใหม่, การปรับปรุงบริการ, or โครงการเชิงกลยุทธ์.\
+\
+    \*\*Strategic Analysis Points (Generate in Thai with Specificity):\*\*\
+    1.  **เป้าหมาย (Purpose):** เป้าหมายหลัก \*ที่วัดผลได้\* ของข้อเสนอนี้คืออะไร? และมันเชื่อมโยงกับจุดแข็ง/จุดอ่อนของคู่แข่งหรือเป้าหมายลูกค้าอย่างไร?\
+    2.  **คนฟัง/คนใช้ (Target Audience):** ระบุกลุ่มเป้าหมายหลัก \*อย่างเฉพาะเจาะจง\* (เช่น ช่างมืออาชีพในเขตกรุงเทพฯ, ผู้ใช้งาน DIY ครั้งแรก) และ \*ทำไม\* ข้อเสนอนี้จึงดึงดูดกลุ่มนี้เป็นพิเศษ?\
+    3.  **บริบท (Context):** \*สภาวะตลาดหรือการกระทำของคู่แข่งใด\* ที่ทำให้ข้อเสนอนี้มีความสำคัญหรือเป็นโอกาสในตอนนี้? อ้างอิงจากข้อมูลสรุปคู่แข่งถ้าเป็นไปได้\
+    4.  **ข้อจำกัด (Constraints):** ระบุข้อจำกัด \*ที่เป็นไปได้และเฉพาะเจาะจง\* มากกว่าแค่ 'งบประมาณ/ทรัพยากร' (เช่น ต้องใช้เวลาพัฒนา 6 เดือน, ต้องการพันธมิตรด้านโลจิสติกส์, อาจกระทบยอดขายสินค้าเดิม)?\
+    5.  **คู่แข่ง/มาตรฐาน (Competitors/Benchmarks):** \*เปรียบเทียบข้อเสนอนี้กับสิ่งที่คู่แข่ง (ระบุชื่อ ถ้ามีในข้อมูลสรุป) กำลังทำอยู่\* และ/หรือ \*แนวทางที่ประสบความสำเร็จจากกรณีศึกษาที่ค้นพบผ่าน Google Search?\* มีตัวอย่างหรือมาตรฐานใดที่เราเทียบเคียงได้?\
+    6.  **ศักยภาพที่ยังไม่มีใครทำ (Untapped Potential):** เสนอ \*ขั้นตอนแรกที่เป็นรูปธรรม\* หรือ \*ช่องว่าง/กลุ่มลูกค้าเฉพาะทาง\* ที่ข้อเสนอนี้สามารถตอบสนองได้และยังไม่มีใครทำได้ดี? \*อ้างอิงข้อมูลจากการค้นหาถ้าเป็นไปได้\*\
+\
+    \*\*Output Format Requirements:\*\*\
+    \*   Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting (like \\\`\\\`\\\`json\\\`).\
+    \*   The JSON object MUST strictly follow the structure below.\
+    \*   \*\*CRITICAL: ALL text values within the JSON object MUST be in Thai language.\*\* This includes title, description, category, impact, competitiveGap, tags, and all *_th fields.\
+    \*   Use \"High\", \"Meidum\", or \"Low\" for the impact field.\
+\
+    \*\*Required JSON Structure Example:\*\*\
+    ${jsonStructureExample}\
+    `;
 
     // 4. Call Gemini API with Grounding
     console.log("Sending request to Gemini API...");
@@ -167,7 +189,6 @@ Based ONLY on the information provided above, generate 5-7 diverse and actionabl
             "google_search": {}
         }],
         generationConfig: {
-          response_mime_type: "application/json",
           temperature: 0.6 // Adjust temperature for creativity vs consistency
         }
     };
@@ -194,10 +215,14 @@ Based ONLY on the information provided above, generate 5-7 diverse and actionabl
         throw new Error('Gemini returned empty or invalid content.');
     }
 
+    let cleanedText: string = ''; // Declare outside try block for scope
     let parsedRecommendations: GeminiRecommendationOutput;
     try {
-        // Attempt to parse the JSON string returned by Gemini
-        parsedRecommendations = JSON.parse(generatedText);
+        // Clean potential markdown fences before parsing
+        cleanedText = generatedText.trim().replace(/^```json\s*/, '').replace(/\s*```$/, '');
+
+        // Attempt to parse the cleaned JSON string returned by Gemini
+        parsedRecommendations = JSON.parse(cleanedText);
         console.log(`Successfully parsed ${parsedRecommendations?.recommendations?.length ?? 0} recommendations from Gemini.`);
 
         // Basic validation
@@ -206,7 +231,7 @@ Based ONLY on the information provided above, generate 5-7 diverse and actionabl
         }
 
     } catch(parseError: any) {
-        console.error("Failed to parse JSON from Gemini:", generatedText, "Error:", parseError);
+        console.error("Failed to parse JSON from Gemini (after cleaning):", cleanedText, "Error:", parseError);
         // Fallback or throw error - maybe return an empty array or error response
         throw new Error(`Failed to parse recommendations JSON from AI: ${parseError.message}`);
     }
