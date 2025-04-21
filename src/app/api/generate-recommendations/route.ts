@@ -18,6 +18,11 @@ interface GeneratedRecommendation {
     constraints_th: string;     // ๔. รู้ข้อจำกัด
     competitors_th: string;     // ๕. รู้ว่าใครทำอะไรไปแล้ว
     untapped_potential_th: string; // ๖. รู้ว่าอะไร "ยังไม่มีใครกล้าทำ"
+    // --- Creative Marketing Execution Ideas ---
+    promoted_product_th: string; // Product/Service to highlight
+    mood_and_tone_th: string;    // e.g., น่าเชื่อถือ, สนุกสนาน, มืออาชีพ
+    key_message_th: string;      // Core message/tagline
+    execution_example_th: string; // Concrete example (e.g., Facebook post idea)
 }
 
 // Expected structure from the Gemini JSON response
@@ -117,25 +122,38 @@ export async function GET(request: NextRequest) {
 
     console.log(`Found ${competitorsData.length} competitors for runId: ${runId}. Preparing prompt for Gemini.`);
 
-    // 2. Summarize Competitor Data
-    const competitorSummary = summarizeCompetitors(competitorsData);
-    console.log("Competitor Summary:", competitorSummary);
+    // 2. Convert full competitor data to JSON string for the prompt
+    const competitorDataJsonString = JSON.stringify(competitorsData, null, 2); // Pretty-print for readability if needed
+
+    // Check if JSON string is too large (optional safety check - adjust limit as needed)
+    const MAX_COMPETITOR_JSON_LENGTH = 30000; // Example limit (adjust based on typical data size and token limits)
+    if (competitorDataJsonString.length > MAX_COMPETITOR_JSON_LENGTH) {
+        console.warn(`Competitor data JSON string is very large (${competitorDataJsonString.length} chars), potentially exceeding limits. Consider summarizing or selecting key fields.`);
+        // Potentially fallback to summarization or throw error if too large
+        // For now, we proceed but log a warning.
+    }
 
     // Define the JSON structure example separately to avoid linter issues
     const jsonStructureExample = `{
       "recommendations": [
         {
           "title": "ชื่อข้อเสนอแนะ (ภาษาไทย)",
-          "description": "คำอธิบายโดยละเอียดเกี่ยวกับข้อเสนอแนะและเหตุผลตามการวิเคราะห์คู่แข่ง (ภาษาไทย)",
+          "description": "คำอธิบายอย่างละเอียด: แนวคิดหลักคืออะไร, ทำไมถึงควรทำ (อ้างอิงข้อมูลคู่แข่ง/กรณีศึกษาที่ค้นเจอ), คาดหวังผลลัพธ์อะไร... (ภาษาไทย)",
           "category": "แคมเปญ", "impact": "สูง",
-          "competitiveGap": "ช่องว่างทางการแข่งขันที่ระบุ (ภาษาไทย)",
+          "competitiveGap": "ช่องว่างทางการแข่งขัน... (ภาษาไทย)",
           "tags": ["คำหลัก1", "คำหลัก2"],
-          "purpose_th": "วิเคราะห์เป้าหมายหลัก... (ภาษาไทย)",
-          "target_audience_th": "ระบุกลุ่มเป้าหมาย... (ภาษาไทย)",
-          "context_th": "อธิบายสถานการณ์... (ภาษาไทย)",
-          "constraints_th": "ระบุข้อจำกัด... (ภาษาไทย)",
-          "competitors_th": "เปรียบเทียบกับคู่แข่ง... (ภาษาไทย)",
-          "untapped_potential_th": "เสนอแนะมุมมอง... (ภาษาไทย)"
+          // Strategic Analysis Fields (Detailed)
+          "purpose_th": "วิเคราะห์เป้าหมายหลักอย่างละเอียด... (ภาษาไทย)",
+          "target_audience_th": "ระบุกลุ่มเป้าหมายอย่างชัดเจน... (ภาษาไทย)",
+          "context_th": "อธิบายสถานการณ์ตลาดโดยละเอียด... (ภาษาไทย)",
+          "constraints_th": "ระบุข้อจำกัดที่เป็นรูปธรรม... (ภาษาไทย)",
+          "competitors_th": "เปรียบเทียบกับคู่แข่งอย่างละเอียด... (ภาษาไทย)",
+          "untapped_potential_th": "เสนอแนะโอกาสที่ชัดเจน... (ภาษาไทย)",
+          // Marketing Execution Fields (Detailed)
+          "promoted_product_th": "ชื่อสินค้า/บริการที่เน้น... (ภาษาไทย)",
+          "mood_and_tone_th": "น่าเชื่อถือและเชี่ยวชาญ เพราะ... (ภาษาไทย)",
+          "key_message_th": "สโลแกนหลัก พร้อมคำอธิบาย... (ภาษาไทย)",
+          "execution_example_th": "ตัวอย่างละเอียด: ขั้นตอนโพสต์ Facebook... (ภาษาไทย)"
         }
         // ... more recommendation objects
       ]
@@ -143,36 +161,50 @@ export async function GET(request: NextRequest) {
 
     // 3. Construct Gemini Prompt
     const prompt = `\
-    You are an expert marketing and business strategist fluent **exclusively in Thai**. Analyze the following client information and competitor summary (provided in English) to generate actionable recommendations **entirely in Thai**. \
+    You are an expert marketing and business strategist AND a creative campaign specialist, fluent **exclusively in Thai**. Your goal is to generate actionable recommendations that are both strategically sound and creatively engaging. Analyze the following client information and **detailed competitor data (provided as a JSON array below)** to generate recommendations **entirely in Thai**. \
 \
     \*\*Client Information (Context):\*\*\
     \*   Name: ${clientInfo.clientName}\
     \*   Market: ${clientInfo.market}\
     \*   Product Focus: ${clientInfo.productFocus}\
 \
-    \*\*Competitor Landscape Summary (Context):\*\*\
-    ${competitorSummary}\
+    \*\*Detailed Competitor Data (Context - JSON Array):\*\*\
+    \`\`\`json\
+    ${competitorDataJsonString}\
+    \`\`\`\
 \
     \*\*Task:\*\*\
-    1.  Generate 5-7 diverse and actionable recommendations for ${clientInfo.clientName} to gain a competitive advantage in the ${clientInfo.market} market, specifically considering their focus on ${clientInfo.productFocus}. \*\*ALL OUTPUT MUST BE IN THAI.\*\*\
-    2.  **Leverage your Google Search tool:** Find 1-2 relevant successful case studies or creative ideas from other businesses (globally or in ${clientInfo.market}) with a similar product focus (${clientInfo.productFocus}). \
-    3.  **Incorporate Search Insights:** Use the findings from your search to inspire and enhance the recommendations and analysis you provide. Make the ideas more creative and grounded in real-world examples.\
-    4.  For EACH recommendation, perform a concise \*\*yet insightful and specific\*\* strategic analysis covering the points below, \*\*also in Thai\*\*. \
-    5.  Recommendations should cover areas like: แคมเปญ, โปรโมชั่น, กลยุทธ์เนื้อหา, ฟีเจอร์ใหม่, การปรับปรุงบริการ, or โครงการเชิงกลยุทธ์.\
-\
-    \*\*Strategic Analysis Points (Generate in Thai with Specificity):\*\*\
-    1.  **เป้าหมาย (Purpose):** เป้าหมายหลัก \*ที่วัดผลได้\* ของข้อเสนอนี้คืออะไร? และมันเชื่อมโยงกับจุดแข็ง/จุดอ่อนของคู่แข่งหรือเป้าหมายลูกค้าอย่างไร?\
-    2.  **คนฟัง/คนใช้ (Target Audience):** ระบุกลุ่มเป้าหมายหลัก \*อย่างเฉพาะเจาะจง\* (เช่น ช่างมืออาชีพในเขตกรุงเทพฯ, ผู้ใช้งาน DIY ครั้งแรก) และ \*ทำไม\* ข้อเสนอนี้จึงดึงดูดกลุ่มนี้เป็นพิเศษ?\
-    3.  **บริบท (Context):** \*สภาวะตลาดหรือการกระทำของคู่แข่งใด\* ที่ทำให้ข้อเสนอนี้มีความสำคัญหรือเป็นโอกาสในตอนนี้? อ้างอิงจากข้อมูลสรุปคู่แข่งถ้าเป็นไปได้\
-    4.  **ข้อจำกัด (Constraints):** ระบุข้อจำกัด \*ที่เป็นไปได้และเฉพาะเจาะจง\* มากกว่าแค่ 'งบประมาณ/ทรัพยากร' (เช่น ต้องใช้เวลาพัฒนา 6 เดือน, ต้องการพันธมิตรด้านโลจิสติกส์, อาจกระทบยอดขายสินค้าเดิม)?\
-    5.  **คู่แข่ง/มาตรฐาน (Competitors/Benchmarks):** \*เปรียบเทียบข้อเสนอนี้กับสิ่งที่คู่แข่ง (ระบุชื่อ ถ้ามีในข้อมูลสรุป) กำลังทำอยู่\* และ/หรือ \*แนวทางที่ประสบความสำเร็จจากกรณีศึกษาที่ค้นพบผ่าน Google Search?\* มีตัวอย่างหรือมาตรฐานใดที่เราเทียบเคียงได้?\
-    6.  **ศักยภาพที่ยังไม่มีใครทำ (Untapped Potential):** เสนอ \*ขั้นตอนแรกที่เป็นรูปธรรม\* หรือ \*ช่องว่าง/กลุ่มลูกค้าเฉพาะทาง\* ที่ข้อเสนอนี้สามารถตอบสนองได้และยังไม่มีใครทำได้ดี? \*อ้างอิงข้อมูลจากการค้นหาถ้าเป็นไปได้\*\
-\
+    \*\*Your primary goal is to leverage Google Search to find relevant, successful examples (case studies, creative campaigns, innovative features) related to ${clientInfo.productFocus} from other businesses.\*\* \
+    1.  **Synthesize Findings into Recommendations:** Based on your search findings AND the **detailed analysis of the provided competitor JSON**, generate 5-7 diverse recommendations for ${clientInfo.clientName}. Aim for a mix of strategic and creative/innovative ideas. Generate **detailed, comprehensive, and presentation-ready** content for each recommendation. \*\*ALL OUTPUT MUST BE IN THAI.\*\*\
+        *   **Creative Focus:** When generating creative ideas, focus on tapping into **แรงจูงใจทางอารมณ์ (Emotional Motivation)**, creating **ความต่างที่คนดูแล้ว "รู้สึกอยากลอง" ทันที (a difference that evokes immediate desire)**, and achieving real **'scroll-stopping' power (พลังในการหยุดนิ้ว)**.\
+    2.  **Elaborate Descriptions:** For EACH recommendation, write a **comprehensive description (in Thai)** that includes:\
+        *   A clear explanation of the core idea.\
+        *   The strategic rationale, explicitly linking to **specific data points in the competitor JSON** OR successful examples/case studies found via Google Search.\
+        *   The expected positive outcomes or benefits for the client.\
+    3.  **Justify Each Recommendation:** For every recommendation, clearly state whether it is primarily inspired by the **analysis of the competitor JSON** OR by external examples found via Google Search.\
+    4.  For EACH recommendation, perform a **detailed, insightful, and specific** strategic analysis covering the points below, \*\*also in Thai\*\*. **Elaborate on each point** with sufficient justification and detail to be clear and convincing. Ensure the analysis references search findings or **specific competitor data points from the JSON** where applicable.\
+    5.  **Generate Brand-Aligned, Attention-Grabbing Execution Concepts:** For EACH recommendation, provide detailed marketing execution concepts **in Thai**. **Critically evaluate: Would the target audience stop scrolling for this? Would the brand approve this creative direction?** Concepts should cover:\
+        *   **Promoted Product/Service (สินค้า/บริการที่จะเน้น):** Which specific client product/service does this idea best promote? Be specific.\
+        *   **Mood & Tone (อารมณ์และโทน):** What should the feeling be (e.g., น่าเชื่อถือ, สนุกสนาน, มืออาชีพ, เร่งด่วน)? **Explain why** and Reflect the desired emotional motivation.\
+        *   **Key Message/Tagline (ข้อความหลัก/สโลแกน):** What is the core message or a catchy tagline? **Make technical points easy to understand (จุดขายทางเทคนิคที่พูดง่าย).** \
+        *   **Execution Example (ตัวอย่างการนำไปใช้):** Describe a **detailed execution example**... **Briefly explain HOW this example achieves scroll-stopping power and aligns with the likely brand image.** Aim for immediate interest and brand appropriateness.\
+    6.  Present all output in **natural, fluent, and engaging Thai.** \
+    7.  Recommendations should cover areas like: แคมเปญ, โปรโมชั่น, กลยุทธ์เนื้อหา, ฟีเจอร์ใหม่, การปรับปรุงบริการ, โครงการเชิงกลยุทธ์, and creative concepts.\
+ \
+    \*\*Strategic Analysis Points (Generate in Thai with Specificity and Detail):\*\*\
+    (Update instructions to reference the detailed JSON)\
+    1.  **เป้าหมาย (Purpose):** เป้าหมายหลัก \*ที่วัดผลได้\* ของข้อเสนอนี้คืออะไร? ... (Elaborate and justify) และมันเชื่อมโยงกับจุดแข็ง/จุดอ่อนของคู่แข่ง (จาก JSON) หรือเป้าหมายลูกค้าอย่างไร?\
+    2.  **คนฟัง/คนใช้ (Target Audience):** ระบุกลุ่มเป้าหมายหลัก \*อย่างเฉพาะเจาะจง\* (พิจารณาข้อมูล targetAudience จาก JSON)...\
+    3.  **บริบท (Context):** \*สภาวะตลาดหรือการกระทำ/ข้อมูลของคู่แข่งใดจาก JSON\* ที่ทำให้ข้อเสนอนี้มีความสำเร็จ ... อ้างอิงข้อมูลจาก JSON ถ้าเป็นไปได้\
+    4.  **ข้อจำกัด (Constraints):** ระบุข้อจำกัด \*ที่เป็นไปได้และเฉพาะเจาะจง\* ... (Elaborate beyond generic points)\
+    5.  **คู่แข่ง/มาตรฐาน (Competitors/Benchmarks):** \*เปรียบเทียบข้อเสนอนี้กับสิ่งที่คู่แข่ง (จาก JSON data) กำลังทำอยู่\* ... และ/หรือ \*แนวทางที่ประสบความสำเร็จจากกรณีศึกษา/ตัวอย่างที่ค้นพบผ่าน Google Search ...\
+    6.  **ศักยภาพที่ยังไม่มีใครทำ (Untapped Potential):** ... \*ต้องอ้างอิงข้อมูลจากการค้นหา หรือ ข้อมูลเฉพาะจาก competitor JSON เพื่อสนับสนุน\*\\\
+ \
     \*\*Output Format Requirements:\*\*\
     \*   Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting (like \\\`\\\`\\\`json\\\`).\
     \*   The JSON object MUST strictly follow the structure below.\
-    \*   \*\*CRITICAL: ALL text values within the JSON object MUST be in Thai language.\*\* This includes title, description, category, impact, competitiveGap, tags, and all *_th fields.\
-    \*   Use \"High\", \"Meidum\", or \"Low\" for the impact field.\
+    \*   \*\*CRITICAL: ALL text values within the JSON object MUST be in Thai language and provide sufficient detail for presentation.** This includes title, description, category, impact, competitiveGap, tags, all strategic *_th fields, **and the new marketing execution fields (promoted_product_th, mood_and_tone_th, key_message_th, execution_example_th)**.\
+    \*   Use \"High\", \"Medium\", or \"Low\" for the impact field. (Reverted based on user change in previous step - user seems to prefer English impact terms)\
 \
     \*\*Required JSON Structure Example:\*\*\
     ${jsonStructureExample}\

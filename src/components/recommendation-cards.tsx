@@ -25,6 +25,10 @@ interface Recommendation {
   constraints_th?: string;
   competitors_th?: string;
   untapped_potential_th?: string;
+  promoted_product_th?: string;
+  mood_and_tone_th?: string;
+  key_message_th?: string;
+  execution_example_th?: string;
 }
 
 export function RecommendationCards() {
@@ -420,6 +424,41 @@ export function RecommendationCards() {
                      </div>
                    </div>
                  )}
+
+                 {/* --- Marketing Execution Section --- */}
+                 <div className="space-y-3 border-t pt-3">
+                    <h4 className="font-semibold text-base mb-2">แนวทางการสื่อสารการตลาด (Marketing Execution Concepts)</h4>
+                    <div className="text-sm">
+                      <p className="font-medium">สินค้า/บริการที่จะเน้น (Promoted Product/Service)</p>
+                      <p className="text-muted-foreground pl-4">{selectedRecommendation.promoted_product_th || 'ไม่ได้ระบุ'}</p>
+                    </div>
+                    <div className="text-sm">
+                      <p className="font-medium">อารมณ์และโทน (Mood & Tone)</p>
+                      <p className="text-muted-foreground pl-4">{selectedRecommendation.mood_and_tone_th || 'ไม่ได้ระบุ'}</p>
+                    </div>
+                    <div className="text-sm">
+                      <p className="font-medium">ข้อความหลัก/สโลแกน (Key Message/Tagline)</p>
+                      <p className="text-muted-foreground pl-4">{selectedRecommendation.key_message_th || 'ไม่ได้ระบุ'}</p>
+                    </div>
+                    <div className="text-sm">
+                      <p className="font-medium">ตัวอย่างการนำไปใช้ (Execution Example)</p>
+                      {/* Use whitespace-pre-wrap to respect newlines in the example */}
+                      <p className="text-muted-foreground pl-4 whitespace-pre-wrap">{selectedRecommendation.execution_example_th || 'ไม่มีตัวอย่าง'}</p>
+                    </div>
+                  </div>
+
+                  {(selectedRecommendation.tags && selectedRecommendation.tags.length > 0) && (
+                    <div>
+                      <h4 className="font-semibold mb-2 text-base border-t pt-3">คำค้นที่เกี่ยวข้อง (Tags)</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedRecommendation.tags.map((tag) => (
+                          <Badge key={tag} variant="secondary" className="text-xs">
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
              </div>
            </ScrollArea>
 
