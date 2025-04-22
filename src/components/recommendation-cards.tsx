@@ -9,6 +9,7 @@ import { useState, useEffect } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import Image from "next/image";
 
 // --- Define Defaults for Editable Prompt Sections ---
 const DEFAULT_TASK_SECTION = `1.  Conceptualize and Detail **7-10 *truly distinctive and breakthrough*** creative recommendations for {clientName} to dominate attention and gain a significant competitive advantage in the {market} market, specifically bringing {productFocus} to life in novel ways.
@@ -82,6 +83,11 @@ export function RecommendationCards() {
   const [error, setError] = useState<string | null>(null);
   // --- State for Dialog ---
   const [selectedRecommendation, setSelectedRecommendation] = useState<Recommendation | null>(null);
+  // --- NEW: State for Image Generation in Dialog ---
+  const [aspectRatio, setAspectRatio] = useState<string>('ASPECT_16_9');
+  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [isImageLoading, setIsImageLoading] = useState<boolean>(false);
+  const [imageError, setImageError] = useState<string | null>(null);
 
   // --- State for Client/Product Selection ---
   const [clientNames, setClientNames] = useState<string[]>([]);
@@ -245,10 +251,79 @@ export function RecommendationCards() {
   // Handler to set the selected recommendation for the dialog
   const handleCardClick = (recommendation: Recommendation) => {
     setSelectedRecommendation(recommendation);
+    // Reset image state when a new card is clicked
+    setGeneratedImageUrl(null);
+    setIsImageLoading(false);
+    setImageError(null);
+    setAspectRatio('ASPECT_16_9'); // Reset aspect ratio too
+  };
+
+  // --- NEW: Handler to Generate Image --- 
+  const handleGenerateImage = async () => {
+    if (!selectedRecommendation) return;
+
+    setIsImageLoading(true);
+    setImageError(null);
+    setGeneratedImageUrl(null); // Clear previous image
+
+    // Construct prompt (Combine concept, headline, description? Adjust as needed)
+    let imagePrompt = selectedRecommendation.concept_idea || '';
+    if (selectedRecommendation.copywriting?.headline) {
+        imagePrompt += `. Headline: ${selectedRecommendation.copywriting.headline}`;
+    }
+    // Optionally add more details, e.g., from description, if helpful
+    // if (selectedRecommendation.description) {
+    //     imagePrompt += ` (${selectedRecommendation.description.substring(0, 100)}...)`; // Limit length if adding description
+    // }
+
+    if (!imagePrompt.trim()) {
+        setImageError("Cannot generate image: Missing concept or headline in recommendation details.");
+        setIsImageLoading(false);
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/generate-image', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ 
+                prompt: imagePrompt, 
+                aspect_ratio: aspectRatio
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || `API Error: ${response.status}`);
+        }
+
+        if (!data.imageUrl) {
+             throw new Error('API did not return an image URL.');
+        }
+
+        setGeneratedImageUrl(data.imageUrl);
+
+    } catch (err: any) {
+        console.error("Failed to generate image:", err);
+        setImageError(err.message || "An unknown error occurred during image generation.");
+    } finally {
+        setIsImageLoading(false);
+    }
   };
 
   return (
-    <Dialog>
+    <Dialog onOpenChange={(open) => {
+      // Reset image state when dialog is closed
+      if (!open) {
+        setGeneratedImageUrl(null);
+        setIsImageLoading(false);
+        setImageError(null);
+        setAspectRatio('ASPECT_16_9');
+      }
+    }}>
       <div>
         {/* --- Selection UI --- */}
          <div className="flex flex-col gap-4 p-4 border rounded-lg mb-6 bg-muted/40">
@@ -540,6 +615,67 @@ export function RecommendationCards() {
                   )}
                 </section>
               )}
+
+              {/* --- NEW: Image Generation Section --- */}
+              <section className="space-y-3 pt-4 border-t mt-4">
+                <h4 className="font-semibold">Generate Visual Concept (Ideogram)</h4>
+                 {/* Aspect Ratio Selector */}
+                 <div className="flex items-center gap-4">
+                     <Label htmlFor="aspect-ratio-select" className="text-sm whitespace-nowrap">Aspect Ratio:</Label>
+                     <Select
+                         value={aspectRatio}
+                         onValueChange={setAspectRatio}
+                         disabled={isImageLoading}
+                     >
+                         <SelectTrigger className="h-9 w-[150px] bg-background" id="aspect-ratio-select">
+                         <SelectValue placeholder="Select Ratio..." />
+                         </SelectTrigger>
+                         <SelectContent>
+                             <SelectItem value="ASPECT_16_9">16:9 (Landscape)</SelectItem>
+                             <SelectItem value="ASPECT_1_1">1:1 (Square)</SelectItem>
+                             <SelectItem value="ASPECT_9_16">9:16 (Portrait)</SelectItem>
+                         </SelectContent>
+                     </Select>
+                     {/* Generate Button */}
+                     <Button 
+                        onClick={handleGenerateImage}
+                        disabled={isImageLoading || !selectedRecommendation}
+                        size="sm"
+                     >
+                        {isImageLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        {isImageLoading ? 'Generating...' : 'Generate Image'}
+                    </Button>
+                 </div>
+
+                 {/* Display Area: Loading, Error, or Image */}
+                 <div className="mt-4 min-h-[200px] border rounded-md flex items-center justify-center bg-muted/20 p-4">
+                    {isImageLoading && (
+                        <div className="flex flex-col items-center text-muted-foreground">
+                           <Loader2 className="h-8 w-8 animate-spin mb-2" />
+                           <span>Generating image...</span> 
+                        </div>
+                    )}
+                    {imageError && !isImageLoading && (
+                        <div className="flex flex-col items-center text-destructive text-center">
+                           <AlertTriangle className="h-8 w-8 mb-2" />
+                           <span className="font-semibold">Image Generation Failed</span>
+                           <span className="text-xs mt-1">{imageError}</span>
+                        </div>
+                    )}
+                     {!isImageLoading && !imageError && generatedImageUrl && (
+                         <Image 
+                             src={generatedImageUrl}
+                             alt={selectedRecommendation?.concept_idea || 'Generated visual concept'}
+                             width={512} // Adjust width/height as needed for layout
+                             height={512 * (aspectRatio === 'ASPECT_9_16' ? (16/9) : aspectRatio === 'ASPECT_16_9' ? (9/16) : 1)} // Calculate height based on ratio
+                             className="rounded-md object-contain max-h-[400px]" // Constrain height
+                         />
+                    )}
+                     {!isImageLoading && !imageError && !generatedImageUrl && (
+                         <span className="text-muted-foreground text-sm">Click "Generate Image" to visualize the concept.</span>
+                    )}
+                 </div>
+              </section>
 
             </div>
           </ScrollArea>
