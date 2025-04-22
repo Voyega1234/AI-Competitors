@@ -7,22 +7,17 @@ const prisma = new PrismaClient();
 interface GeneratedRecommendation {
     title: string;
     description: string;
-    category: string;
-    impact: string;
+    category: string; // e.g., Campaign, Promotion, Content, Feature, Initiative
+    impact: string;   // e.g., High, Medium, Low
     competitiveGap?: string | null;
     tags?: string[] | null;
-    // --- Thai Strategic Analysis Fields ---
+    // --- Add Thai Strategic Analysis Fields ---
     purpose_th: string;       // ๑. รู้เป้าหมาย
     target_audience_th: string; // ๒. รู้คนฟัง/คนใช้
     context_th: string;         // ๓. รู้บริบท
     constraints_th: string;     // ๔. รู้ข้อจำกัด
     competitors_th: string;     // ๕. รู้ว่าใครทำอะไรไปแล้ว
     untapped_potential_th: string; // ๖. รู้ว่าอะไร "ยังไม่มีใครกล้าทำ"
-    // --- Creative Marketing Execution Ideas ---
-    promoted_product_th: string; // Product/Service to highlight
-    mood_and_tone_th: string;    // e.g., น่าเชื่อถือ, สนุกสนาน, มืออาชีพ
-    key_message_th: string;      // Core message/tagline
-    execution_example_th: string; // Concrete example (e.g., Facebook post idea)
 }
 
 // Expected structure from the Gemini JSON response
@@ -78,6 +73,9 @@ function summarizeCompetitors(competitors: Competitor[]): string {
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const runId = searchParams.get('runId');
+  const userBrief = searchParams.get('brief');
+  const taskSectionParam = searchParams.get('taskSection');
+  const detailsSectionParam = searchParams.get('detailsSection');
   const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY; // Use server-side key
 
   console.log(`Attempting to handle GET /api/generate-recommendations for runId: ${runId}`);
@@ -122,106 +120,99 @@ export async function GET(request: NextRequest) {
 
     console.log(`Found ${competitorsData.length} competitors for runId: ${runId}. Preparing prompt for Gemini.`);
 
-    // 2. Convert full competitor data to JSON string for the prompt
-    const competitorDataJsonString = JSON.stringify(competitorsData, null, 2); // Pretty-print for readability if needed
+    // 2. Summarize Competitor Data
+    const competitorSummary = summarizeCompetitors(competitorsData);
+    console.log("Competitor Summary:", competitorSummary);
 
-    // Check if JSON string is too large (optional safety check - adjust limit as needed)
-    const MAX_COMPETITOR_JSON_LENGTH = 30000; // Example limit (adjust based on typical data size and token limits)
-    if (competitorDataJsonString.length > MAX_COMPETITOR_JSON_LENGTH) {
-        console.warn(`Competitor data JSON string is very large (${competitorDataJsonString.length} chars), potentially exceeding limits. Consider summarizing or selecting key fields.`);
-        // Potentially fallback to summarization or throw error if too large
-        // For now, we proceed but log a warning.
+    // 3. Construct Gemini Prompt (Revised logic)
+
+    // Define Default Sections (placeholders will be replaced later)
+    const defaultTaskText = `1.  Conceptualize and Detail **7-10 *truly distinctive and breakthrough*** creative recommendations for {clientName} to dominate attention and gain a significant competitive advantage in the {market} market, specifically bringing {productFocus} to life in novel ways.\n2.  **Crucially, these recommendations MUST be highly CREATIVE and ACTIONABLE:** Focus intensely on unique creative directions, specific content narratives, viral-potential ad concepts, and engaging execution formats. Prioritize ideas that are **memorable, shareable, and emotionally resonant**. Push the boundaries of conventional marketing creative.\n3.  **Actively use the integrated search grounding capability** to inform your recommendations (trends, competitor examples, platform formats, audience conversations, external inspiration).\n4.  For EACH recommendation, provide the **Creative Execution Details** below. **Generate specific, compelling content for each field IN THAI LANGUAGE.**\n5.  Populate the corresponding fields in the final JSON object.`;
+    const defaultDetailsText = `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** (เช่น \"เคล็ดลับฮาวทู\", \"เบื้องหลังการทำงาน\", \"เรื่องราวความสำเร็จลูกค้า\", \"การหักล้างความเชื่อผิดๆ\", \"ไลฟ์สไตล์และการใช้งาน\", \"ปัญหาและการแก้ไข\").\nb.  **\`product_focus\`:** ระบุ {productFocus} หรือฟีเจอร์เฉพาะที่ต้องการเน้น **(ภาษาไทย)**.\nc.  **\`concept_idea\`:** สรุปแนวคิดสร้างสรรค์หลัก (1-2 ประโยค) สำหรับการนำเสนอไอเดียนี้ **(ภาษาไทย)**.\nd.  **\`copywriting\`:** สร้างสรรค์องค์ประกอบข้อความโฆษณาเบื้องต้น **(ภาษาไทย)**:\n    *   **\`headline\`:** พาดหัวที่ดึงดูดความสนใจ **(ภาษาไทย)**.\n    *   **\`sub_headline_1\`:** พาดหัวรองที่ขยายความหรือเน้นประโยชน์ **(ภาษาไทย)**.\n    *   **\`sub_headline_2\`:** พาดหัวรองที่สอง (ถ้ามี) เพื่อเพิ่มบริบทหรือความเร่งด่วน **(ภาษาไทย)** (ใช้ \`null\` หากไม่ต้องการ).\n    *   **\`bullets\`:** รายการจุดเด่น 2-4 ข้อที่เน้นประโยชน์หลัก, ฟีเจอร์ หรือเหตุผลที่น่าเชื่อถือ **(ภาษาไทย)**.\n    *   **\`cta\`:** ข้อความเรียกร้องให้ดำเนินการ (Call To Action) ที่ชัดเจน **(ภาษาไทย)** (เช่น \"เรียนรู้เพิ่มเติม\", \"ซื้อเลย\", \"ดูเดโม\", \"เข้าร่วม Waiting List\", \"ดาวน์โหลดคู่มือ\").`;
+
+    // Use provided sections or defaults
+    let taskSectionContent = taskSectionParam ? taskSectionParam.replace(/\{clientName\}/g, clientInfo.clientName).replace(/\{market\}/g, clientInfo.market).replace(/\{productFocus\}/g, clientInfo.productFocus || 'products/services') : defaultTaskText.replace(/\{clientName\}/g, clientInfo.clientName).replace(/\{market\}/g, clientInfo.market).replace(/\{productFocus\}/g, clientInfo.productFocus || 'products/services');
+    let detailsSectionContent = detailsSectionParam ? detailsSectionParam.replace(/\{productFocus\}/g, clientInfo.productFocus || 'products/services') : defaultDetailsText.replace(/\{productFocus\}/g, clientInfo.productFocus || 'products/services');
+
+    // Build user brief section
+    const userBriefSection = userBrief ? `
+**Additional User Brief/Context:**
+${userBrief}
+` : '';
+
+    // Construct the final prompt using the determined sections
+    const finalPrompt = `
+You are a **Visionary Creative Director & Disruptive Marketing Strategist**, fluent in Thai and English, known for generating **award-winning, conversation-starting campaigns**. Analyze the following client information and competitor summary to conceptualize groundbreaking creative recommendations and their initial execution details **in Thai**. **Crucially, leverage your access to real-time information via search grounding to ensure ideas are timely, relevant, and informed by the latest digital landscape.**
+
+**Client Information:**
+*   Name: ${clientInfo.clientName}
+*   Market: ${clientInfo.market}
+*   Product Focus: ${clientInfo.productFocus}
+${userBriefSection}
+
+**Competitor Landscape Summary:**
+${competitorSummary}
+*(Analyze this summary not just for what competitors *do*, but for **what they *don't* do well**, where their creative is **predictable or stale**, and identify **clear white spaces** for ${clientInfo.clientName} to own. **Use search grounding to supplement this summary with recent competitor activities or emerging players if needed.**)*
+
+**Task:**
+${taskSectionContent}
+
+**Creative Execution Details (Per Recommendation - Populate these fields IN THAI for the JSON):**
+${detailsSectionContent}
+
+**Output Format Requirements:**
+*   Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting (like \`\`\`json\`\`).
+*   The JSON object MUST strictly follow the structure below.
+*   **Crucially, the values for \`content_pillar\`, \`product_focus\`, \`concept_idea\`, and all fields within \`copywriting\` (\`headline\`, \`sub_headline_1\`, \`sub_headline_2\`, \`bullets\`, \`cta\`) MUST be generated in THAI LANGUAGE.**
+*   \`title\` and \`description\` fields should remain in English/Original language.
+*   Use "High", "Medium", or "Low" for the impact field (bias towards "High").
+*   Provide a concise "competitiveGap" string (in English/Original).
+*   Include 2-4 relevant and specific keyword strings in the "tags" array (in English/Original).
+
+**Required JSON Structure:**
+\`\`\`json
+{
+  "recommendations": [
+    {
+      "title": "หัวข้อแนะนำ (ภาษาไทย)", // Thai - Must be original
+      "description": "รายละเอียดแนวคิดสร้างสรรค์ ที่ไม่ซ้ำใคร และมีประสิทธิภาพ (ภาษาไทย)", // Thai - Must be original
+      "category": "Campaign", // Keep category identifier standard
+      "impact": "High",
+      "competitiveGap": "ระบุช่องว่างทางการแข่งขันที่ไอเดียนี้เข้าไปตอบโจทย์ (ภาษาไทย)", // Thai - Must be original
+      "tags": ["คำค้น1", "คำค้น2", "รูปแบบเนื้อหา"], // Thai - Must be original
+      "content_pillar": "ตัวอย่าง: เคล็ดลับฮาวทู", // Thai - Must be original
+      "product_focus": "ระบุ ${clientInfo.productFocus} ที่ระบุใน Input", // Thai - Must be original & specific to input
+      "concept_idea": "สรุปแนวคิดสร้างสรรค์หลักสำหรับไอเดียนี้ (1-2 ประโยค)", // Thai - Must be original
+      "copywriting": {
+        "headline": "พาดหัวหลักที่น่าสนใจ", // Thai - Must be original
+        "sub_headline_1": "พาดหัวรองสนับสนุน", // Thai - Must be original
+        "sub_headline_2": "พาดหัวรองที่สอง (ถ้ามี) หรือ null", // Thai - Must be original or null
+        "bullets": [
+          "จุดเด่นที่ 1", // Thai - Must be original
+          "จุดเด่นที่ 2", // Thai - Must be original
+          "จุดเด่นที่ 3"  // Thai - Must be original
+        ],
+        "cta": "ตัวอย่าง: ดูเพิ่มเติม" // Thai - Must be original
+      }
     }
-
-    // Define the JSON structure example separately to avoid linter issues
-    const jsonStructureExample = `{
-      "recommendations": [
-        {
-          "title": "ชื่อข้อเสนอแนะ (ภาษาไทย)",
-          "description": "คำอธิบายอย่างละเอียด: แนวคิดหลักคืออะไร, ทำไมถึงควรทำ (อ้างอิงข้อมูลคู่แข่ง/กรณีศึกษาที่ค้นเจอ), คาดหวังผลลัพธ์อะไร... (ภาษาไทย)",
-          "category": "แคมเปญ", "impact": "สูง",
-          "competitiveGap": "ช่องว่างทางการแข่งขัน... (ภาษาไทย)",
-          "tags": ["คำหลัก1", "คำหลัก2"],
-          // Strategic Analysis Fields (Detailed)
-          "purpose_th": "วิเคราะห์เป้าหมายหลักอย่างละเอียด... (ภาษาไทย)",
-          "target_audience_th": "ระบุกลุ่มเป้าหมายอย่างชัดเจน... (ภาษาไทย)",
-          "context_th": "อธิบายสถานการณ์ตลาดโดยละเอียด... (ภาษาไทย)",
-          "constraints_th": "ระบุข้อจำกัดที่เป็นรูปธรรม... (ภาษาไทย)",
-          "competitors_th": "เปรียบเทียบกับคู่แข่งอย่างละเอียด... (ภาษาไทย)",
-          "untapped_potential_th": "เสนอแนะโอกาสที่ชัดเจน... (ภาษาไทย)",
-          // Marketing Execution Fields (Detailed)
-          "promoted_product_th": "ชื่อสินค้า/บริการที่เน้น... (ภาษาไทย)",
-          "mood_and_tone_th": "น่าเชื่อถือและเชี่ยวชาญ เพราะ... (ภาษาไทย)",
-          "key_message_th": "สโลแกนหลัก พร้อมคำอธิบาย... (ภาษาไทย)",
-          "execution_example_th": "ตัวอย่างละเอียด: ขั้นตอนโพสต์ Facebook... (ภาษาไทย)"
-        }
-        // ... more recommendation objects
-      ]
-    }`;
-
-    // 3. Construct Gemini Prompt
-    const prompt = `\
-    You are an expert marketing and business strategist AND a creative campaign specialist, fluent **exclusively in Thai**. Your goal is to generate actionable recommendations that are both strategically sound and creatively engaging. Analyze the following client information and **detailed competitor data (provided as a JSON array below)** to generate recommendations **entirely in Thai**. \
-\
-    \*\*Client Information (Context):\*\*\
-    \*   Name: ${clientInfo.clientName}\
-    \*   Market: ${clientInfo.market}\
-    \*   Product Focus: ${clientInfo.productFocus}\
-\
-    \*\*Detailed Competitor Data (Context - JSON Array):\*\*\
-    \`\`\`json\
-    ${competitorDataJsonString}\
-    \`\`\`\
-\
-    \*\*Task:\*\*\
-    \*\*Your primary goal is to leverage Google Search to find relevant, successful examples (case studies, creative campaigns, innovative features) related to ${clientInfo.productFocus} from other businesses.\*\* \
-    1.  **Synthesize Findings into Recommendations:** Based on your search findings AND the **detailed analysis of the provided competitor JSON**, generate 5-7 diverse recommendations for ${clientInfo.clientName}. Aim for a mix of strategic and creative/innovative ideas. Generate **detailed, comprehensive, and presentation-ready** content for each recommendation. \*\*ALL OUTPUT MUST BE IN THAI.\*\*\
-        *   **Creative Focus:** When generating creative ideas, focus on tapping into **แรงจูงใจทางอารมณ์ (Emotional Motivation)**, creating **ความต่างที่คนดูแล้ว "รู้สึกอยากลอง" ทันที (a difference that evokes immediate desire)**, and achieving real **'scroll-stopping' power (พลังในการหยุดนิ้ว)**.\
-    2.  **Elaborate Descriptions:** For EACH recommendation, write a **comprehensive description (in Thai)** that includes:\
-        *   A clear explanation of the core idea.\
-        *   The strategic rationale, explicitly linking to **specific data points in the competitor JSON** OR successful examples/case studies found via Google Search.\
-        *   The expected positive outcomes or benefits for the client.\
-    3.  **Justify Each Recommendation:** For every recommendation, clearly state whether it is primarily inspired by the **analysis of the competitor JSON** OR by external examples found via Google Search.\
-    4.  For EACH recommendation, perform a **detailed, insightful, and specific** strategic analysis covering the points below, \*\*also in Thai\*\*. **Elaborate on each point** with sufficient justification and detail to be clear and convincing. Ensure the analysis references search findings or **specific competitor data points from the JSON** where applicable.\
-    5.  **Generate Brand-Aligned, Attention-Grabbing Execution Concepts:** For EACH recommendation, provide detailed marketing execution concepts **in Thai**. **Critically evaluate: Would the target audience stop scrolling for this? Would the brand approve this creative direction?** Concepts should cover:\
-        *   **Promoted Product/Service (สินค้า/บริการที่จะเน้น):** Which specific client product/service does this idea best promote? Be specific.\
-        *   **Mood & Tone (อารมณ์และโทน):** What should the feeling be (e.g., น่าเชื่อถือ, สนุกสนาน, มืออาชีพ, เร่งด่วน)? **Explain why** and Reflect the desired emotional motivation.\
-        *   **Key Message/Tagline (ข้อความหลัก/สโลแกน):** What is the core message or a catchy tagline? **Make technical points easy to understand (จุดขายทางเทคนิคที่พูดง่าย).** \
-        *   **Execution Example (ตัวอย่างการนำไปใช้):** Describe a **detailed execution example**... **Briefly explain HOW this example achieves scroll-stopping power and aligns with the likely brand image.** Aim for immediate interest and brand appropriateness.\
-    6.  Present all output in **natural, fluent, and engaging Thai.** \
-    7.  Recommendations should cover areas like: แคมเปญ, โปรโมชั่น, กลยุทธ์เนื้อหา, ฟีเจอร์ใหม่, การปรับปรุงบริการ, โครงการเชิงกลยุทธ์, and creative concepts.\
- \
-    \*\*Strategic Analysis Points (Generate in Thai with Specificity and Detail):\*\*\
-    (Update instructions to reference the detailed JSON)\
-    1.  **เป้าหมาย (Purpose):** เป้าหมายหลัก \*ที่วัดผลได้\* ของข้อเสนอนี้คืออะไร? ... (Elaborate and justify) และมันเชื่อมโยงกับจุดแข็ง/จุดอ่อนของคู่แข่ง (จาก JSON) หรือเป้าหมายลูกค้าอย่างไร?\
-    2.  **คนฟัง/คนใช้ (Target Audience):** ระบุกลุ่มเป้าหมายหลัก \*อย่างเฉพาะเจาะจง\* (พิจารณาข้อมูล targetAudience จาก JSON)...\
-    3.  **บริบท (Context):** \*สภาวะตลาดหรือการกระทำ/ข้อมูลของคู่แข่งใดจาก JSON\* ที่ทำให้ข้อเสนอนี้มีความสำเร็จ ... อ้างอิงข้อมูลจาก JSON ถ้าเป็นไปได้\
-    4.  **ข้อจำกัด (Constraints):** ระบุข้อจำกัด \*ที่เป็นไปได้และเฉพาะเจาะจง\* ... (Elaborate beyond generic points)\
-    5.  **คู่แข่ง/มาตรฐาน (Competitors/Benchmarks):** \*เปรียบเทียบข้อเสนอนี้กับสิ่งที่คู่แข่ง (จาก JSON data) กำลังทำอยู่\* ... และ/หรือ \*แนวทางที่ประสบความสำเร็จจากกรณีศึกษา/ตัวอย่างที่ค้นพบผ่าน Google Search ...\
-    6.  **ศักยภาพที่ยังไม่มีใครทำ (Untapped Potential):** ... \*ต้องอ้างอิงข้อมูลจากการค้นหา หรือ ข้อมูลเฉพาะจาก competitor JSON เพื่อสนับสนุน\*\\\
- \
-    \*\*Output Format Requirements:\*\*\
-    \*   Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting (like \\\`\\\`\\\`json\\\`).\
-    \*   The JSON object MUST strictly follow the structure below.\
-    \*   \*\*CRITICAL: ALL text values within the JSON object MUST be in Thai language and provide sufficient detail for presentation.** This includes title, description, category, impact, competitiveGap, tags, all strategic *_th fields, **and the new marketing execution fields (promoted_product_th, mood_and_tone_th, key_message_th, execution_example_th)**.\
-    \*   Use \"High\", \"Medium\", or \"Low\" for the impact field. (Reverted based on user change in previous step - user seems to prefer English impact terms)\
-\
-    \*\*Required JSON Structure Example:\*\*\
-    ${jsonStructureExample}\
-    `;
+    // ... more recommendation objects (7-10 total)
+  ]
+}
+\`\`\`
+`;
 
     // 4. Call Gemini API with Grounding
     console.log("Sending request to Gemini API...");
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${GEMINI_API_KEY}`;
 
     const geminiPayload = {
-        contents: [{ parts: [{ text: prompt }] }],
+        contents: [{ parts: [{ text: finalPrompt }] }],
         // Enable Grounding with Google Search [[reference]](https://ai.google.dev/gemini-api/docs/grounding?lang=rest)
         tools: [{
             "google_search": {}
         }],
         generationConfig: {
-          temperature: 0.6 // Adjust temperature for creativity vs consistency
+          temperature: 0.8 // Adjust temperature for creativity vs consistency
         }
     };
 
