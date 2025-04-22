@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient, AnalysisRun } from '../../../generated/prisma'; // Adjust path if needed
+import supabaseAdmin from '@/lib/supabaseClient'; // Import the Supabase client
 
-const prisma = new PrismaClient();
+// Remove Prisma imports and instantiation
+// import { PrismaClient, AnalysisRun } from '../../../generated/prisma';
+// const prisma = new PrismaClient();
 
-// Define the expected shape after the select statement
-type AnalysisRunProductFocus = Pick<AnalysisRun, 'productFocus'>;
+// Define the expected shape of the data from Supabase
+interface ProductFocusResult {
+  productFocus: string | null;
+}
 
 export async function GET(request: NextRequest) {
   // Extract clientName from query parameters
   const searchParams = request.nextUrl.searchParams;
   const clientName = searchParams.get('clientName');
 
-  console.log(`Attempting to handle GET /api/products for client: ${clientName}`);
+  console.log(`Attempting to handle GET /api/products for client: ${clientName} using Supabase`);
 
   if (!clientName) {
     return new NextResponse(
@@ -21,36 +25,36 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const analysisRuns: AnalysisRunProductFocus[] = await prisma.analysisRun.findMany({
-      where: {
-        clientName: clientName, // Filter by the provided client name
-      },
-      distinct: ['productFocus'], // Get unique product focuses for this client
-      select: {
-        productFocus: true,
-      },
-      orderBy: {
-        productFocus: 'asc', // Optional: Order products alphabetically
-      },
-    });
+    // Fetch distinct product focuses for the given client using Supabase
+    const { data, error } = await supabaseAdmin
+      .from('AnalysisRun') // Ensure 'AnalysisRun' matches your table name
+      .select('productFocus', { head: false, count: 'exact' })
+      .eq('clientName', clientName) // Filter by clientName
+      .order('productFocus', { ascending: true });
 
-    // Extract just the product focus strings
-    const productFocuses = analysisRuns.map((run: AnalysisRunProductFocus) => run.productFocus);
-    console.log(`Found products for ${clientName}:`, productFocuses);
+    if (error) {
+      console.error(`Supabase error fetching products for ${clientName}:`, error);
+      throw new Error(error.message || 'Failed to fetch products from Supabase');
+    }
 
-    // Filter out any null or empty values, though distinct should handle nulls
-    const validProductFocuses = productFocuses.filter((focus: string | null) => focus != null);
+    // Process the results
+    const productFocuses = (data || []).map((item: ProductFocusResult) => item.productFocus);
+                                    
+    // Get unique focuses (select distinct isn't directly supported, do it manually)
+    // Also handle potential nulls explicitly
+    const uniqueProductFocuses = Array.from(new Set(productFocuses));
 
-    return NextResponse.json({ products: validProductFocuses });
+    console.log(`Found unique products for ${clientName}:`, uniqueProductFocuses);
 
-  } catch (error) {
+    // Note: The frontend expects nulls to be represented, don't filter them here unless intended
+    return NextResponse.json({ products: uniqueProductFocuses });
+
+  } catch (error: any) {
     console.error(`Error in GET /api/products for ${clientName}:`, error);
     return new NextResponse(
-      JSON.stringify({ error: `Failed to fetch products for ${clientName}` }),
+      JSON.stringify({ error: error.message || `Failed to fetch products for ${clientName}` }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
-  } finally {
-    // Optional: Disconnect Prisma
-    // await prisma.$disconnect();
   }
+  // No finally block needed for Prisma disconnect
 } 

@@ -10,13 +10,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import Image from "next/image";
+import { Checkbox } from "@/components/ui/checkbox";
 
 // --- Define Defaults for Editable Prompt Sections ---
 const DEFAULT_TASK_SECTION = `1.  Conceptualize and Detail **7-10 *truly distinctive and breakthrough*** creative recommendations for {clientName} to dominate attention and gain a significant competitive advantage in the {market} market, specifically bringing {productFocus} to life in novel ways.
 2.  **Crucially, these recommendations MUST be highly CREATIVE and ACTIONABLE:** Focus intensely on unique creative directions, specific content narratives, viral-potential ad concepts, and engaging execution formats. Prioritize ideas that are **memorable, shareable, and emotionally resonant**. Push the boundaries of conventional marketing creative.
 3.  **Actively use the integrated search grounding capability** to inform your recommendations (trends, competitor examples, platform formats, audience conversations, external inspiration).
 4.  For EACH recommendation, provide the **Creative Execution Details** below. **Generate specific, compelling content for each field IN THAI LANGUAGE.**
-5.  Populate the corresponding fields in the final JSON object.`;
+5.  Populate the corresponding fields in the final JSON object. 
+6. Make the ideas specific to the brand only. For example, if the idea generated can be applied to a competitor offering a similar product, its not specific enough.`;
 
 const DEFAULT_DETAILS_SECTION = `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** (เช่น \"เคล็ดลับฮาวทู\", \"เบื้องหลังการทำงาน\", \"เรื่องราวความสำเร็จลูกค้า\", \"การหักล้างความเชื่อผิดๆ\", \"ไลฟ์สไตล์และการใช้งาน\", \"ปัญหาและการแก้ไข\").
 b.  **\`product_focus\`:** ระบุ {productFocus} หรือฟีเจอร์เฉพาะที่ต้องการเน้น **(ภาษาไทย)**.
@@ -100,6 +102,11 @@ export function RecommendationCards() {
   const [userBrief, setUserBrief] = useState<string>(""); // State for user brief
   const [editableTaskSection, setEditableTaskSection] = useState<string>(DEFAULT_TASK_SECTION); // NEW: State for editable task
   const [editableDetailsSection, setEditableDetailsSection] = useState<string>(DEFAULT_DETAILS_SECTION); // NEW: State for editable details
+  // --- NEW: State for Book Summaries ---
+  const [availableBooks, setAvailableBooks] = useState<string[]>([]);
+  const [selectedBooks, setSelectedBooks] = useState<string[]>([]); // NEW: multi-selection state
+  const [isBooksLoading, setIsBooksLoading] = useState<boolean>(false);
+  const [booksError, setBooksError] = useState<string | null>(null);
 
   // --- Force re-render check when selectedRecommendation changes --- 
   useEffect(() => {
@@ -206,6 +213,29 @@ export function RecommendationCards() {
        }
    }, [selectedClientName, selectedProductFocus]);
 
+  // --- NEW: Fetch Book Summaries List on Mount ---
+  useEffect(() => {
+    const fetchBooks = async () => {
+        setIsBooksLoading(true);
+        setBooksError(null);
+        try {
+            const response = await fetch('/api/book-summaries');
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: `API Error: ${response.status}` }));
+                throw new Error(errorData.error || 'Failed to fetch book list');
+            }
+            const data = await response.json();
+            setAvailableBooks(data.books || []);
+        } catch (err: any) {
+            console.error("Error fetching book list:", err);
+            setBooksError("Could not load book summaries list.");
+        }
+        finally {
+            setIsBooksLoading(false);
+        }
+    };
+    fetchBooks();
+  }, []); // Run only on mount
 
   // --- Generate Recommendations when Generate Button is Clicked ---
   const handleGenerateRecommendations = async () => {
@@ -232,6 +262,11 @@ export function RecommendationCards() {
       // NEW: Append edited sections
       apiUrl += `&taskSection=${encodeURIComponent(editableTaskSection)}`;
       apiUrl += `&detailsSection=${encodeURIComponent(editableDetailsSection)}`;
+      // NEW: Append selected book filenames if any are chosen
+      if (selectedBooks.length > 0) {
+          // Join the array into a comma-separated string
+          apiUrl += `&bookFilenames=${encodeURIComponent(selectedBooks.join(','))}`;
+      }
 
       const response = await fetch(apiUrl); // Use updated URL
       if (!response.ok) {
@@ -289,7 +324,7 @@ export function RecommendationCards() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({ 
-                prompt: imagePrompt, 
+                inputText: imagePrompt,
                 aspect_ratio: aspectRatio
             })
         });
@@ -429,6 +464,43 @@ export function RecommendationCards() {
                    disabled={isLoading || isMetaLoading}
                />
            </div>
+
+           {/* NEW: Optional Book Summary Checkboxes */}
+            <div className="grid gap-1.5 w-full">
+                <Label className="text-sm font-medium">Optional Context: Book Summaries</Label>
+                {isBooksLoading && <p className="text-sm text-muted-foreground">Loading books...</p>}
+                {booksError && <p className="text-sm text-destructive">{booksError}</p>}
+                {!isBooksLoading && !booksError && availableBooks.length === 0 && (
+                    <p className="text-sm text-muted-foreground">No book summaries found.</p>
+                )}
+                {!isBooksLoading && !booksError && availableBooks.length > 0 && (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-2 mt-2 max-h-40 overflow-y-auto border rounded p-3 bg-background">
+                        {availableBooks.map((bookFile) => (
+                            <div key={bookFile} className="flex items-center space-x-2">
+                                <Checkbox 
+                                    id={`book-${bookFile}`}
+                                    checked={selectedBooks.includes(bookFile)}
+                                    onCheckedChange={(checked) => {
+                                        setSelectedBooks(prev => 
+                                            checked 
+                                                ? [...prev, bookFile] // Add book if checked
+                                                : prev.filter(b => b !== bookFile) // Remove book if unchecked
+                                        );
+                                    }}
+                                    disabled={isLoading || isMetaLoading}
+                                />
+                                <Label 
+                                    htmlFor={`book-${bookFile}`}
+                                    className="text-sm font-normal cursor-pointer truncate"
+                                    title={bookFile} // Show full name on hover
+                                >
+                                    {bookFile.replace(/\.(txt|md)$/i, '')} 
+                                </Label>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
          </div>
 
         {/* --- Display Area --- */}
@@ -454,7 +526,7 @@ export function RecommendationCards() {
            <div className="flex flex-col items-center justify-center gap-4 p-8 border rounded-lg text-muted-foreground">
              <AlertTriangle className="h-8 w-8" />
              <span>No recommendations generated. Try adjusting the brief or selection.</span>
-           </div>
+            </div>
          )}
 
         {/* Display Recommendations */}
@@ -481,8 +553,8 @@ export function RecommendationCards() {
                           rec.impact === 'Medium' ? 'border-yellow-600 text-yellow-700' : 
                           ''
                         )}>{rec.impact} Impact</Badge>
-                      </CardDescription>
-                    </CardHeader>
+            </CardDescription>
+          </CardHeader>
                     <CardContent className="flex-grow text-sm text-muted-foreground pb-3">
                       <p className="line-clamp-4">{rec.description}</p>
                     </CardContent>
@@ -644,7 +716,7 @@ export function RecommendationCards() {
                      >
                         {isImageLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                         {isImageLoading ? 'Generating...' : 'Generate Image'}
-                    </Button>
+            </Button>
                  </div>
 
                  {/* Display Area: Loading, Error, or Image */}
@@ -685,7 +757,7 @@ export function RecommendationCards() {
         <DialogClose asChild>
           <Button type="button" variant="secondary">
             Close
-          </Button>
+            </Button>
         </DialogClose>
       </DialogFooter>
     </Dialog>

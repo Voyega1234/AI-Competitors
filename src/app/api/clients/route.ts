@@ -1,45 +1,47 @@
 import { NextResponse } from 'next/server';
-// IMPORTANT: Adjust this import if your Prisma Client is located elsewhere!
-// Corrected import path based on schema.prisma output
-import { PrismaClient, AnalysisRun } from '../../../generated/prisma'; // Assuming this path is correct
+import supabaseAdmin from '@/lib/supabaseClient'; // Import the Supabase client
 
-const prisma = new PrismaClient();
+// Remove Prisma imports and instantiation
+// import { PrismaClient, AnalysisRun } from '../../../generated/prisma';
+// const prisma = new PrismaClient();
 
-// Define the expected shape after the select statement
-type AnalysisRunClientName = Pick<AnalysisRun, 'clientName'>;
+// Define the expected shape of the data from Supabase
+interface ClientNameResult {
+  clientName: string | null;
+}
 
 export async function GET() {
-  console.log("Attempting to handle GET /api/clients"); // Add log
+  console.log("Attempting to handle GET /api/clients using Supabase");
   try {
-    // Explicitly type the result of findMany based on the select
-    const analysisRuns: AnalysisRunClientName[] = await prisma.analysisRun.findMany({
-      distinct: ['clientName'],
-      select: {
-        clientName: true,
-      },
-      orderBy: {
-        clientName: 'asc',
-      },
-    });
+    // Fetch distinct client names using Supabase
+    const { data, error } = await supabaseAdmin
+      .from('AnalysisRun') // Ensure 'AnalysisRun' matches your table name
+      .select('clientName', { head: false, count: 'exact' })
+      .order('clientName', { ascending: true });
 
-    // Add type to the 'run' parameter
-    const clientNames = analysisRuns.map((run: AnalysisRunClientName) => run.clientName);
-    console.log("Found client names:", clientNames); // Add log
+    if (error) {
+      console.error("Supabase error fetching client names:", error);
+      throw new Error(error.message || 'Failed to fetch from Supabase');
+    }
 
-    // Ensure null/empty names are handled if necessary, though distinct should prevent null unless explicitly in DB
-    // Add type to the 'name' parameter
-    const validClientNames = clientNames.filter((name: string | null) => name != null && name.trim() !== '');
+    // Process the results
+    const clientNames = (data || []).map((item: ClientNameResult) => item.clientName)
+                                  // Filter out null or empty names directly
+                                  .filter((name: string | null): name is string => name != null && name.trim() !== '');
+    
+    // Get unique names (select distinct isn't directly supported like Prisma, do it manually)
+    const uniqueClientNames = Array.from(new Set(clientNames));
 
-    return NextResponse.json({ clients: validClientNames });
+    console.log("Found unique client names:", uniqueClientNames); 
 
-  } catch (error) {
-    console.error("Error in GET /api/clients:", error); // Log the actual error
+    return NextResponse.json({ clients: uniqueClientNames });
+
+  } catch (error: any) {
+    console.error("Error in GET /api/clients:", error); 
     return new NextResponse(
-      JSON.stringify({ error: 'Failed to fetch client names' }),
+      JSON.stringify({ error: error.message || 'Failed to fetch client names' }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
-  } finally {
-     // Optional: If you initialize prisma here, consider disconnecting
-     // await prisma.$disconnect();
-  }
+  } 
+  // No finally block needed for Prisma disconnect
 } 
