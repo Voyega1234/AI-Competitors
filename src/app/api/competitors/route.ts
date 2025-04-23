@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '../../../generated/prisma'; // Adjust path if needed
+// Remove Prisma import
+// import { PrismaClient } from '../../../generated/prisma'; // Adjust path if needed
+import supabaseAdmin from '@/lib/supabaseClient'; // Import Supabase client
 
-const prisma = new PrismaClient();
+// Remove Prisma instantiation
+// const prisma = new PrismaClient();
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -17,21 +20,22 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Fetch competitors associated with the given analysisRunId
-    const competitors = await prisma.competitor.findMany({
-      where: {
-        analysisRunId: runId,
-      },
-      // Optional: Order competitors if needed, e.g., by name
-      orderBy: {
-        name: 'asc',
-      }
-    });
+    // Fetch competitors associated with the given analysisRunId using Supabase
+    const { data: competitors, error } = await supabaseAdmin
+      .from('Competitor') // Ensure 'Competitor' matches your Supabase table name
+      .select('*')
+      .eq('analysisRunId', runId)
+      .order('name', { ascending: true }); // Optional ordering
 
-    console.log(`Found ${competitors.length} competitors for runId: ${runId}`);
+    if (error) {
+      console.error(`Supabase error fetching Competitors for runId ${runId}:`, error);
+      throw new Error(error.message || 'Failed to fetch competitor data from Supabase');
+    }
+
+    console.log(`Found ${competitors?.length ?? 0} competitors for runId: ${runId}`);
 
     // The frontend expects the data in a specific format: { competitors: [...] }
-    return NextResponse.json({ competitors: competitors });
+    return NextResponse.json({ competitors: competitors || [] }); // Return empty array if null
 
   } catch (error) {
     console.error(`Error in GET /api/competitors for runId ${runId}:`, error);
@@ -40,7 +44,7 @@ export async function GET(request: NextRequest) {
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   } finally {
-    // Optional: Disconnect Prisma
+    // Optional: Disconnect Prisma (No longer needed for Supabase)
     // await prisma.$disconnect();
   }
 } 

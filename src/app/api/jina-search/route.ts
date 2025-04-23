@@ -1,11 +1,6 @@
 import { NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import fs from 'fs';
-import path from 'path';
-import { PrismaClient } from '@/generated/prisma'; // Import Prisma Client from generated path
-
-// Initialize Prisma Client outside the handler
-const prisma = new PrismaClient();
+import supabaseAdmin from '@/lib/supabaseClient'; // Import Supabase client
 
 // Mark the route as dynamic
 export const dynamic = 'force-dynamic';
@@ -86,6 +81,7 @@ interface AnalysisResult {
     market: string;
     productFocus?: string | null;
     additionalInfo?: string | null;
+    userCompetitors?: string | null;
     timestamp: string;
   };
   competitors: FinalCompetitor[];
@@ -131,7 +127,7 @@ export async function POST(request: Request) {
     // Parse request body
     const body = await request.json();
     // Destructure productFocus and keep additionalInfo separate
-    const { clientName, facebookUrl: clientFacebookUrl, websiteUrl: clientWebsiteUrl, market, productFocus, additionalInfo } = body;
+    const { clientName, facebookUrl: clientFacebookUrl, websiteUrl: clientWebsiteUrl, market, productFocus, additionalInfo, userCompetitors } = body;
     
     // Store input for later saving
     const analysisInput = {
@@ -141,6 +137,7 @@ export async function POST(request: Request) {
       market,
       productFocus,
       additionalInfo,
+      userCompetitors,
       timestamp: new Date().toISOString(),
     };
     
@@ -162,29 +159,30 @@ export async function POST(request: Request) {
     const productFocusPhrase = productFocus || "the client\'s main offerings";
     const competitorFocusPhrase = productFocus || 'general offerings similar to the client';
 
+    // Add user-specified competitors if provided
+    const userCompetitorsSection = userCompetitors && userCompetitors.trim() 
+        ? `\n\nPlease pay special attention to the following user-specified competitors if found during your search: ${userCompetitors.trim()}. Include them in the analysis alongside other relevant competitors.`
+        : '';
+
     // Assemble the Jina query using the constructed parts
     query = `
 ${clientBaseInfo}${clientProductInfo}. The client operates ${marketInfo}.${clientAdditionalContext}
 
-Find the top 5-7 main competitors for our client ${marketInfo}, specifically focusing on businesses offering similar products/services (${competitorFocusPhrase}).
+Find the top 5-7 main competitors for our client ${marketInfo}, specifically focusing on businesses offering similar products/services (${competitorFocusPhrase}).${userCompetitorsSection}
 
 Please research and provide detailed information about each competitor, including:
 *   Company Name
 *   Website URL
-*   Facebook Page URL (if available)
-*   Their specific services and key features (especially those related to ${productFocusPhrase}).
-*   Their target market/customer base.
-*   Their pricing model/overview.
-*   Their key strengths or differentiators.
-*   Their potential weaknesses or market gaps.
+*   Their specific services and key features (especially those related to ${productFocusPhrase}). (*important)
+*   Their target market/customer base. (*important)
+*   Their pricing model/overview. (*important) i want real number if possible but it have to be a correct from source number not make up number
+*   Their key strengths or differentiators. (*important)
+*   Their potential weaknesses or market gaps. (*important)
 *   Their brand specialty and unique selling proposition (USP).
 *   Their brand tone and public perception (positive and negative).
 *   Estimated market share (if found).
 *   Common customer complaints.
 *   Common advertising themes.
-*   SEO details (Domain Authority, Backlinks, Organic Traffic Estimate).
-*   Website Quality metrics (UX Score, Loading Speed, Mobile Responsiveness).
-*   Social Media details (Follower count).
 
 For any metrics or data points provided (market share, followers, etc.), please include when this data was collected or reported.
 
@@ -276,7 +274,7 @@ Present the findings as a comprehensive text report.
       // --- End Post-processing ---
 
       return {
-        id: uuidv4(), // Generate unique ID
+        id: uuidv4(),
         name: comp.name || 'Unknown Competitor',
         website: ensureAbsoluteUrl(comp.website),
         facebookUrl: ensureAbsoluteUrl(comp.facebookUrl),
@@ -296,92 +294,116 @@ Present the findings as a comprehensive text report.
         marketShare: processStringOrArrayField(comp.marketShare),
         complaints: comp.complaints || [],
         adThemes: comp.adThemes || [],
-        seo: { 
-          domainAuthority: parseInt(String(seo.domainAuthority ?? '0'), 10) || 0, 
-          backlinks: parseInt(String(seo.backlinks ?? '0'), 10) || 0, 
-          organicTraffic: String(seo.organicTraffic ?? 'N/A') 
+        seo: {
+          domainAuthority: parseInt(String(seo.domainAuthority ?? '0'), 10) || 0,
+          backlinks: parseInt(String(seo.backlinks ?? '0'), 10) || 0,
+          organicTraffic: String(seo.organicTraffic ?? 'N/A')
         },
-        websiteQuality: { 
-          uxScore: parseInt(String(websiteQuality.uxScore ?? '0'), 10) || 0, 
+        websiteQuality: {
+          uxScore: parseInt(String(websiteQuality.uxScore ?? '0'), 10) || 0,
           loadingSpeed: processStringOrArrayField(websiteQuality.loadingSpeed),
           mobileResponsiveness: processStringOrArrayField(websiteQuality.mobileResponsiveness)
         },
         usp: processStringOrArrayField(comp.usp),
-        socialMetrics: { 
-          followers: parseInt(String(socialMetrics.followers ?? '0'), 10) || 0, 
+        socialMetrics: {
+          followers: parseInt(String(socialMetrics.followers ?? '0'), 10) || 0,
         }
       };
     }).filter(comp => comp.name !== 'Unknown Competitor'); // Filter out fundamentally broken entries
 
     console.log(`[jina-search] Processed ${processedCompetitors.length} competitors via Gemini (with category cleaning).`);
 
-    // --- Create the final result object including input ---
-    const finalResult: AnalysisResult = {
-      analysisInput,
-      competitors: processedCompetitors
-    };
-
-    // --- Save the combined result to the Database ---
+    // --- Save the combined result to the Database using Supabase --- 
     try {
-      // Create the AnalysisRun record and connect the Competitor records
-      const savedAnalysis = await prisma.analysisRun.create({
-        data: {
-          // Map fields from analysisInput
-          clientName: analysisInput.clientName,
-          clientWebsiteUrl: analysisInput.clientWebsiteUrl,
-          clientFacebookUrl: analysisInput.clientFacebookUrl,
-          market: analysisInput.market,
-          productFocus: analysisInput.productFocus,
-          additionalInfo: analysisInput.additionalInfo,
-          timestamp: new Date(analysisInput.timestamp), // Ensure it's a Date object
-          // Create nested competitors using the correct relation field name
-          Competitor: { // Use uppercase 'C' as defined in schema
-            create: processedCompetitors.map(comp => ({
-              // Map fields from FinalCompetitor to the Competitor model
-              id: comp.id, // Use the pre-generated UUID
-              name: comp.name,
-              website: comp.website,
-              facebookUrl: comp.facebookUrl,
-              services: comp.services,
-              serviceCategories: comp.serviceCategories,
-              features: comp.features,
-              pricing: comp.pricing,
-              strengths: comp.strengths,
-              weaknesses: comp.weaknesses,
-              specialty: comp.specialty,
-              targetAudience: comp.targetAudience,
-              brandTone: comp.brandTone,
-              positivePerception: comp.brandPerception.positive, // Flattened
-              negativePerception: comp.brandPerception.negative, // Flattened
-              marketShare: comp.marketShare,
-              complaints: comp.complaints,
-              adThemes: comp.adThemes,
-              domainAuthority: comp.seo.domainAuthority, 
-              backlinks: comp.seo.backlinks,             
-              organicTraffic: comp.seo.organicTraffic,     
-              uxScore: comp.websiteQuality.uxScore,         
-              loadingSpeed: comp.websiteQuality.loadingSpeed, 
-              mobileResponsiveness: comp.websiteQuality.mobileResponsiveness, 
-              usp: comp.usp,
-              followers: comp.socialMetrics.followers       
-            }))
-          }
-        },
-        // Include the created competitors in the response (optional, but good for confirmation)
-        include: {
-          Competitor: true, // Use uppercase 'C' as defined in schema
-        },
-      });
-      console.log(`[jina-search] Successfully saved analysis results (ID: ${savedAnalysis.id}) to database.`);
+        // 1. Insert AnalysisRun
+        const { data: savedAnalysisRun, error: runInsertError } = await supabaseAdmin
+            .from('AnalysisRun')
+            .insert({
+                id: uuidv4(),
+                // Map fields from analysisInput
+                clientName: analysisInput.clientName,
+                clientWebsiteUrl: analysisInput.clientWebsiteUrl,
+                clientFacebookUrl: analysisInput.clientFacebookUrl,
+                market: analysisInput.market,
+                productFocus: analysisInput.productFocus,
+                additionalInfo: analysisInput.additionalInfo,
+                userCompetitors: analysisInput.userCompetitors,
+                timestamp: analysisInput.timestamp,
+                updatedAt: analysisInput.timestamp
+            })
+            .select()
+            .single();
+
+        if (runInsertError) {
+            console.error('[jina-search] Supabase error inserting AnalysisRun:', runInsertError);
+            throw new Error(runInsertError.message || 'Failed to save analysis run data.');
+        }
+
+        if (!savedAnalysisRun || !savedAnalysisRun.id) {
+            throw new Error('Failed to retrieve ID after inserting AnalysisRun.');
+        }
+
+        const newRunId = savedAnalysisRun.id;
+        console.log(`[jina-search] Successfully saved AnalysisRun (ID: ${newRunId}) to database.`);
+
+        // 2. Prepare and Insert Competitors
+        if (processedCompetitors.length > 0) {
+            const competitorsToInsert = processedCompetitors.map(comp => ({
+                // Map fields from FinalCompetitor to the Competitor table schema
+                id: comp.id, 
+                analysisRunId: newRunId, 
+                name: comp.name,
+                website: comp.website,
+                facebookUrl: comp.facebookUrl,
+                services: comp.services,
+                serviceCategories: comp.serviceCategories,
+                features: comp.features,
+                pricing: comp.pricing,
+                strengths: comp.strengths,
+                weaknesses: comp.weaknesses,
+                specialty: comp.specialty,
+                targetAudience: comp.targetAudience,
+                brandTone: comp.brandTone,
+                positivePerception: comp.brandPerception.positive, 
+                negativePerception: comp.brandPerception.negative, 
+                marketShare: comp.marketShare,
+                complaints: comp.complaints,
+                adThemes: comp.adThemes,
+                // Explicitly handle defaults for NOT NULL integer fields here
+                domainAuthority: comp.seo?.domainAuthority ?? 0, 
+                backlinks: comp.seo?.backlinks ?? 0,             
+                organicTraffic: comp.seo?.organicTraffic ?? 'N/A', // Keep as string, assuming table expects text    
+                uxScore: comp.websiteQuality?.uxScore ?? 0,         
+                loadingSpeed: comp.websiteQuality?.loadingSpeed ?? 'N/A', // Keep as string
+                mobileResponsiveness: comp.websiteQuality?.mobileResponsiveness ?? 'N/A', // Keep as string
+                usp: comp.usp,
+                followers: comp.socialMetrics?.followers ?? 0      
+            }));
+
+            const { error: competitorInsertError } = await supabaseAdmin
+                .from('Competitor')
+                .insert(competitorsToInsert);
+
+            if (competitorInsertError) {
+                console.error('[jina-search] Supabase error inserting Competitors:', competitorInsertError);
+                // Decide how to handle partial failure: Maybe log and continue, or throw?
+                // Throwing for now, assuming atomicity is preferred.
+                // Consider deleting the AnalysisRun if competitors fail? (More complex)
+                throw new Error(competitorInsertError.message || 'Failed to save competitor data.');
+            }
+            console.log(`[jina-search] Successfully saved ${competitorsToInsert.length} competitors linked to AnalysisRun ID: ${newRunId}.`);
+        } else {
+            console.log(`[jina-search] No competitors processed, skipping competitor insert for AnalysisRun ID: ${newRunId}.`);
+        }
 
     } catch (dbError: any) {
       console.error('[jina-search] Failed to save analysis result to database:', dbError);
-      // Optionally, you could decide if a DB error should fail the whole request
-      // For now, we log it but still return success to the user if Jina/Gemini worked
-      // return NextResponse.json({ success: false, error: 'Failed to save analysis results.' }, { status: 500 });
+      // Re-throw the error to be caught by the outer try-catch
+      throw dbError; 
     }
     // --- End database saving ---
 
+    // Return success only if everything including DB save worked
     return NextResponse.json({ 
       success: true,
       competitors: processedCompetitors // Return the final list needed by the frontend
@@ -391,6 +413,8 @@ Present the findings as a comprehensive text report.
     console.error('[jina-search] Error in POST handler or Gemini parsing:', error);
     const errorMessage = error.message?.includes('Gemini') 
                        ? `Error processing results: ${error.message}` 
+                       : error.message?.includes('Supabase')
+                       ? `Database error: ${error.message}`
                        : error.message || 'An unexpected server error occurred';
     return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
   }

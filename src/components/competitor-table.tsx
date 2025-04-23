@@ -97,8 +97,6 @@ export function CompetitorTable({ initialCompetitors }: CompetitorTableProps) {
     mobileResponsiveness: false,
     usp: false,
     serviceCategories: false,
-    strengths: false,
-    weaknesses: false,
     specialty: false,
     targetAudience: false,
     brandTone: false,

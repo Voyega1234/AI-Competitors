@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import supabaseAdmin from '@/lib/supabaseClient'; // Import the Supabase client
 
-// Remove Prisma imports and instantiation
-// import { PrismaClient, AnalysisRun } from '../../../generated/prisma';
-// const prisma = new PrismaClient();
-
 // Define the expected shape of the data from Supabase
 interface ProductFocusResult {
   productFocus: string | null;

@@ -27,6 +27,7 @@ const formSchema = z.object({
   }),
   productFocus: z.string().optional(),
   additionalInfo: z.string().optional(),
+  userCompetitors: z.string().optional(),
 })
 
 // Export the inferred type
@@ -47,6 +48,7 @@ export function NewAnalysisForm({ onSubmitAnalysis, isLoading }: NewAnalysisForm
       market: "thailand",
       productFocus: "",
       additionalInfo: "",
+      userCompetitors: "",
     },
   })
 
@@ -141,6 +143,26 @@ export function NewAnalysisForm({ onSubmitAnalysis, isLoading }: NewAnalysisForm
             />
             <FormField
               control={form.control}
+              name="userCompetitors"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Specific Competitors to Analyze (Optional)</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Enter competitor names or websites, separated by commas..."
+                      className="resize-none"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    List any specific competitors you definitely want included in the analysis.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
               name="additionalInfo"
               render={({ field }) => (
                 <FormItem>
@@ -153,7 +175,7 @@ export function NewAnalysisForm({ onSubmitAnalysis, isLoading }: NewAnalysisForm
                     />
                   </FormControl>
                   <FormDescription>
-                    Optional: Add any specific information that might help with the analysis.
+                    Optional: Add any other specific information that might help with the analysis.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
