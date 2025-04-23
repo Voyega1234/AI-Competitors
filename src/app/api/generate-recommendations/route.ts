@@ -95,30 +95,57 @@ interface AnalysisRun {
   // Add other fields from your AnalysisRun table
 }
 
+// Define types for results/errors per model (as used in frontend)
+type ModelResults = { [modelName: string]: GeneratedRecommendation[] | null };
+type ModelErrorState = { [modelName: string]: string | null };
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const runId = searchParams.get('runId');
   const userBrief = searchParams.get('brief');
   const taskSectionParam = searchParams.get('taskSection');
   const detailsSectionParam = searchParams.get('detailsSection');
-  const bookFilenamesParam = searchParams.get('bookFilenames'); // NEW: Comma-separated list
-  const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY; // Use server-side key
+  const bookFilenamesParam = searchParams.get('bookFilenames');
+  const modelsParam = searchParams.get('models'); // NEW: Read models parameter
+  const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+  const OPENAI_API_KEY = process.env.NEXT_PUBLIC_OPENAI_API_KEY; // Read OpenAI Key
+  const ANTHROPIC_API_KEY = process.env.NEXT_PUBLIC_ANTHROPIC_API_KEY; // Read Anthropic Key
 
-  console.log(`Attempting to handle GET /api/generate-recommendations for runId: ${runId}`);
+  // TODO: Add OPENAI_API_KEY and CLAUDE_API_KEY later
 
+  // --- Validation ---
   if (!runId) {
-    return new NextResponse(
-      JSON.stringify({ error: 'runId query parameter is required' }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } }
-    );
+    return new NextResponse(JSON.stringify({ error: 'runId query parameter is required' }), { status: 400 });
   }
-  if (!GEMINI_API_KEY) {
-      console.error("GEMINI_API_KEY is not set in environment variables.");
-      return new NextResponse(JSON.stringify({ error: 'Server configuration error: Missing API key.' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  if (!modelsParam) {
+    return new NextResponse(JSON.stringify({ error: 'models query parameter is required' }), { status: 400 });
   }
+  const requestedModels = modelsParam.split(',').map(m => m.trim().toLowerCase()); // Parse and normalize
+  if (requestedModels.length === 0) {
+    return new NextResponse(JSON.stringify({ error: 'No models specified in models parameter' }), { status: 400 });
+  }
+  if (requestedModels.includes('gemini') && !GEMINI_API_KEY) {
+    console.error("GEMINI_API_KEY is not set.");
+    return new NextResponse(JSON.stringify({ error: 'Server configuration error: Missing Gemini API key.' }), { status: 500 });
+  }
+  if (requestedModels.includes('openai') && !OPENAI_API_KEY) { // Check for OpenAI key
+    console.error("OPENAI_API_KEY is not set.");
+    return new NextResponse(JSON.stringify({ error: 'Server configuration error: Missing OpenAI API key.' }), { status: 500 });
+  }
+  if (requestedModels.includes('claude') && !ANTHROPIC_API_KEY) { // Check for Anthropic key
+    console.error("ANTHROPIC_API_KEY is not set.");
+    return new NextResponse(JSON.stringify({ error: 'Server configuration error: Missing Anthropic API key.' }), { status: 500 });
+  }
+  // TODO: Add checks for OpenAI/Claude keys when implemented
+
+  console.log(`Handling GET /api/generate-recommendations for runId: ${runId}, Models: ${requestedModels.join(', ')}`);
+
+  // --- Initialize result holders ---
+  let finalResults: ModelResults = {};
+  let finalErrors: ModelErrorState = {};
 
   try {
-    // 1. Fetch Analysis Run details using Supabase
+    // --- Fetch common data (needed by all models) ---
     const { data: analysisRunData, error: runError } = await supabaseAdmin
         .from('AnalysisRun') // Ensure table name is correct
         .select('*')
@@ -183,65 +210,24 @@ export async function GET(request: NextRequest) {
     }
     // --- End Book Summary Fetch ---
 
-    // --- NEW: Perform Grounded Search for Recent Client Info ---
-    let groundedClientInfo = '';
-    const groundingPrompt = `ขอข้อมูลของ ${analysisRunData.clientName} ข้อมูลอัพเดทล่าสุด อยากได้ข้อมูลเช่น ราคา-ค่าใช้จ่าย, จุดเด่น ข้อมูลสำคัญต่างๆ โปรโมชั่น หรือ กิจกรรมและแคมเปญล่าสุด อยากได้ข้อมูลที่สดใหม่ที่สุด`;
-    console.log(`Performing grounding search for client: ${analysisRunData.clientName}`);
-    try {
-        const groundingPayload = {
-            contents: [{ parts: [{ text: groundingPrompt }] }],
-            tools: [{ "google_search": {} }],
-            generationConfig: { temperature: 0.2 } // Low temp for factual retrieval
-        };
-        const groundingGeminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
-        const groundingResponse = await fetch(groundingGeminiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(groundingPayload)
-        });
+    // --- Prepare Common Prompt Components (Build ONCE) ---
+    const clientInfo = { clientName: analysisRunData.clientName, market: analysisRunData.market, productFocus: analysisRunData.productFocus, };
+    const competitorSummary = summarizeCompetitors(competitorsData || []);
+    const bookSummarySection = bookSummaryContent ? `
+**Optional Book Summary Contexts:**
+${bookSummaryContent}
+` : '';
+    const userBriefSection = userBrief ? `
+**Additional User Brief/Context:**
+${userBrief}
+` : '';
 
-        if (!groundingResponse.ok) {
-          // This part runs if the API call FAILS
-          const errorText = await groundingResponse.text();
-          console.warn(`Gemini grounding search failed (${groundingResponse.status}): ${errorText}`); // <--- THIS MUST BE RUNNING
-          // ...then it skips the 'else' block...
-        } else {
-            // This part runs ONLY if the API call SUCCEEDS
-            const groundingData = await groundingResponse.json();
-
-            groundedClientInfo = groundingData?.candidates?.[0]?.content?.parts?.[1]?.text?.trim() || '';
-            console.log("Value assigned to groundedClientInfo:", groundedClientInfo);
-            // --- Log the full response ---\n            // console.log(\"Full grounding response data:\", JSON.stringify(groundingData, null, 2)); // Keep commented for now to reduce noise\n            // --- End Log ---\n\n            // --- Assign text from parts[1] to groundedClientInfo ---\n            groundedClientInfo = groundingData?.candidates?.[0]?.content?.parts?.[1]?.text?.trim() || '';\n            // ---\n\n            // --- Log the result of the assignment ---\n            console.log(\"Value assigned to groundedClientInfo:\", groundedClientInfo);\n            // ---\n\n            if (groundedClientInfo) {\n                 console.log(`Grounding search successful, extracted info for ${analysisRunData.clientName}. Length: ${groundedClientInfo.length}`);\n            } else {\n                 console.log(`Grounding search successfully completed, but NO text found in parts[1] for ${analysisRunData.clientName}.`);\n            }\n        }\n    } catch (groundingError: any) {\n        console.error("Error during Gemini grounding search:", groundingError);\n        // Proceed without grounding info if an exception occurs
-        }
-    } catch (groundingError: any) {
-        console.error("Error during Gemini grounding search:", groundingError);
-        // Proceed without grounding info if an exception occurs
-    }
-    // --- End Grounded Search ---
-
-    // Prepare data for the rest of the function
-    const clientInfo = {
-      clientName: analysisRunData.clientName,
-      market: analysisRunData.market,
-      productFocus: analysisRunData.productFocus,
-    };
-    // Ensure competitorsData is an array (it should be from Supabase)
-    const finalCompetitorsData: Competitor[] = competitorsData || [];
-
-    console.log(`Found ${finalCompetitorsData.length} competitors for runId: ${runId}. Preparing prompt for Gemini.`);
-
-    // 3. Summarize Competitor Data (using the fetched Supabase data)
-    const competitorSummary = summarizeCompetitors(finalCompetitorsData);
-    console.log("Competitor Summary:", competitorSummary);
-
-    // 4. Construct Gemini Prompt (Revised logic)
-
-    // Define Default Sections (placeholders will be replaced later)
-    const defaultTaskText = `1.  Spark and detail **7-10 *fresh, distinctive, and engaging*** creative ideas for ${clientInfo.clientName}. Focus on concepts that can present the client's specific ${clientInfo.productFocus} from new perspectives that **spark curiosity, drive engagement, or create a memorable impression** within the ${clientInfo.market}. Ideas should build upon the client's strengths and available insights.
-                              2.  **Focus on Actionable Creativity:** Ensure each recommendation translates into tangible marketing ideas (campaigns, content pillars, ad concepts). Prioritize ideas that are memorable, shareable, emotionally resonant, and push creative boundaries for this *specific client*.
-                              3.  **Informed by Context:** Where available, let the \`groundedClientInfo\` and \`bookSummarySection\` inform the *relevance, timeliness, or strategic angle* of your ideas, but the core inspiration should stem from the client's fundamental product/service and market position. Use grounding to verify trends or competitor actions if needed.
-                              4.  For EACH recommendation, provide the **Creative Execution Details** below. **Generate specific, compelling content for each field IN THAI LANGUAGE.**
-                              5.  Populate the corresponding fields in the final JSON object. Ensure all text output is original for this request.`;
+    // Define default prompt sections (using variables from frontend if passed)
+    const defaultTaskText = `1. Spark and detail 7-10 fresh, distinctive, and engaging creative ideas for ${clientInfo.clientName}, specifically focusing on concepts highly suitable for Facebook Ad campaigns. Focus on concepts that can present the client's specific ${clientInfo.productFocus} from new perspectives that spark curiosity, drive engagement, or create a memorable impression within the ${clientInfo.market} on social media. Ideas should build upon the client's strengths and available insights.
+  2. Focus on Actionable Creativity for Facebook: Ensure each recommendation translates into tangible marketing ideas easily adaptable into compelling Facebook Ad formats (e.g., single image/video, carousel, stories, reels). Include potential ad angles, visual directions, and calls-to-action. Prioritize ideas that are visually arresting, memorable, shareable, emotionally resonant, and push creative boundaries for this specific client on Facebook.
+  3. Informed by Context: Where available, let the \`groundedClientInfo\` and \`bookSummarySection\` inform the relevance, timeliness, or strategic angle of your ideas, but the core inspiration should stem from the client's fundamental product/service and market position. Use grounding to verify trends or competitor actions if needed.
+  4. For EACH recommendation, provide the Creative Execution Details below, specifically tailored for a Facebook Ad context. Generate specific, compelling content for each field IN THAI LANGUAGE, imagining how the core idea translates into ad components (e.g., Headline, Ad Copy, Visual Description, Call-to-Action).
+  5. Populate the corresponding fields in the final JSON object. Ensure all text output is original for this request`;
     const defaultDetailsText = `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** (เช่น "เคล็ดลับฮาวทู", "เบื้องหลังการทำงาน", "เรื่องราวความสำเร็จลูกค้า", "การหักล้างความเชื่อผิดๆ", "ไลฟ์สไตล์และการใช้งาน", "ปัญหาและการแก้ไข").
                                 b.  **\`product_focus\`:** ระบุ ${clientInfo.productFocus} หรือฟีเจอร์เฉพาะที่ต้องการเน้น **(ภาษาไทย)**.
                                 c.  **\`concept_idea\`:** สรุปแนวคิดสร้างสรรค์หลัก (1-2 ประโยค) สำหรับการนำเสนอไอเดียนี้ **(ภาษาไทย)**.
@@ -252,44 +238,85 @@ export async function GET(request: NextRequest) {
                                     *   **\`bullets\`:** รายการจุดเด่น 2-4 ข้อที่เน้นประโยชน์หลัก, ฟีเจอร์ หรือเหตุผลที่น่าเชื่อถือ **(ภาษาไทย)**.
                                     *   **\`cta\`:** ข้อความเรียกร้องให้ดำเนินการ (Call To Action) ที่ชัดเจน **(ภาษาไทย)** (เช่น "เรียนรู้เพิ่มเติม", "ซื้อเลย", "ดูเดโม", "เข้าร่วม Waiting List", "ดาวน์โหลดคู่มือ").`;
 
-    // Use provided sections or defaults
-    let taskSectionContent = taskSectionParam ? taskSectionParam.replace(/\{clientName\}/g, clientInfo.clientName).replace(/\{market\}/g, clientInfo.market).replace(/\{productFocus\}/g, clientInfo.productFocus || 'products/services') : defaultTaskText.replace(/\{clientName\}/g, clientInfo.clientName).replace(/\{market\}/g, clientInfo.market).replace(/\{productFocus\}/g, clientInfo.productFocus || 'products/services');
-    let detailsSectionContent = detailsSectionParam ? detailsSectionParam.replace(/\{productFocus\}/g, clientInfo.productFocus || 'products/services') : defaultDetailsText.replace(/\{productFocus\}/g, clientInfo.productFocus || 'products/services');
+    let taskSectionContent = taskSectionParam ? taskSectionParam.replace(/\{clientName\}/g, clientInfo.clientName).replace(/\{market\}/g, clientInfo.market).replace(/\{productFocus\}/g, clientInfo.productFocus || 'products/services') : defaultTaskText; // Use defaults directly if param missing
+    let detailsSectionContent = detailsSectionParam ? detailsSectionParam.replace(/\{productFocus\}/g, clientInfo.productFocus || 'products/services') : defaultDetailsText; // Use defaults directly if param missing
 
-    // Build user brief section
-    const userBriefSection = userBrief ? `
-**Additional User Brief/Context:**
-${userBrief}
+    // Define the System Prompt (primarily for Claude, but can be logged for context)
+    const systemPrompt = "You are an AI assistant tasked with generating creative marketing recommendations. Your response MUST be a single, valid JSON object and nothing else. Do not include any text before or after the JSON object. All text content within the JSON object MUST be in THAI language.";
+
+    // --- Perform Grounding Search (Run ONCE if Gemini Key exists, used by all models) ---
+    let groundedClientInfoCommon = '';
+    if (GEMINI_API_KEY) { // Only attempt grounding if the key is available
+        const groundingPrompt = `ขอข้อมูลของ ${analysisRunData.clientName} ข้อมูลอัพเดทล่าสุด อยากได้ข้อมูลเช่น ราคา-ค่าใช้จ่าย, จุดเด่น ข้อมูลสำคัญต่างๆ โปรโมชั่น หรือ กิจกรรมและแคมเปญล่าสุด อยากได้ข้อมูลที่สดใหม่ที่สุด`;
+        console.log(`[Refactor] Performing common grounding search for client: ${analysisRunData.clientName}`);
+        try {
+            const groundingPayload = {
+                contents: [{ parts: [{ text: groundingPrompt }] }],
+                tools: [{ "google_search": {} }],
+                generationConfig: { temperature: 0.2 } // Low temp for factual retrieval
+            };
+            const groundingGeminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`; // Use Flash for grounding
+            const groundingResponse = await fetch(groundingGeminiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(groundingPayload)
+            });
+
+            if (!groundingResponse.ok) {
+                const errorText = await groundingResponse.text();
+                console.warn(`[Refactor] Common grounding search failed (${groundingResponse.status}): ${errorText}`);
+            } else {
+                const groundingData = await groundingResponse.json();
+                // Check tool calls response structure (adjust logic based on actual Gemini response format for tool calls)
+                const functionResponse = groundingData?.candidates?.[0]?.content?.parts?.find((part: any) => part.functionResponse);
+                if (functionResponse?.functionResponse?.name === 'google_search') { // More specific check
+                     groundedClientInfoCommon = functionResponse.functionResponse.text || ''; // Adjust based on actual structure
+                     console.log(`[Refactor] Common grounding successful via tool call. Length: ${groundedClientInfoCommon.length}`);
+                } else {
+                     // Fallback: check for direct text response (less likely)
+                     groundedClientInfoCommon = groundingData?.candidates?.[0]?.content?.parts?.[1]?.text?.trim() || '';
+                     if (groundedClientInfoCommon) {
+                         console.log(`[Refactor] Common grounding returned direct text (fallback). Length: ${groundedClientInfoCommon.length}`);
+                     } else {
+                         console.log(`[Refactor] Common grounding completed, but NO relevant text found in response.`);
+                     }
+                }
+            }
+        } catch (groundingError: any) {
+            console.error("[Refactor] Error during common grounding search:", groundingError);
+            // Proceed without grounding info if search fails
+        }
+    } else {
+        console.log("[Refactor] Skipping common grounding search as Gemini API key is not set.");
+    }
+    // --- End Grounding Search ---
+
+    // --- Function to build the final user prompt (dynamically includes grounded info) ---
+    const buildFinalUserPrompt = (groundedInfo: string) => {
+        const groundedSection = groundedInfo ? `
+**Recent Client Information (via Grounded Search):**
+---
+${groundedInfo}
+---
+*(This section provides recent context about ${clientInfo.clientName}. Consider these details alongside the core client information to ensure recommendations are timely and relevant. Use specific points from here where they offer a clear advantage or fresh angle.)*
 ` : '';
 
-    // NEW: Use combined summaries
-    const bookSummarySection = bookSummaryContent ? `\n**Optional Book Summary Contexts:**\n${bookSummaryContent}\n` : '';
-
-    // Construct the final prompt using the determined sections
-    const finalPrompt = `
-You are a **Visionary Creative Director & Disruptive Marketing Strategist**, fluent in Thai and English, known for generating **award-winning, conversation-starting campaigns**. Analyze the following client information, recent grounded search results, competitor summary, and optional book context to conceptualize groundbreaking creative recommendations and their initial execution details **IN THAI**. **ALL TEXTUAL OUTPUT IN THE FINAL JSON RESPONSE MUST BE IN THAI.** **Crucially, leverage your access to real-time information via search grounding to ensure ideas are timely, relevant, and informed by the latest digital landscape.**
+        return `
+Analyze the following client information, recent grounded search results (if available), competitor summary, and optional book context to conceptualize groundbreaking creative recommendations and their initial execution details **IN THAI**. **ALL TEXTUAL OUTPUT IN THE FINAL JSON RESPONSE MUST BE IN THAI.** **Crucially, leverage your access to real-time information via search grounding (if applicable to the model/call) to ensure ideas are timely, relevant, and informed by the latest digital landscape.**
 
 **Client Information:**
 *   Name: ${clientInfo.clientName}
 *   Market: ${clientInfo.market}
 *   Product Focus: ${clientInfo.productFocus}
 ${userBriefSection}
-${groundedClientInfo ? `\n**Recent Client Information (via Grounded Search):**\n---\n${groundedClientInfo}\n---\n` : ''}
----
-*(This section provides recent context about ${clientInfo.clientName}. Consider these details alongside the core client information to ensure recommendations are timely and relevant. Use specific points from here where they offer a clear advantage or fresh angle.)*
-
+${groundedSection}
 ${bookSummarySection}
-
 **Competitor Landscape Summary:**
 ${competitorSummary}
 *(Analyze the competitor summary, recent client info, and optional book context...)*
 
-**Recent Client Information is Important please use it to generate creative recommendations.
-
 **Task:**
-${taskSectionContent}
-
-**Remember: Ensure the output fields 'title', 'description', 'competitiveGap', and 'tags' within the final JSON are also generated in THAI LANGUAGE, alongside all Creative Execution Details.**
+${taskSectionContent} use ${groundedClientInfoCommon} to generate recommendations ideas that respresent จุดเด่น, ผลิตภัณฑ์เด่น, โปรโมชั่น แคมเปญล่าสุด หรือ กิจกรรมล่าสุด หรือ ข้อมูลสำคัญต่างๆ 
 
 **Creative Execution Details (Per Recommendation - Populate these fields IN THAI for the JSON):**
 ${detailsSectionContent}
@@ -315,7 +342,7 @@ ${detailsSectionContent}
       "competitiveGap": "ระบุช่องว่างทางการแข่งขันที่ไอเดียนี้เข้าไปตอบโจทย์ (ภาษาไทย)", // Thai - Must be original
       "tags": ["คำค้น1", "คำค้น2", "รูปแบบเนื้อหา"], // Thai - Must be original
       "content_pillar": "ตัวอย่าง: เคล็ดลับฮาวทู", // Thai - Must be original
-      "product_focus": "ระบุ ${clientInfo.productFocus} ที่ระบุใน Input", // Thai - Must be original & specific to input
+      "product_focus": "ระบุ ${clientInfo.productFocus || 'ผลิตภัณฑ์/บริการ'} ที่ระบุใน Input", // Thai - Must be original & specific to input
       "concept_idea": "สรุปแนวคิดสร้างสรรค์หลักสำหรับไอเดียนี้ (1-2 ประโยค)", // Thai - Must be original
       "copywriting": {
         "headline": "พาดหัวหลักที่น่าสนใจ", // Thai - Must be original
@@ -334,106 +361,274 @@ ${detailsSectionContent}
 }
 \`\`\`
 `;
-
-    // --- Log final prompt before saving ---\n    console.log(\"--- START FINAL PROMPT TO BE SAVED ---\");\n    console.log(finalPrompt);\n    console.log(\"--- END FINAL PROMPT TO BE SAVED ---\");\n    // --- End Log ---\n\n    // --- NEW: Save the prompt for debugging ---\n    try {
-        const debugFilename = `prompt_debug_${runId}.txt`;
-        await fs.writeFile(path.join(process.cwd(), debugFilename), finalPrompt);
-        console.log(`Debug prompt saved to: ${debugFilename}`);
-    // } catch (debugError) {
-    //     console.error("Error saving debug prompt file:", debugError);
-    //     // Continue execution even if saving fails
-    // }
-    // --- End Save Prompt ---
-    
-    // 5. Call Gemini API with Grounding
-    console.log("Sending request to Gemini API...");
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${GEMINI_API_KEY}`;
-
-    const geminiPayload = {
-        contents: [{ parts: [{ text: finalPrompt }] }],
-        // Enable Grounding with Google Search [[reference]](https://ai.google.dev/gemini-api/docs/grounding?lang=rest)
-        tools: [{
-            "google_search": {}
-        }],
-        generationConfig: {
-          temperature: 0.0 // Adjust temperature for creativity vs consistency
-        }
     };
 
-    const geminiResponse = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(geminiPayload)
-    });
 
-    if (!geminiResponse.ok) {
-      const errorText = await geminiResponse.text();
-      console.error('Gemini API error response:', errorText);
-      throw new Error(`Gemini API request failed: ${geminiResponse.status} - ${errorText}`);
-    }
+    // --- Model-Specific Generation ---
 
-    const geminiData = await geminiResponse.json();
-    console.log("Received response from Gemini API.");
+    // --- Gemini Generation (Conditional) ---
+    if (requestedModels.includes('gemini')) {
+        console.log("Starting Gemini generation...");
+        try {
+            // --- Prepare Gemini Prompt (using common builder) ---
+            const finalGeminiPrompt = buildFinalUserPrompt(groundedClientInfoCommon);
 
-    // 6. Parse and Validate Gemini's JSON Output
-    const generatedText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
+            // --- Log Gemini Prompt ---
+            console.log("--- START FINAL GEMINI PROMPT ---");
+            console.log(finalGeminiPrompt);
+            console.log("--- END FINAL GEMINI PROMPT ---");
 
-    // Log the raw response before attempting to parse
-    console.log("Raw text received from Gemini:", generatedText);
 
-    if (typeof generatedText !== 'string' || generatedText.trim() === '') {
-        console.error("Gemini response missing valid text content or is empty:", geminiData);
-        throw new Error('Gemini returned empty or invalid content.');
-    }
+            // --- Call Gemini API ---
+            console.log("Sending request to Gemini API...");
+            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${GEMINI_API_KEY}`; // Use Pro for main generation
+            const geminiPayload = {
+                contents: [{ parts: [{ text: finalGeminiPrompt }] }],
+                // Grounding is implicitly part of the prompt text now, remove explicit tool call for main generation
+                // tools: [{ "google_search": {} }], // Removed for main generation
+                generationConfig: { 
+                    temperature: 0.0, // Adjusted temperature for creativity
+                    response_mime_type: "application/json", // Request JSON output directly
+                } 
+            };
+            const geminiResponse = await fetch(geminiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(geminiPayload)
+            });
 
-    let parsedRecommendations: GeminiRecommendationOutput;
-    let jsonString: string = ''; // Define jsonString in the outer scope
-    try {
-        // Clean potential markdown fences first (as a fallback)
-        let potentiallyCleanedText = generatedText.trim().replace(/^```json\s*/, '').replace(/\s*```$/, '');
+            if (!geminiResponse.ok) {
+                const errorText = await geminiResponse.text();
+                throw new Error(`Gemini API request failed: ${geminiResponse.status} - ${errorText}`);
+            }
+            const geminiData = await geminiResponse.json();
+            // With response_mime_type, the text should be JSON directly
+            const generatedText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text; 
+            if (typeof generatedText !== 'string' || generatedText.trim() === '') {
+                console.error("Gemini response missing text part:", JSON.stringify(geminiData, null, 2));
+                throw new Error('Gemini returned empty or invalid content.');
+            }
 
-        // Find the start and end of the main JSON object
-        const startIndex = potentiallyCleanedText.indexOf('{');
-        const endIndex = potentiallyCleanedText.lastIndexOf('}');
+            // --- Parse Gemini Response ---
+            let parsedRecommendations: GeminiRecommendationOutput;
+            let jsonString = generatedText.trim(); // Assume direct JSON string
+            try {
+                 // No need to clean ```json markers if response_mime_type is set
+                // let potentiallyCleanedText = generatedText.trim().replace(/^```json\s*/, '').replace(/\s*```$/, '');
+                // const startIndex = potentiallyCleanedText.indexOf('{');
+                // const endIndex = potentiallyCleanedText.lastIndexOf('}');
+                // if (startIndex === -1 || endIndex === -1 || endIndex < startIndex) {
+                //     throw new Error('AI response did not contain a valid JSON object structure.');
+                // }
+                // jsonString = potentiallyCleanedText.substring(startIndex, endIndex + 1);
 
-        if (startIndex === -1 || endIndex === -1 || endIndex < startIndex) {
-            console.error("Could not find valid JSON object delimiters {} in response:", potentiallyCleanedText);
-            throw new Error('AI response did not contain a valid JSON object structure.');
+                parsedRecommendations = JSON.parse(jsonString);
+                if (!parsedRecommendations || !Array.isArray(parsedRecommendations.recommendations)) {
+                    throw new Error("Parsed JSON does not contain a 'recommendations' array.");
+                }
+                finalResults['gemini'] = parsedRecommendations.recommendations; // Store successful result
+                console.log("Gemini generation successful.");
+            } catch (parseError: any) {
+                console.error("Failed to parse JSON from Gemini:", jsonString, "Error:", parseError);
+                throw new Error(`Failed to parse recommendations JSON from Gemini: ${parseError.message}`);
+            }
+
+        } catch (geminiError: any) {
+            console.error("Error during Gemini generation process:", geminiError);
+            finalErrors['gemini'] = geminiError.message || "An unknown error occurred during Gemini generation.";
+            finalResults['gemini'] = null; // Ensure no stale results
         }
-
-        // Extract the JSON string between the first { and last }
-        jsonString = potentiallyCleanedText.substring(startIndex, endIndex + 1); // Assign to outer scope variable
-
-        // Attempt to parse the extracted JSON string
-        parsedRecommendations = JSON.parse(jsonString);
-        console.log(`Successfully parsed ${parsedRecommendations?.recommendations?.length ?? 0} recommendations from Gemini JSON block.`);
-
-        // Basic validation
-        if (!parsedRecommendations || !Array.isArray(parsedRecommendations.recommendations)) {
-           throw new Error("Parsed JSON does not contain a 'recommendations' array.");
-        }
-
-    } catch(parseError: any) {
-        console.error("Failed to parse JSON from Gemini (after extraction):", jsonString, "Original text:", generatedText, "Error:", parseError);
-        // Fallback or throw error - maybe return an empty array or error response
-        throw new Error(`Failed to parse recommendations JSON from AI: ${parseError.message}`);
     }
-    
-    // Return the successfully generated and parsed recommendations
-    return NextResponse.json({ recommendations: parsedRecommendations.recommendations });
+
+    // --- OpenAI Generation (Conditional) ---
+    if (requestedModels.includes('openai')) {
+        console.log("Starting OpenAI generation...");
+        try {
+            // --- Prepare OpenAI Prompt (using common builder, no grounding needed here) ---
+            const finalOpenAIPrompt = buildFinalUserPrompt(groundedClientInfoCommon);
+
+            // --- Log OpenAI Prompt ---
+            console.log("--- START FINAL OPENAI PROMPT ---");
+            console.log(finalOpenAIPrompt);
+            console.log("--- END FINAL OPENAI PROMPT ---");
+
+
+            // --- Call OpenAI API ---
+            console.log("Sending request to OpenAI API...");
+            const openaiUrl = "https://api.openai.com/v1/chat/completions";
+            const openaiPayload = {
+                model: "gpt-4.1-mini", // Use the desired OpenAI model
+                messages: [
+                    // Optional System prompt can be added here if desired for OpenAI
+                    // { role: "system", content: systemPrompt }, 
+                    { role: "user", content: finalOpenAIPrompt }
+                ],
+                response_format: { type: "json_object" }, // Request JSON output
+                temperature: 0.0 // Adjust temperature if needed
+            };
+
+            const openaiResponse = await fetch(openaiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${OPENAI_API_KEY}`
+                },
+                body: JSON.stringify(openaiPayload)
+            });
+
+            if (!openaiResponse.ok) {
+                const errorBody = await openaiResponse.json().catch(() => ({ error: { message: 'Failed to parse error response' } }));
+                const errorMessage = errorBody?.error?.message || `OpenAI API request failed: ${openaiResponse.status} - ${openaiResponse.statusText}`;
+                console.error('OpenAI API error response:', errorBody);
+                throw new Error(errorMessage);
+            }
+
+            const openaiData = await openaiResponse.json();
+            const generatedText = openaiData?.choices?.[0]?.message?.content;
+
+            console.log("Raw text received from OpenAI:", generatedText);
+
+            if (typeof generatedText !== 'string' || generatedText.trim() === '') {
+                 console.error("OpenAI response missing content:", JSON.stringify(openaiData, null, 2));
+                throw new Error('OpenAI returned empty or invalid content.');
+            }
+
+            // --- Parse OpenAI Response ---
+            let parsedRecommendations: GeminiRecommendationOutput;
+            let jsonString = generatedText.trim(); // Assume direct JSON due to response_format
+            try {
+                parsedRecommendations = JSON.parse(jsonString);
+                if (!parsedRecommendations || !Array.isArray(parsedRecommendations.recommendations)) {
+                    throw new Error("Parsed JSON does not contain a 'recommendations' array.");
+                }
+                finalResults['openai'] = parsedRecommendations.recommendations; // Store successful result
+                console.log("OpenAI generation successful.");
+            } catch (parseError: any) {
+                console.error("Failed to parse JSON from OpenAI:", jsonString, "Error:", parseError);
+                throw new Error(`Failed to parse recommendations JSON from OpenAI: ${parseError.message}`);
+            }
+
+        } catch (openaiError: any) {
+            console.error("Error during OpenAI generation process:", openaiError);
+            finalErrors['openai'] = openaiError.message || "An unknown error occurred during OpenAI generation.";
+            finalResults['openai'] = null; // Ensure no stale results
+        }
+    }
+
+    // --- Claude Generation (Conditional) ---
+    if (requestedModels.includes('claude')) {
+        console.log("Starting Claude generation...");
+        try {
+            // --- Prepare Claude Prompt (using common builder, no grounding needed here) ---
+            const finalClaudePrompt = buildFinalUserPrompt(groundedClientInfoCommon);
+            
+            // Use the predefined systemPrompt
+            const systemPromptClaude = systemPrompt; 
+
+            // --- Log Claude Prompt ---
+            console.log("--- START FINAL CLAUDE PROMPT ---");
+            console.log("System Prompt:", systemPromptClaude);
+            console.log("User Prompt:", finalClaudePrompt);
+            console.log("--- END FINAL CLAUDE PROMPT ---");
+
+
+            // --- Call Claude API ---
+            console.log("Sending request to Anthropic API...");
+            const claudeUrl = "https://api.anthropic.com/v1/messages";
+            const claudePayload = {
+                model: "claude-3-7-sonnet-20250219", // Ensure this model is correct/available
+                max_tokens: 64000,
+                system: systemPromptClaude, // Use the specific system prompt
+                messages: [
+                    { role: "user" as const, content: finalClaudePrompt } // Use the common user prompt
+                ],
+                temperature: 0.0 // Adjusted temperature
+            };
+
+            const claudeResponse = await fetch(claudeUrl, {
+                method: 'POST',
+                headers: {
+                    'x-api-key': ANTHROPIC_API_KEY!,
+                    'anthropic-version': '2023-06-01',
+                    'content-type': 'application/json'
+                },
+                body: JSON.stringify(claudePayload)
+            });
+
+            if (!claudeResponse.ok) {
+                const errorText = await claudeResponse.text();
+                let errorMessage = `Anthropic API request failed: ${claudeResponse.status} - ${claudeResponse.statusText}`;
+                try {
+                    const errorBody = JSON.parse(errorText);
+                    errorMessage = errorBody?.error?.message || errorMessage;
+                    console.error('Anthropic API error response (parsed):', errorBody);
+                } catch {
+                     console.error('Anthropic API error response (text):', errorText);
+                     errorMessage += ` - ${errorText}`
+                }
+                throw new Error(errorMessage);
+            }
+
+            const claudeData = await claudeResponse.json();
+            const generatedText = claudeData?.content?.[0]?.text;
+
+            console.log("Raw text received from Claude:", generatedText);
+
+            if (typeof generatedText !== 'string' || generatedText.trim() === '') {
+                console.error('Claude response missing text content:', JSON.stringify(claudeData, null, 2));
+                throw new Error('Claude returned empty or invalid content in the expected structure.');
+            }
+
+            // --- Parse Claude Response ---
+            let parsedRecommendations: GeminiRecommendationOutput;
+            let jsonString = '';
+            try {
+                // Attempt to extract JSON even if wrapped
+                let potentiallyCleanedText = generatedText.trim().replace(/^```json\s*/, '').replace(/\s*```$/, '');
+                const startIndex = potentiallyCleanedText.indexOf('{');
+                const endIndex = potentiallyCleanedText.lastIndexOf('}');
+                if (startIndex === -1 || endIndex === -1 || endIndex < startIndex) {
+                    console.error("Invalid JSON structure found in Claude text:", potentiallyCleanedText)
+                    throw new Error('AI response did not contain a valid JSON object structure.');
+                }
+                jsonString = potentiallyCleanedText.substring(startIndex, endIndex + 1);
+                parsedRecommendations = JSON.parse(jsonString);
+                if (!parsedRecommendations || !Array.isArray(parsedRecommendations.recommendations)) {
+                     console.error("Parsed JSON missing 'recommendations' array:", parsedRecommendations);
+                    throw new Error("Parsed JSON does not contain a 'recommendations' array.");
+                }
+                finalResults['claude'] = parsedRecommendations.recommendations; // Store successful result
+                console.log("Claude generation successful.");
+            } catch (parseError: any) {
+                console.error("Failed to parse JSON from Claude:", jsonString, "Error:", parseError);
+                throw new Error(`Failed to parse recommendations JSON from Claude: ${parseError.message}`);
+            }
+
+        } catch (claudeError: any) {
+            console.error("Error during Claude generation process:", claudeError);
+            finalErrors['claude'] = claudeError.message || "An unknown error occurred during Claude generation.";
+            finalResults['claude'] = null; // Ensure no stale results
+        }
+    }
+
+    // --- Return Combined Results ---
+    console.log("Final results being returned:", JSON.stringify(finalResults));
+    console.log("Final errors being returned:", JSON.stringify(finalErrors));
+    return NextResponse.json({ results: finalResults, errors: finalErrors });
 
   } catch (error) {
-    console.error(`Error in GET /api/generate-recommendations for runId ${runId}:`, error);
-    let errorMessage = 'Failed to generate recommendations';
+    // Catch errors from initial data fetching (Supabase, etc.)
+    console.error(`Unhandled error in GET /api/generate-recommendations for runId ${runId}:`, error);
+    let errorMessage = 'Failed to generate recommendations due to a server error.';
     if (error instanceof Error) {
         errorMessage = error.message;
     }
+    // Return a general error structure - frontend expects { results: {}, errors: {} }
     return new NextResponse(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+        JSON.stringify({ results: {}, errors: { general: errorMessage } }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   } finally {
-    // Optional: Disconnect Supabase
-    // await supabaseAdmin.$disconnect();
+    // Optional: Disconnect Supabase client if needed
   }
 } 

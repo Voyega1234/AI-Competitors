@@ -33,10 +33,25 @@ export async function POST(request: NextRequest) {
         console.log(`Generating Ideogram prompt based on input: "${inputText.substring(0, 100)}..."`);
 
         const geminiPromptForPromptGeneration = `
-You are an expert image prompt generator. Based on the following creative concept details, create a concise yet descriptive and visually rich prompt suitable for generating an image with an AI like Ideogram. Focus on visual elements, composition, mood, and style. Output ONLY the generated prompt text, without any introductory phrases or explanations.
+You are an expert Ideogram prompt generator for impactful Facebook Ads.
 
-Creative Concept Details:
+**Your Task:** Create a concise Ideogram prompt based on the core concept
+
+**Ideogram Prompt Requirements:**
+
+1.  **Core Concept:** Visualize the main idea from the input text.
+2.  **Visual Impact (for Facebook):** Generate a visually striking image. Choose a suitable **Style** (e.g., Photorealistic, 3D Render, Cinematic Illustration) and specify a **Mood/Tone** (e.g., Empowering, Professional, Exciting) derived from the input. Use strong composition and lighting.
+3.  **Integrated English Text:** MUST include **2-4 readable English text elements** using Ideogram's typography. Suggest text for:
+    *   **Main Headline** (benefit-driven)
+    *   **Supporting Detail/Benefit**
+    *   **(Optional) CTA**
+
+**Instructions for You:**
+*   Analyze the input text for the core message, mood, and key visuals.
+*   Translate these into English for the prompt.
+*   Generate the Ideogram prompt incorporating the requirements above.
 ---
+Input Text for Analysis:
 ${inputText}
 ---
 
@@ -46,7 +61,7 @@ Generated Image Prompt:
         const geminiPayload = {
             contents: [{ parts: [{ text: geminiPromptForPromptGeneration }] }],
             generationConfig: {
-              temperature: 0.7, // Adjust for creativity vs. directness
+              temperature: 0.4, // Adjust for creativity vs. directness
               // maxOutputTokens: 150, // Optional: Limit prompt length
             }
         };
@@ -79,7 +94,8 @@ Generated Image Prompt:
                 prompt: generatedIdeogramPrompt, // Use the prompt from Gemini
                 aspect_ratio: aspect_ratio,
                 model: "V_2", // Using model V_2 as per Ideogram docs
-                magic_prompt_option: "AUTO" // Using AUTO magic prompt
+                magic_prompt_option: "AUTO", // Using AUTO magic prompt
+                negative_prompt : "Worst quality, low res,Ineffective, unmemorable, misleading, inaccurate, incomplete, low-quality, poorly designed, confusing, cluttered, unattractive, cliched, outdated, unprofessional,"
             }
         };
 
