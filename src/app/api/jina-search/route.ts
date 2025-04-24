@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import supabaseAdmin from '@/lib/supabaseClient'; // Import Supabase client
+import { exec } from 'child_process'; // Import exec
+import { promisify } from 'util'; // Import promisify
+import path from 'path'; // Import path for directory resolution
+import fs from 'fs'; // <-- Import Node.js File System module
+
+const execPromise = promisify(exec); // Promisify exec
 
 // Mark the route as dynamic
 export const dynamic = 'force-dynamic';
@@ -117,19 +123,18 @@ export async function POST(request: Request) {
   try {
     // Get API keys from environment variables
     const JINA_API_KEY = process.env.JINA_API_KEY;
-    const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    // Read the Gemini key used by the parent Next.js process
+    const PARENT_GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY; 
     
-    if (!JINA_API_KEY || !GEMINI_API_KEY) {
-      console.error('API keys (Jina or Gemini) are not defined');
-      return NextResponse.json({ success: false, error: 'API key configuration error' }, { status: 500 });
+    if (!JINA_API_KEY || !PARENT_GEMINI_API_KEY) { // Check the parent key
+      console.error('API keys (Jina or Gemini) are not defined in the Next.js environment');
+      return NextResponse.json({ success: false, error: 'API key configuration error in Next.js backend' }, { status: 500 });
     }
     
     // Parse request body
     const body = await request.json();
-    // Destructure productFocus and keep additionalInfo separate
     const { clientName, facebookUrl: clientFacebookUrl, websiteUrl: clientWebsiteUrl, market, productFocus, additionalInfo, userCompetitors } = body;
     
-    // Store input for later saving
     const analysisInput = {
       clientName,
       clientWebsiteUrl,
@@ -146,90 +151,149 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Client name and target market are required' }, { status: 400 });
     }
     
-    // --- Jina Prompt Construction ---
-    let query = '';
-    // Use productFocus for the specific product/service, additionalInfo for general context
+    // --- Construct Query for node-DeepResearch --- 
     const clientProductInfo = productFocus ? ` focusing on products/services like: ${productFocus}` : '';
     const clientAdditionalContext = additionalInfo ? ` Additional context: ${additionalInfo}` : '';
-    // Construct base client info, escaping quotes for the final query string
-    const clientBaseInfo = `Our client is \"${clientName}\"${clientWebsiteUrl ? ` with website ${clientWebsiteUrl}` : ''}${clientFacebookUrl ? ` and Facebook page ${clientFacebookUrl}` : ''}`;
-    // Determine market phrasing, handling "Global"
+    const clientBaseInfo = `Our client is \"${clientName}\" ${clientWebsiteUrl ? ` with website ${clientWebsiteUrl}` : ''}${clientFacebookUrl ? ` and Facebook page ${clientFacebookUrl}` : ''}`;
     const marketInfo = market.toLowerCase() === 'global' ? 'globally' : `in the ${market} market`;
-    // Determine phrasing for product focus in the prompt, using the dedicated field
-    const productFocusPhrase = productFocus || "the client\'s main offerings";
+    const productFocusPhrase = productFocus || "the client's main offerings";
     const competitorFocusPhrase = productFocus || 'general offerings similar to the client';
-
-    // Add user-specified competitors if provided
     const userCompetitorsSection = userCompetitors && userCompetitors.trim() 
-        ? `\n\nPlease pay special attention to the following user-specified competitors if found during your search: ${userCompetitors.trim()}. Include them in the analysis alongside other relevant competitors.`
+        ? `Please pay special attention to the following user-specified competitors if found: ${userCompetitors.trim()}.`
         : '';
 
-    // Assemble the Jina query using the constructed parts
-    query = `
-${clientBaseInfo}${clientProductInfo}. The client operates ${marketInfo}.${clientAdditionalContext}
+    // Use the detailed query provided by the user for the script
+    const detailedResearchPrompt = `
+กรุณาค้นคว้าและให้ข้อมูลโดยละเอียดเกี่ยวกับคู่แข่งแต่ละรายอย่างละเอียด โดยมีรายละเอียดดังต่อไปนี้:
+*ชื่อบริษัท
+*URL เว็บไซต์
+*บริการและฟีเจอร์หลักของพวกเขา (โดยเฉพาะที่เกี่ยวข้องกับ ${productFocusPhrase}) (สำคัญ)
+*กลุ่มเป้าหมาย / ฐานลูกค้าของพวกเขา (สำคัญ)
+*รูปแบบ / ภาพรวมราคาของพวกเขา (สำคัญ) - ต้องการตัวเลขราคาจริงจากแหล่งข้อมูลที่เชื่อถือได้ หากเป็นไปได้ ต้องเป็นตัวเลขที่ถูกต้อง ไม่ใช่ตัวเลขที่แต่งขึ้นมาเอง
+*จุดแข็งหลักหรือสิ่งที่ทำให้แตกต่าง (สำคัญ) ถ้าสามารถระบุตัวเลขหรือสถิติอะไรจะดีมากที่สุด
+*จุดอ่อนที่เป็นไปได้หรือช่องว่างทางการตลาด (สำคัญ) ถ้าสามารถระบุตัวเลขหรือสถิติอะไรจะดีมากที่สุด
+*ความเชี่ยวชาญของแบรนด์และจุดขายที่เป็นเอกลักษณ์ (USP)
+*น้ำเสียงของแบรนด์และการรับรู้ของสาธารณชน (ทั้งในแง่บวกและลบ)
+*ส่วนแบ่งการตลาดโดยประมาณ (หากหาข้อมูลได้)
+*ข้อร้องเรียนทั่วไปจากลูกค้า
+*แนวคิดหลัก / ธีมที่ใช้ในการโฆษณาโดยทั่วไป
+*ขอบคุณที่ช่วยค้นคว้าเพิ่มเติมเกี่ยวกับคู่แข่งของเรา
+PLEASE GIVE ME THE COMPLETELY DETIALS AS MUCH AS POSSIBLE
+FINAL ANSWER MUST BE IN THAI
+`;
 
-Find the top 5-7 main competitors for our client ${marketInfo}, specifically focusing on businesses offering similar products/services (${competitorFocusPhrase}).${userCompetitorsSection}
+    // Combine the initial context with the detailed research points for the script query
+    const queryForScript = `Analyze competitors for ${clientBaseInfo}, operating ${marketInfo}${clientProductInfo}. Focus on ${competitorFocusPhrase}. ${userCompetitorsSection} ${clientAdditionalContext}
+${detailedResearchPrompt}`;
 
-Please research and provide detailed information about each competitor, including:
-*   Company Name
-*   Website URL
-*   Their specific services and key features (especially those related to ${productFocusPhrase}). (*important)
-*   Their target market/customer base. (*important)
-*   Their pricing model/overview. (*important) i want real number if possible but it have to be a correct from source number not make up number
-*   Their key strengths or differentiators. (*important)
-*   Their potential weaknesses or market gaps. (*important)
-*   Their brand specialty and unique selling proposition (USP).
-*   Their brand tone and public perception (positive and negative).
-*   Estimated market share (if found).
-*   Common customer complaints.
-*   Common advertising themes.
+    console.log('[node-DeepResearch] Query sent to script:', queryForScript);
 
-For any metrics or data points provided (market share, followers, etc.), please include when this data was collected or reported.
+    // --- Execute node-DeepResearch Script --- 
+    let rawContent = '';
+    try {
+        const scriptDir = path.resolve(process.cwd(), 'src/node-DeepResearch');
+        const escapedQuery = JSON.stringify(queryForScript);
+        const command = `npm run dev ${escapedQuery}`;
+        
+        console.log(`[node-DeepResearch] Executing command in ${scriptDir}: ${command}`);
+        
+        // Construct the environment for the child process
+        const scriptEnv = {
+            ...process.env, // Inherit parent environment (important for PATH etc.)
+            GEMINI_API_KEY: PARENT_GEMINI_API_KEY, // Pass Gemini key with the expected name
+            JINA_API_KEY: JINA_API_KEY // Pass Jina key
+        };
 
-Present the findings as a comprehensive text report.
-    `; // End of template literal
-    // --- End Query Generation ---
+        // Execute the command with the specific environment
+        const { stdout, stderr } = await execPromise(command, { 
+            cwd: scriptDir, 
+            encoding: 'utf8',
+            timeout: 3000000, // 50 minutes timeout (Adjusted in previous step)
+            env: scriptEnv // <-- Pass the constructed environment
+        }); 
 
-    console.log('[jina-search] Constructed query:', query);
+        // --- SUCCESS PATH (Script exited cleanly, exit code 0) --- 
+        if (stderr) {
+            console.warn('[node-DeepResearch] Script stderr (clean exit):', stderr);
+        }
+        console.log('[node-DeepResearch] Script stdout length (clean exit):', stdout.length);
 
-    const payload = {
-      model: "jina-deepsearch-v1",
-      messages: [{ role: "user", content: query }],
-      stream: false,
-      reasoning_effort: "high",
-      max_attempts: 1,
-      no_direct_answer: true
-    };
+        const finalAnswerMarker = "Final Answer:";
+        const answerStartIndex = stdout.lastIndexOf(finalAnswerMarker);
 
-    console.log('[jina-search] Sending request to Jina');
-    const response = await fetch('https://deepsearch.jina.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${JINA_API_KEY}` },
-      body: JSON.stringify(payload)
-    });
+        if (answerStartIndex !== -1) {
+            rawContent = stdout.substring(answerStartIndex + finalAnswerMarker.length).trim();
+            console.log('[node-DeepResearch] Extracted Final Answer content length (clean exit):', rawContent.length);
+        } else {
+            console.warn('[node-DeepResearch] Could not find "Final Answer:" marker in script output (clean exit). Using full output.');
+            rawContent = stdout.trim(); 
+            if (!rawContent) {
+                 // If stdout is empty even on clean exit, something is wrong
+                 throw new Error('node-DeepResearch script exited cleanly but produced no output.');
+            }
+        }
+        // --- End Success Path --- 
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[jina-search] Error from Jina API: ${response.status}`, errorText);
-      let errorMessage = `Error from search API: ${response.status}`;
-      try { errorMessage = JSON.parse(errorText).detail || errorMessage; } catch {} 
-      return NextResponse.json({ success: false, error: errorMessage }, { status: response.status });
+    } catch (execError: any) {
+        // --- ERROR PATH (Script likely exited with non-zero code or other exec error) --- 
+        console.error('[node-DeepResearch] Script execution failed or exited with error:', execError.message);
+        if (execError.stderr) {
+             console.warn('[node-DeepResearch] Script stderr (on error):', execError.stderr);
+        }
+
+        // IMPORTANT: Check if stdout exists in the error object and try to extract Final Answer anyway
+        const errorStdout = execError.stdout;
+        if (errorStdout && typeof errorStdout === 'string' && errorStdout.trim()) {
+            console.log('[node-DeepResearch] Attempting to extract Final Answer from stdout despite script error...');
+            const finalAnswerMarker = "Final Answer:";
+            const answerStartIndex = errorStdout.lastIndexOf(finalAnswerMarker);
+
+            if (answerStartIndex !== -1) {
+                rawContent = errorStdout.substring(answerStartIndex + finalAnswerMarker.length).trim();
+                console.log('[node-DeepResearch] Successfully extracted Final Answer content length (from error stdout):', rawContent.length);
+                // We have the answer, so we proceed despite the script's exit code/errors
+            } else {
+                // Script errored AND we couldn't find the answer in its output.
+                console.error('[node-DeepResearch] Script errored AND "Final Answer:" marker not found in stdout.');
+                const errorDetails = execError.stderr || execError.stdout || execError.message;
+                throw new Error(`Failed to execute analysis script AND could not find Final Answer: ${errorDetails}`); 
+            }
+        } else {
+             // Script errored AND produced no stdout.
+             console.error('[node-DeepResearch] Script errored AND produced no stdout.');
+             const errorDetails = execError.stderr || execError.message;
+             throw new Error(`Failed to execute analysis script, no stdout produced: ${errorDetails}`); 
+        }
+        // --- End Error Path --- 
     }
+    // --- End Script Execution --- 
 
-    const data = await response.json();
-    console.log('[jina-search] Received response from Jina');
-    
-    const rawContent = data.choices?.[0]?.message?.content || '';
+    // ---->>> SAVE RAW CONTENT TO FILE FOR DEBUGGING <<<----
+    // if (rawContent) {
+    //     try {
+    //         const debugFilePath = path.resolve(process.cwd(), 'tmp', `final-answer-debug-${Date.now()}.txt`);
+    //         // Ensure tmp directory exists (optional, adjust path if needed)
+    //         const tmpDir = path.dirname(debugFilePath);
+    //         if (!fs.existsSync(tmpDir)){
+    //             fs.mkdirSync(tmpDir, { recursive: true });
+    //         }
+    //         fs.writeFileSync(debugFilePath, rawContent, 'utf8');
+    //         console.log(`[jina-search] Saved raw 'Final Answer' content for debugging to: ${debugFilePath}`);
+    //     } catch (fileError: any) {
+    //         console.error(`[jina-search] Failed to write debug file: ${fileError.message}`);
+    //         // Don't stop the main process if logging fails
+    //     }
+    // }
+    // ---->>> END DEBUG FILE SAVE <<<----
+
+    // ---->>> PARSE WITH GEMINI <<<---- (Using the extracted rawContent)
     if (!rawContent) {
-      console.error('[jina-search] No content found in Jina response');
-      return NextResponse.json({ success: false, error: 'Search API returned empty content.' }, { status: 500 });
+        console.error('[jina-search] Reached Gemini parsing step but rawContent is empty. This should not happen.');
+        throw new Error('Internal error: Failed to obtain content for Gemini parsing.');
     }
     
-    console.log('[jina-search] Raw content length:', rawContent.length);
-    
-    // ---->>> PARSE WITH GEMINI <<<----
-    // Pass productFocus to Gemini for context
-    const parsedData: GeminiOutput = await parseWithGemini(rawContent, GEMINI_API_KEY, clientName, productFocus);
+    console.log('[jina-search] Sending extracted content to Gemini for parsing...');
+    const parsedData: GeminiOutput = await parseWithGemini(rawContent, PARENT_GEMINI_API_KEY, clientName, productFocus);
     
     // --- Process Gemini's Output --- 
     const processedCompetitors: FinalCompetitor[] = (parsedData.competitors || []).map((comp): FinalCompetitor => {
@@ -311,7 +375,7 @@ Present the findings as a comprehensive text report.
       };
     }).filter(comp => comp.name !== 'Unknown Competitor'); // Filter out fundamentally broken entries
 
-    console.log(`[jina-search] Processed ${processedCompetitors.length} competitors via Gemini (with category cleaning).`);
+    console.log(`[jina-search] Processed ${processedCompetitors.length} competitors via Gemini.`);
 
     // --- Save the combined result to the Database using Supabase --- 
     try {
@@ -327,7 +391,6 @@ Present the findings as a comprehensive text report.
                 market: analysisInput.market,
                 productFocus: analysisInput.productFocus,
                 additionalInfo: analysisInput.additionalInfo,
-                userCompetitors: analysisInput.userCompetitors,
                 timestamp: analysisInput.timestamp,
                 updatedAt: analysisInput.timestamp
             })
@@ -410,12 +473,8 @@ Present the findings as a comprehensive text report.
     });
 
   } catch (error: any) {
-    console.error('[jina-search] Error in POST handler or Gemini parsing:', error);
-    const errorMessage = error.message?.includes('Gemini') 
-                       ? `Error processing results: ${error.message}` 
-                       : error.message?.includes('Supabase')
-                       ? `Database error: ${error.message}`
-                       : error.message || 'An unexpected server error occurred';
+    console.error('[jina-search] Error in POST handler:', error);
+    const errorMessage = error.message || 'An unexpected server error occurred'; // Simplified
     return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
   }
 }
@@ -437,28 +496,30 @@ async function parseWithGemini(
     "Digital Assets", "Cryptocurrency", "General Finance", "Other"
   ].join(", ");
 
+  // Modified prompt to handle markdown table input
   const prompt = `
-You are an expert marketing analyst. Analyze the following text report about ${clientName} and its competitors, focusing on products/services like: ${productFocus || 'general offerings'}. PRIORITIZE the most recent information available. Generate a VALID JSON object summarizing the key findings for the competitors found, structured exactly as specified below.
+You are an expert marketing analyst. The following text report about ${clientName} and its competitors contains a **MARKDOWN TABLE**. Analyze the table and surrounding text, focusing on products/services like: ${productFocus || 'general offerings'}. PRIORITIZE the most recent information available. Generate a VALID JSON object summarizing the key findings for **ALL** competitors found in the table, structured exactly as specified below.
 
-**Input Text Report:**
+**Input Text Report (contains a Markdown Table):**
 \`\`\`text
 ${rawContent}
 \`\`\`
 
 **Analysis & Structuring Instructions:**
-1.  **Identify Competitors:** For each competitor, extract all available information for the fields in the JSON structure.
-2.  **Extract Services:** From the text about each competitor, carefully identify ONLY their specific product or service offerings. Include:
-    * Specific named products or services (e.g., "Gold Savings Account", "Robo-advisor Platform")
+1.  **Identify Competitors:** The competitors are listed as columns in the markdown table. Extract data for EACH competitor column.
+2.  **Extract Data from Rows:** For each competitor column, go through the rows of the table (e.g., 'URL เว็บไซต์', 'บริการและฟีเจอร์หลัก', 'กลุ่มเป้าหมาย', 'รูปแบบ/ภาพรวมราคา', 'จุดแข็งหลัก', 'จุดอ่อนที่เป็นไปได้', etc.) and extract the corresponding information from the cell for that competitor.
+3.  **Extract Services:** From the 'บริการและฟีเจอร์หลัก' row for each competitor, carefully identify ONLY their specific product or service offerings. Include:
+    * Specific named products or services (e.g., "Gold Savings Account", "Robo-advisor Platform", "สินเชื่อส่วนบุคคลดิจิทัล")
     * Concrete service types (e.g., "Investment Advisory", "Commodity Trading")
-    * Distinct product categories (e.g., "Physical Gold", "ETFs")
-    DO NOT include general descriptions, marketing claims, or features. Each service should be 1-4 words maximum and represent something a customer could specifically purchase or sign up for.
-3.  **Categorize Services:** Based *only* on the extracted \`services\` list for a competitor, assign one or more relevant categories from the suggested list below (or generate a similar, appropriate category if none fit perfectly) and put them in the \`serviceCategories\` array. Aim for 1-3 concise categories per competitor. Suggested Categories: [${serviceCategoryExamples}].
-4.  **Prioritize Focus:** When extracting services and assigning categories, give priority to those related to the client's focus: ${productFocus || 'general offerings'}.
-5.  **Handle Missing Data:** For other fields, use \`null\` if the information is not found. For array fields (\`services\`, \`serviceCategories\`, \`features\`, etc.), use an empty array \`[]\` if no items are found. For nested objects (\`brandPerception\`, etc.), use \`null\` if the entire object's data is missing, otherwise include the object with \`null\` for its missing inner fields.
-6.  **Collect Competitors:** Create a JSON object for each competitor and collect them in the main \`competitors\` array.
+    * Distinct product categories (e.g., "Physical Gold", "ETFs", "Nano-finance")
+    DO NOT include general descriptions, marketing claims, or features. Each service should be 1-4 words maximum and represent something a customer could specifically purchase or sign up for. Put these in the \`services\` array.
+4.  **Categorize Services:** Based *only* on the extracted \`services\` list for a competitor, assign one or more relevant categories from the suggested list below (or generate a similar, appropriate category if none fit perfectly) and put them in the \`serviceCategories\` array. Aim for 1-3 concise categories per competitor. Suggested Categories: [${serviceCategoryExamples}].
+5.  **Prioritize Focus:** When extracting services and assigning categories, give priority to those related to the client's focus: ${productFocus || 'general offerings'}.
+6.  **Handle Missing/N/A Data:** If a cell in the table is empty, contains "N/A", or the information is otherwise not found, use \`null\` for the corresponding field in the JSON. For array fields (\`services\`, \`serviceCategories\`, \`features\`, etc.), use an empty array \`[]\` if no items are found. For nested objects (\`brandPerception\`, etc.), use \`null\` if the entire object's data is missing, otherwise include the object with \`null\` for its missing inner fields.
+7.  **Collect Competitors:** Create a JSON object for EACH competitor found in the table columns and collect them in the main \`competitors\` array.
 
 **Output Format & JSON Validity RULES:**
-*   **Return ONLY the single, valid JSON object.** No explanations, intro text, or markdown formatting (like \`\`\`json\`).
+*   **Return ONLY the single, valid JSON object.** No explanations, intro text, or markdown formatting (like \`\`\`json\`\`\`).
 *   **CRITICAL: Ensure valid JSON syntax.** Double quotes for keys/strings, no trailing commas, correct brackets/braces.
 *   The output MUST start with \`{\` and end with \`}\`.
 
@@ -467,45 +528,45 @@ ${rawContent}
 {
   "competitors": [
     {
-      "name": "Example Competitor",
+      "name": "Example Competitor", // Extracted from table column header
       "website": null,
-      "facebookUrl": null, // Extract only if clearly present
-      "services": [], // Raw list of services mentioned
+      "facebookUrl": null, // Extract only if clearly present (might not be in table)
+      "services": [], // Extracted from 'บริการและฟีเจอร์หลัก' row
       "serviceCategories": [], // Assigned categories based on services
-      "features": [],
-      "pricing": null,
-      "strengths": [],
-      "weaknesses": [],
-      "specialty": null,
-      "targetAudience": null,
-      "brandTone": null,
-      "brandPerception": {
+      "features": [], // May need extraction from services/strengths row if applicable
+      "pricing": null, // Extracted from 'รูปแบบ/ภาพรวมราคา' row
+      "strengths": [], // Extracted from 'จุดแข็งหลัก' row (parse list if needed)
+      "weaknesses": [], // Extracted from 'จุดอ่อนที่เป็นไปได้' row (parse list if needed)
+      "specialty": null, // Extracted from 'ความเชี่ยวชาญของแบรนด์/USP' row
+      "targetAudience": null, // Extracted from 'กลุ่มเป้าหมาย/ฐานลูกค้า' row
+      "brandTone": null, // Extracted from 'น้ำเสียงของแบรนด์' row
+      "brandPerception": { // Extracted from 'การรับรู้ของสาธารณชน' row
         "positive": null,
         "negative": null
       },
-      "marketShare": null,
-      "complaints": [],
-      "adThemes": [],
-      "seo": {
+      "marketShare": null, // Extracted from 'ส่วนแบ่งการตลาดโดยประมาณ' row
+      "complaints": [], // Extracted from 'ข้อร้องเรียนทั่วไปจากลูกค้า' row
+      "adThemes": [], // Extracted from 'แนวคิดหลัก/ธีมที่ใช้ในการโฆษณา' row
+      "seo": { // These might not be in the table, use null if not found
         "domainAuthority": null,
         "backlinks": null,
         "organicTraffic": null
       },
-      "websiteQuality": {
+      "websiteQuality": { // These might not be in the table, use null if not found
         "uxScore": null,
         "loadingSpeed": null,
         "mobileResponsiveness": null
       },
-      "usp": null,
-      "socialMetrics": {
+      "usp": null, // Often combined with specialty, extract if separate
+      "socialMetrics": { // These might not be in the table, use null if not found
         "followers": null
       }
     }
-    // ... more competitors
+    // ... include ALL competitors from the table columns
   ]
 }
 \`\`\`
-`; // Correctly terminated template literal
+`;
 
   try {
     console.log('[jina-search] Sending request to Gemini API (with categorization)');

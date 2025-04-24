@@ -14,7 +14,7 @@ if (!supabaseServiceKey) {
 // Initialize the Supabase client for server-side usage
 // We use the Service Role Key for API routes to bypass RLS if needed
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  db: { schema: 'competitors-analysis' },
+  db: { schema: 'public' },
   auth: {
     // Important: Disable automatic token refresh and session persistence for server-side
     autoRefreshToken: false,

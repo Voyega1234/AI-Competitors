@@ -18,7 +18,8 @@ const DEFAULT_TASK_SECTION = `1. Spark and detail 7-10 fresh, distinctive, and e
 2. Focus on Actionable Creativity for Facebook: Ensure each recommendation translates into tangible marketing ideas easily adaptable into compelling Facebook Ad formats (e.g., single image/video, carousel, stories, reels). Include potential ad angles, visual directions, and calls-to-action. Prioritize ideas that are visually arresting, memorable, shareable, emotionally resonant, and push creative boundaries for this specific client on Facebook.
 3. Informed by Context: Where available, let the \`groundedClientInfo\` and \`bookSummarySection\` inform the relevance, timeliness, or strategic angle of your ideas, but the core inspiration should stem from the client's fundamental product/service and market position. Use grounding to verify trends or competitor actions if needed.
 4. For EACH recommendation, provide the Creative Execution Details below, specifically tailored for a Facebook Ad context. Generate specific, compelling content for each field IN THAI LANGUAGE, imagining how the core idea translates into ad components (e.g., Headline, Ad Copy, Visual Description, Call-to-Action).
-5. Populate the corresponding fields in the final JSON object. Ensure all text output is original for this request.`;
+5. Populate the corresponding fields in the final JSON object. Ensure all text output is original for this request.
+6. Ideas to include but not limited to: why the solutions from \`ClientName\` are different than what is being offered in the market currently. Talk about the differentiation of the product if and when it makes the client's product or service more appealing. `;
 
 const DEFAULT_DETAILS_SECTION = `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** (เช่น "เคล็ดลับฮาวทู", "เบื้องหลังการทำงาน", "เรื่องราวความสำเร็จลูกค้า", "การหักล้างความเชื่อผิดๆ", "ไลฟ์สไตล์และการใช้งาน", "ปัญหาและการแก้ไข").
                                 b.  **\`product_focus\`:** ระบุ {productFocus} หรือฟีเจอร์เฉพาะที่ต้องการเน้น **(ภาษาไทย)**.
@@ -113,11 +114,6 @@ export function RecommendationCards() {
     const [userBrief, setUserBrief] = useState<string>("");
     const [editableTaskSection, setEditableTaskSection] = useState<string>(DEFAULT_TASK_SECTION);
     const [editableDetailsSection, setEditableDetailsSection] = useState<string>(DEFAULT_DETAILS_SECTION);
-    // --- State for Book Summaries ---
-    const [availableBooks, setAvailableBooks] = useState<string[]>([]);
-    const [selectedBooks, setSelectedBooks] = useState<string[]>([]);
-    const [isBooksLoading, setIsBooksLoading] = useState<boolean>(false);
-    const [booksError, setBooksError] = useState<string | null>(null);
 
     // --- NEW: State for Model Selection ---
     const [selectedModels, setSelectedModels] = useState<string[]>(['gemini']); // Default to Gemini
@@ -229,29 +225,6 @@ export function RecommendationCards() {
         }
     }, [selectedClientName, selectedProductFocus]);
 
-    // --- Fetch Book Summaries List ---
-    useEffect(() => {
-        const fetchBooks = async () => {
-            setIsBooksLoading(true);
-            setBooksError(null);
-            try {
-                const response = await fetch('/api/book-summaries');
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({ error: `API Error: ${response.status}` }));
-                    throw new Error(errorData.error || 'Failed to fetch book list');
-                }
-                const data = await response.json();
-                setAvailableBooks(data.books || []);
-            } catch (err: any) {
-                console.error("Error fetching book list:", err);
-                setBooksError("Could not load book summaries list.");
-            } finally {
-                setIsBooksLoading(false);
-            }
-        };
-        fetchBooks();
-    }, []);
-
     // --- Generate Recommendations (Updated for Multi-Model) ---
     const handleGenerateRecommendations = async () => {
         if (!selectedRunId) {
@@ -281,7 +254,7 @@ export function RecommendationCards() {
             console.log(`Fetching recommendations for runId: ${selectedRunId}, Models: ${selectedModels.join(', ')}`);
             let apiUrl = `/api/generate-recommendations?runId=${selectedRunId}`;
 
-            // NEW: Append selected models
+            // Append selected models
             apiUrl += `&models=${encodeURIComponent(selectedModels.join(','))}`;
 
             // Append other params
@@ -290,9 +263,6 @@ export function RecommendationCards() {
             }
             apiUrl += `&taskSection=${encodeURIComponent(editableTaskSection)}`;
             apiUrl += `&detailsSection=${encodeURIComponent(editableDetailsSection)}`;
-            if (selectedBooks.length > 0) {
-                apiUrl += `&bookFilenames=${encodeURIComponent(selectedBooks.join(','))}`;
-            }
 
             const response = await fetch(apiUrl);
             const data = await response.json(); // Assume API returns structure { results: { model: [...] }, errors: { model: "..." } }
@@ -546,43 +516,6 @@ export function RecommendationCards() {
                             className="min-h-[150px] bg-background font-mono text-xs"
                             disabled={isAnyModelLoading || isMetaLoading}
                         />
-                    </div>
-
-                    {/* Optional Book Summary Checkboxes */}
-                    <div className="grid gap-1.5 w-full">
-                        <Label className="text-sm font-medium">Optional Context: Book Summaries</Label>
-                        {isBooksLoading && <p className="text-sm text-muted-foreground">Loading books...</p>}
-                        {booksError && <p className="text-sm text-destructive">{booksError}</p>}
-                        {!isBooksLoading && !booksError && availableBooks.length === 0 && (
-                            <p className="text-sm text-muted-foreground">No book summaries found.</p>
-                        )}
-                        {!isBooksLoading && !booksError && availableBooks.length > 0 && (
-                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-2 mt-2 max-h-40 overflow-y-auto border rounded p-3 bg-background">
-                                {availableBooks.map((bookFile) => (
-                                    <div key={bookFile} className="flex items-center space-x-2">
-                                        <Checkbox
-                                            id={`book-${bookFile}`}
-                                            checked={selectedBooks.includes(bookFile)}
-                                            onCheckedChange={(checked) => {
-                                                setSelectedBooks(prev =>
-                                                    checked
-                                                        ? [...prev, bookFile]
-                                                        : prev.filter(b => b !== bookFile)
-                                                );
-                                            }}
-                                            disabled={isAnyModelLoading || isMetaLoading}
-                                        />
-                                        <Label
-                                            htmlFor={`book-${bookFile}`}
-                                            className="text-sm font-normal cursor-pointer truncate"
-                                            title={bookFile}
-                                        >
-                                            {bookFile.replace(/\.(txt|md)$/i, '')}
-                                        </Label>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
                     </div>
                 </div>
 

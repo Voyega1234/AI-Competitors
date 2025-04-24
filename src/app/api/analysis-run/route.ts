@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import supabaseAdmin from '@/lib/supabaseClient'; // Import the Supabase client
 
-// Remove Prisma imports and instantiation
-// import { PrismaClient, Prisma } from '../../../generated/prisma';
-// const prisma = new PrismaClient();
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -28,7 +25,9 @@ export async function GET(request: NextRequest) {
 
     // Handle null productFocus using Supabase methods
     if (productFocus === null) {
-      query = query.is('productFocus', null); // Check for NULL in the database
+      // query = query.is('productFocus', null); // Check for NULL in the database
+      // Check for empty string OR NULL when the parameter is not provided
+      query = query.or('productFocus.eq.,productFocus.is.null') 
     } else {
       query = query.eq('productFocus', productFocus); // Check for specific string
     }

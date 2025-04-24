@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
   const userBrief = searchParams.get('brief');
   const taskSectionParam = searchParams.get('taskSection');
   const detailsSectionParam = searchParams.get('detailsSection');
-  const bookFilenamesParam = searchParams.get('bookFilenames');
+  // const bookFilenamesParam = searchParams.get('bookFilenames'); // REMOVED - Now reading all books
   const modelsParam = searchParams.get('models'); // NEW: Read models parameter
   const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
   const OPENAI_API_KEY = process.env.NEXT_PUBLIC_OPENAI_API_KEY; // Read OpenAI Key
@@ -176,37 +176,35 @@ export async function GET(request: NextRequest) {
         throw new Error(competitorError.message || 'Failed to fetch competitor data');
     }
 
-    // --- Fetch Book Summary Content ---
+    // --- Fetch and Concatenate ALL Book Summary Content ---
     let bookSummaryContent = '';
-    if (bookFilenamesParam) {
-        const filenames = bookFilenamesParam.split(','); // Split the string into an array
-        console.log(`Attempting to read ${filenames.length} book summaries...`);
-        let summaries: string[] = []; // Store summaries temporarily
+    console.log(`Attempting to read ALL book summaries from: ${booksDirectory}`);
+    try {
+        const allFiles = await fs.readdir(booksDirectory);
+        const bookFiles = allFiles.filter(file => file.match(/\.(txt|md)$/i)); // Filter for .txt or .md
+        console.log(`Found ${bookFiles.length} potential book summary files.`);
+        let summaries: string[] = [];
 
-        for (const filename of filenames) {
-            const safeFilename = path.basename(filename.trim()); // Trim whitespace
-            if (safeFilename !== filename.trim() || !safeFilename.match(/^[^/\\.]+[\w .-]+\.(txt|md)$/i)) {
-                 console.warn(`Skipping invalid book filename: ${filename}`);
-                 continue; // Skip this file
-            }
-
-            const filePath = path.join(booksDirectory, safeFilename);
+        for (const filename of bookFiles) {
+            const filePath = path.join(booksDirectory, filename);
             try {
                 const content = await fs.readFile(filePath, 'utf-8');
-                console.log(`Successfully read ${safeFilename}`);
-                // Add filename header for context
-                summaries.push(`--- Start Summary: ${safeFilename} ---\n${content}\n--- End Summary: ${safeFilename} ---`);
+                console.log(`Successfully read ${filename}`);
+                summaries.push(`--- Start Summary: ${filename} ---\n${content}\n--- End Summary: ${filename} ---`);
             } catch (fileError: any) {
-                 if (fileError.code === 'ENOENT') {
-                    console.error(`Selected book summary file not found: ${filePath}`);
-                 } else {
-                    console.error(`Error reading book summary file ${filePath}:`, fileError);
-                 }
-                 // Skip this file if error reading
+                console.error(`Error reading book summary file ${filePath}:`, fileError);
+                // Skip this file if error reading, but log it
             }
         }
-        // Join all successfully read summaries
         bookSummaryContent = summaries.join('\n\n'); 
+        console.log(`Total combined book summary length: ${bookSummaryContent.length}`);
+    } catch (dirError: any) {
+        if (dirError.code === 'ENOENT') {
+            console.warn(`Book summaries directory not found: ${booksDirectory}. Proceeding without book context.`);
+        } else {
+            console.error(`Error reading book summaries directory ${booksDirectory}:`, dirError);
+        }
+        // Proceed without book summaries if directory reading fails
     }
     // --- End Book Summary Fetch ---
 
@@ -294,9 +292,6 @@ ${userBrief}
     // --- Function to build the final user prompt (dynamically includes grounded info) ---
     const buildFinalUserPrompt = (groundedInfo: string) => {
         const groundedSection = groundedInfo ? `
-**Recent Client Information (via Grounded Search):**
----
-${groundedInfo}
 ---
 *(This section provides recent context about ${clientInfo.clientName}. Consider these details alongside the core client information to ensure recommendations are timely and relevant. Use specific points from here where they offer a clear advantage or fresh angle.)*
 ` : '';
