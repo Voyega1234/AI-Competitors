@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import supabaseAdmin from '@/lib/supabaseClient'; // Import the Supabase client
+import { ErrorWithMessage } from '@/types/error';
 
 
 export async function GET(request: NextRequest) {
@@ -55,10 +56,11 @@ export async function GET(request: NextRequest) {
     console.log(`Found analysis run ID: ${analysisRun.id}`);
     return NextResponse.json({ id: analysisRun.id });
 
-  } catch (error: any) {
-    console.error(`Error in GET /api/analysis-run for ${clientName}, ${productFocus}:`, error);
+  } catch (error: unknown) {
+    const err = error as ErrorWithMessage;
+    console.error(`Error in GET /api/analysis-run for ${clientName}, ${productFocus}:`, err);
     return new NextResponse(
-      JSON.stringify({ error: error.message || 'Failed to fetch analysis run ID' }),
+      JSON.stringify({ error: err.message || 'Failed to fetch analysis run ID' }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
