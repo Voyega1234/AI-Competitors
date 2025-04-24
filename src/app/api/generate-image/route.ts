@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     const IDEOGRAM_API_KEY = process.env.IDEOGRAM_API_KEY;
     const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY; // Assuming Gemini key is same as recommendations
     const IDEOGRAM_API_URL = "https://api.ideogram.ai/generate";
-    const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`; // Using Flash for speed
+    const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`; // Using Flash for speed
 
     if (!IDEOGRAM_API_KEY) {
         console.error("IDEOGRAM_API_KEY is not set in environment variables.");
@@ -79,7 +79,7 @@ Generated Image Prompt:
         }
 
         const geminiData = await geminiResponse.json();
-        const generatedIdeogramPrompt = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        const generatedIdeogramPrompt = geminiData?.candidates?.[0]?.content?.parts?.[1]?.text?.trim();
 
         if (!generatedIdeogramPrompt) {
             console.error("Gemini response missing valid text content for Ideogram prompt:", geminiData);

@@ -246,7 +246,7 @@ ${userBrief}
     // --- Perform Grounding Search (Run ONCE if Gemini Key exists, used by all models) ---
     let groundedClientInfoCommon = '';
     if (GEMINI_API_KEY) { // Only attempt grounding if the key is available
-        const groundingPrompt = `ขอข้อมูลของ ${analysisRunData.clientName} ข้อมูลอัพเดทล่าสุด อยากได้ข้อมูลเช่น ราคา-ค่าใช้จ่าย, จุดเด่น ข้อมูลสำคัญต่างๆ โปรโมชั่น หรือ กิจกรรมและแคมเปญล่าสุด อยากได้ข้อมูลที่สดใหม่ที่สุด`;
+        const groundingPrompt = `ขอข้อมูลของ ${analysisRunData.clientName} ข้อมูลอัพเดทล่าสุด อยากได้ข้อมูลเช่น ราคา-ค่าใช้จ่าย, จุดเด่น ข้อมูลสำคัญต่างๆ โปรโมชั่น หรือ กิจกรรมและแคมเปญล่าสุด อยากได้ข้อมูลที่สดใหม่ที่สุด ตอบแค่คำตอบเท่านั้นห้ามตลอดอะไรมากกว่านี้`;
         console.log(`[Refactor] Performing common grounding search for client: ${analysisRunData.clientName}`);
         try {
             const groundingPayload = {

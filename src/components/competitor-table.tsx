@@ -48,6 +48,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useState, useEffect, useMemo } from "react"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
+import { StrategicInsights, StrategicIdea } from "@/types/insights"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import ReactMarkdown from 'react-markdown'
 
 export type Competitor = {
   id: string
@@ -72,6 +77,9 @@ export type Competitor = {
   usp: string
 }
 
+// Type for the grounded competitor info map expected from API
+type GroundedCompetitorInfoMap = Record<string, string | null>;
+
 interface CompetitorTableProps {
   initialCompetitors: Competitor[];
 }
@@ -85,7 +93,7 @@ export function CompetitorTable({ initialCompetitors }: CompetitorTableProps) {
     usp: false,
     serviceCategories: false,
     specialty: false,
-    targetAudience: false,
+    domainAuthority: false,
     brandTone: false,
     marketShare: false,
     complaints: false,
@@ -111,6 +119,13 @@ export function CompetitorTable({ initialCompetitors }: CompetitorTableProps) {
   // --- State for Service Category Filtering ---
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null);
+
+  // --- State for Insights & Grounding Results --- 
+  const [isGeneratingInsights, setIsGeneratingInsights] = useState<boolean>(false);
+  const [insightsResult, setInsightsResult] = useState<StrategicInsights | null>(null);
+  const [insightsError, setInsightsError] = useState<string | null>(null);
+  const [latestClientInfo, setLatestClientInfo] = useState<string | null>(null);
+  const [latestCompetitorInfoMap, setLatestCompetitorInfoMap] = useState<GroundedCompetitorInfoMap>({});
 
   useEffect(() => {
     const fetchClientNames = async () => {
@@ -167,6 +182,13 @@ export function CompetitorTable({ initialCompetitors }: CompetitorTableProps) {
             }
           });
       }
+      if (competitor.serviceCategories && Array.isArray(competitor.serviceCategories)) {
+        competitor.serviceCategories.forEach(category => {
+          if (category) {
+            allCategories.add(category.trim().toLowerCase());
+          }
+        });
+      }
     });
 
     const sortedCategories = Array.from(allCategories).sort();
@@ -186,6 +208,10 @@ export function CompetitorTable({ initialCompetitors }: CompetitorTableProps) {
     setIsLoadingTable(true)
     setTableError(null)
     setCompetitors([])
+    setInsightsResult(null)
+    setInsightsError(null)
+    setLatestClientInfo(null)
+    setLatestCompetitorInfoMap({})
 
     try {
       const productFocusForQuery = selectedProductFocus === 'placeholder-for-empty' ? null : selectedProductFocus
@@ -292,11 +318,69 @@ export function CompetitorTable({ initialCompetitors }: CompetitorTableProps) {
       return competitors; // No filter applied
     }
     return competitors.filter(competitor =>
-      competitor.services?.some(service => 
+      (competitor.services?.some(service => 
           service.trim().toLowerCase() === selectedCategoryFilter
-      )
+      )) ||
+      (competitor.serviceCategories?.some(category => // Also filter by serviceCategories if present
+          category.trim().toLowerCase() === selectedCategoryFilter
+      ))
     );
   }, [competitors, selectedCategoryFilter]); // Recalculate when these change
+
+  // --- Handler for Generating Insights --- 
+  const handleGenerateInsights = async () => {
+    if (!selectedClientName || !selectedProductFocus) {
+      setInsightsError("Please select a client and product focus before generating insights.");
+      return;
+    }
+    if (!filteredCompetitors || filteredCompetitors.length === 0) {
+      setInsightsError("No competitor data available to analyze. Please load or clear filters.");
+      return;
+    }
+
+    setIsGeneratingInsights(true);
+    setInsightsResult(null);
+    setInsightsError(null);
+    setLatestClientInfo(null); 
+    setLatestCompetitorInfoMap({}); // Clear previous competitor info
+
+    try {
+      const productFocusForQuery = selectedProductFocus === 'placeholder-for-empty' ? null : selectedProductFocus;
+
+      const response = await fetch('/api/generate-strategic-insights', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          clientName: selectedClientName,
+          productFocus: productFocusForQuery,
+          competitors: filteredCompetitors, // Send the currently filtered/displayed data
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      }
+
+      // --- Updated response handling (Insights + Grounding) --- 
+      const resultData = await response.json(); 
+      if (!resultData || !resultData.insights) { 
+         throw new Error("Invalid response structure received from API (missing insights).");
+      }
+      setInsightsResult(resultData.insights); 
+      setLatestClientInfo(resultData.groundedClientInfo || null); // Store client grounding
+      setLatestCompetitorInfoMap(resultData.groundedCompetitorInfo || {}); // Store competitor grounding map
+      // --- End Update --- 
+
+    } catch (error) {
+      console.error("Error generating strategic insights:", error);
+      setInsightsError(error instanceof Error ? error.message : "An unknown error occurred.");
+    } finally {
+      setIsGeneratingInsights(false);
+    }
+  };
 
   const columns: ColumnDef<Competitor>[] = [
     {
@@ -1387,31 +1471,49 @@ export function CompetitorTable({ initialCompetitors }: CompetitorTableProps) {
           </Button>
         </div>
 
-        <div className="flex-shrink-0">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="h-9">
-                Columns <ChevronDown className="ml-2 h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[200px]">
-              {table
-                .getAllColumns()
-                .filter((column) => column.getCanHide())
-                .map((column) => {
-                  return (
-                    <DropdownMenuCheckboxItem
-                      key={column.id}
-                      className="capitalize"
-                      checked={column.getIsVisible()}
-                      onCheckedChange={(value) => column.toggleVisibility(!!value)}
-                    >
-                      {column.id.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
-                    </DropdownMenuCheckboxItem>
-                  )
-                })}
-            </DropdownMenuContent>
-          </DropdownMenu>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Button
+            onClick={handleGenerateInsights}
+            disabled={isLoadingTable || isGeneratingInsights || !selectedClientName || !selectedProductFocus || filteredCompetitors.length === 0}
+            className="h-9"
+            variant="secondary"
+          >
+            {isGeneratingInsights ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                Analyzing...
+              </>
+            ) : (
+              "Generate Strategic Insights"
+            )}
+          </Button>
+
+          <div className="flex-shrink-0">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="h-9">
+                  Columns <ChevronDown className="ml-2 h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-[200px]">
+                {table
+                  .getAllColumns()
+                  .filter((column) => column.getCanHide())
+                  .map((column) => {
+                    return (
+                      <DropdownMenuCheckboxItem
+                        key={column.id}
+                        className="capitalize"
+                        checked={column.getIsVisible()}
+                        onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                      >
+                        {column.id.replace(/([A-Z])/g, ' $1').replace(/^./, (str: string) => str.toUpperCase())}
+                      </DropdownMenuCheckboxItem>
+                    )
+                  })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
 
@@ -1436,6 +1538,124 @@ export function CompetitorTable({ initialCompetitors }: CompetitorTableProps) {
             </Button>
         ))}
       </div>
+
+      {insightsError && (
+        <Alert variant="destructive" className="my-4">
+          <AlertTitle>Error Generating Insights</AlertTitle>
+          <AlertDescription>{insightsError}</AlertDescription>
+        </Alert>
+      )}
+      {isGeneratingInsights && !insightsResult && (
+         <Card className="my-4">
+           <CardHeader>
+             <CardTitle className="flex items-center gap-2">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-900"></div>
+                Generating Insights & Fetching Latest Info...
+             </CardTitle>
+           </CardHeader>
+           <CardContent>
+             <p>Please wait while Gemini analyzes and searches for the latest client and competitor information. This may take a bit longer.</p>
+             <Progress value={undefined} className="mt-4 h-2 animate-pulse" /> {/* Indeterminate progress */}
+           </CardContent>
+         </Card>
+      )}
+      
+      {insightsResult && (
+        <div className="my-4 space-y-4">
+          {/* 1. Strategic Insights Card */} 
+          <Card className="bg-gradient-to-br from-purple-50 via-indigo-50 to-blue-50 dark:from-gray-800 dark:via-gray-900 dark:to-black">
+             <CardHeader>
+                <CardTitle>Strategic Insights & Actionable Ideas</CardTitle>
+                <CardDescription>Generated based on latest client/competitor info and table data.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <h3 className="font-semibold text-lg mb-2">Analysis Summary</h3>
+                <p className="text-sm text-muted-foreground">{insightsResult.analysisSummary}</p>
+              </div>
+              <Separator />
+              <div>
+                <h3 className="font-semibold text-lg mb-2">Strategic Ideas</h3>
+                {insightsResult.strategicIdeas && insightsResult.strategicIdeas.length > 0 ? (
+                  <Accordion type="single" collapsible className="w-full">
+                    {insightsResult.strategicIdeas.map((idea, index) => (
+                      <AccordionItem value={`item-${index}`} key={index}>
+                        <AccordionTrigger className="text-left">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">{idea.category}</Badge>
+                            <span>{idea.title}</span>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="space-y-2 text-sm">
+                          <p>{idea.description}</p>
+                          <p><strong className="font-medium">Rationale:</strong> {idea.rationale}</p>
+                          {idea.targetCompetitors && idea.targetCompetitors.length > 0 && (
+                            <p><strong className="font-medium">Targets:</strong> {idea.targetCompetitors.join(", ")}</p>
+                          )}
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">No specific strategic ideas generated.</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+           {/* 2. Latest Client Info Card (Fix ReactMarkdown) */} 
+           {latestClientInfo && (
+              <Card>
+                 <CardHeader>
+                     <CardTitle>Latest Client Info ({selectedClientName || 'Client'})</CardTitle>
+                    <CardDescription>Retrieved via grounding search.</CardDescription>
+                 </CardHeader>
+                 <CardContent>
+                    <ScrollArea className="h-[200px] p-3 border rounded-md bg-muted/40">
+                       <div className="prose prose-sm dark:prose-invert max-w-none">
+                           <ReactMarkdown>
+                             {latestClientInfo}
+                           </ReactMarkdown>
+                       </div>
+                    </ScrollArea>
+                 </CardContent>
+             </Card>
+           )}
+
+           {/* 3. Latest Competitor Info Accordion (Fix ReactMarkdown) */} 
+           {Object.keys(latestCompetitorInfoMap).length > 0 && (
+             <Card>
+                 <CardHeader>
+                     <CardTitle>Latest Competitor Info (Activities, Promos, etc.)</CardTitle>
+                     <CardDescription>Retrieved via grounding search for each competitor.</CardDescription>
+                </CardHeader>
+                 <CardContent>
+                    <Accordion type="multiple" className="w-full">
+                        {Object.entries(latestCompetitorInfoMap).map(([name, info], index) => (
+                         <AccordionItem value={`comp-info-${index}`} key={name}>
+                            <AccordionTrigger>{name}</AccordionTrigger>
+                            <AccordionContent>
+                            {info ? (
+                                <ScrollArea className="h-[150px] p-2 border rounded-md bg-muted/50">
+                                   <div className="prose prose-sm dark:prose-invert max-w-none">
+                                       <ReactMarkdown>
+                                         {info}
+                                       </ReactMarkdown>
+                                   </div>
+                                </ScrollArea>
+                            ) : (
+                                <p className="text-sm text-muted-foreground italic p-2">No specific recent info found...</p>
+                            )}
+                            </AccordionContent>
+                        </AccordionItem>
+                        ))}
+                    </Accordion>
+                 </CardContent>
+             </Card>
+           )}
+
+        </div>
+      )}
 
       <div className="rounded-md border mt-4">
         <Table>

@@ -162,7 +162,7 @@ export async function POST(request: Request) {
 
     // Use the detailed query provided by the user for the script
     const detailedResearchPrompt = `
-Please conduct thorough research and provide detailed information about each competitor with the following details:
+Please conduct thorough research and provide detailed information about our client ${clientName} and each competitor with the following details:
 
 Company Name
 
