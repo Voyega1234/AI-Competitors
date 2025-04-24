@@ -69,14 +69,7 @@ export type Competitor = {
   marketShare: string
   complaints: string[]
   adThemes: string[]
-  domainAuthority: number
-  backlinks: number
-  organicTraffic: string
-  uxScore: number
-  loadingSpeed: string
-  mobileResponsiveness: string
   usp: string
-  followers: number
 }
 
 interface CompetitorTableProps {
@@ -89,12 +82,6 @@ export function CompetitorTable({ initialCompetitors }: CompetitorTableProps) {
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({
     positivePerception: false,
     negativePerception: false,
-    domainAuthority: false,
-    backlinks: false,
-    organicTraffic: false,
-    uxScore: false,
-    loadingSpeed: false,
-    mobileResponsiveness: false,
     usp: false,
     serviceCategories: false,
     specialty: false,
@@ -1035,173 +1022,6 @@ export function CompetitorTable({ initialCompetitors }: CompetitorTableProps) {
       },
     },
     {
-      accessorKey: "backlinks",
-      header: "Backlinks",
-      cell: ({ row }) => {
-        const value = row.getValue("backlinks") as number
-        const id = row.original.id
-        if (editingCell && editingCell.id === id && editingCell.column === "backlinks") {
-          return (
-            <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                value={editingCell.value}
-                onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
-                className="h-8 w-[80px]"
-              />
-              <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                <Save className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )
-        }
-        return (
-          <div className="flex items-center gap-2 group">
-            <span className="font-medium">{value.toLocaleString()}</span>
-            <Button variant="ghost" size="icon" onClick={() => handleEdit(id, "backlinks", value)} className="h-6 w-6 opacity-0 group-hover:opacity-100">
-              <Edit className="h-3 w-3" />
-            </Button>
-          </div>
-        )
-      },
-    },
-    {
-      accessorKey: "organicTraffic",
-      header: "Organic Traffic",
-      cell: ({ row }) => {
-        const value = row.getValue("organicTraffic") as string
-        const id = row.original.id
-        if (editingCell && editingCell.id === id && editingCell.column === "organicTraffic") {
-          return (
-            <div className="flex items-center gap-2">
-              <Input
-                value={editingCell.value}
-                onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
-                className="h-8 w-[120px]"
-              />
-              <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                <Save className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )
-        }
-        return (
-          <div className="flex items-center gap-2 group">
-            <span className="font-medium">{value}</span>
-            <Button variant="ghost" size="icon" onClick={() => handleEdit(id, "organicTraffic", value)} className="h-6 w-6 opacity-0 group-hover:opacity-100">
-              <Edit className="h-3 w-3" />
-            </Button>
-          </div>
-        )
-      },
-    },
-    {
-      accessorKey: "uxScore",
-      header: "UX Score",
-      cell: ({ row }) => {
-        const value = row.getValue("uxScore") as number
-        const id = row.original.id
-        if (editingCell && editingCell.id === id && editingCell.column === "uxScore") {
-          return (
-            <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                value={editingCell.value}
-                onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
-                className="h-8 w-[80px]"
-              />
-              <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                <Save className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )
-        }
-        return (
-          <div className="flex items-center gap-2 group">
-            <span className="font-medium">{value}/100</span>
-            <Button variant="ghost" size="icon" onClick={() => handleEdit(id, "uxScore", value)} className="h-6 w-6 opacity-0 group-hover:opacity-100">
-              <Edit className="h-3 w-3" />
-            </Button>
-          </div>
-        )
-      },
-    },
-    {
-      accessorKey: "loadingSpeed",
-      header: "Loading Speed",
-      cell: ({ row }) => {
-        const value = row.getValue("loadingSpeed") as string
-        const id = row.original.id
-        if (editingCell && editingCell.id === id && editingCell.column === "loadingSpeed") {
-          return (
-            <div className="flex items-center gap-2">
-              <Input
-                value={editingCell.value}
-                onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
-                className="h-8 w-[120px]"
-              />
-              <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                <Save className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )
-        }
-        return (
-          <div className="flex items-center gap-2 group">
-            <span className="font-medium">{value}</span>
-            <Button variant="ghost" size="icon" onClick={() => handleEdit(id, "loadingSpeed", value)} className="h-6 w-6 opacity-0 group-hover:opacity-100">
-              <Edit className="h-3 w-3" />
-            </Button>
-          </div>
-        )
-      },
-    },
-    {
-      accessorKey: "mobileResponsiveness",
-      header: "Mobile Resp.",
-      cell: ({ row }) => {
-        const value = row.getValue("mobileResponsiveness") as string
-        const id = row.original.id
-        if (editingCell && editingCell.id === id && editingCell.column === "mobileResponsiveness") {
-          return (
-            <div className="flex items-center gap-2">
-              <Input
-                value={editingCell.value}
-                onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
-                className="h-8 w-[120px]"
-              />
-              <Button variant="ghost" size="icon" onClick={handleSave} className="h-8 w-8">
-                <Save className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" onClick={handleCancel} className="h-8 w-8">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )
-        }
-        return (
-          <div className="flex items-center gap-2 group">
-            <span className="font-medium">{value}</span>
-            <Button variant="ghost" size="icon" onClick={() => handleEdit(id, "mobileResponsiveness", value)} className="h-6 w-6 opacity-0 group-hover:opacity-100">
-              <Edit className="h-3 w-3" />
-            </Button>
-          </div>
-        )
-      },
-    },
-    {
       id: "actions",
       cell: ({ row }) => {
         const competitor = row.original
@@ -1356,90 +1176,9 @@ export function CompetitorTable({ initialCompetitors }: CompetitorTableProps) {
 
                     <Separator />
 
-                    <div>
-                      <h3 className="text-lg font-medium">Social Media Presence</h3>
-                      <div className="grid gap-4 mt-2">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">Followers:</span>
-                          <span>
-                            {typeof competitor.followers === 'number' && !isNaN(competitor.followers)
-                                ? competitor.followers.toLocaleString()
-                                : '0'
-                            }
-                          </span>
-                        </div>
-                        {competitor.facebookUrl && (
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium">Facebook:</span>
-                            <a
-                              href={competitor.facebookUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:underline"
-                            >
-                              Visit Page
-                            </a>
-                          </div>
-                        )}
-                      </div>
-                    </div>
                   </TabsContent>
 
                   <TabsContent value="technical" className="space-y-4">
-                    <div>
-                      <h3 className="text-lg font-medium">SEO Performance</h3>
-                      <div className="grid gap-4 mt-2">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">Domain Authority:</span>
-                          <span>{competitor.domainAuthority ?? 0}/100</span>
-                        </div>
-                        <div>
-                          <div className="flex items-center justify-between text-sm">
-                            <span>Domain Authority Score</span>
-                            <span>{competitor.domainAuthority ?? 0}/100</span>
-                          </div>
-                          <Progress value={competitor.domainAuthority ?? 0} className="h-2 mt-1" />
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">Backlinks:</span>
-                          <span>
-                            {typeof competitor.backlinks === 'number' && !isNaN(competitor.backlinks)
-                                ? competitor.backlinks.toLocaleString()
-                                : '0'
-                            }
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">Organic Traffic:</span>
-                          <span>{competitor.organicTraffic ?? 'N/A'}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    <div>
-                      <h3 className="text-lg font-medium">Website Quality</h3>
-                      <div className="grid gap-4 mt-2">
-                        <div>
-                          <div className="flex items-center justify-between text-sm">
-                            <span>UX/UI Score</span>
-                            <span>{competitor.uxScore ?? 0}/100</span>
-                          </div>
-                          <Progress value={competitor.uxScore ?? 0} className="h-2 mt-1" />
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">Loading Speed:</span>
-                          <span>{competitor.loadingSpeed ?? 'N/A'}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">Mobile Responsiveness:</span>
-                          <span>{competitor.mobileResponsiveness ?? 'N/A'}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <Separator />
 
                     <div>
                       <h3 className="text-lg font-medium">Technology Stack</h3>
@@ -1742,7 +1481,7 @@ export function CompetitorTable({ initialCompetitors }: CompetitorTableProps) {
                 <TableCell colSpan={columns.length} className="h-24 text-center">
                   {selectedCategoryFilter 
                       ? `No competitors found for category: ${selectedCategoryFilter}`
-                      : "No results found for the selected analysis."
+                      : "After you click 'Start Analysis,' it may take 5 to 15 minutes to process the data. Alternatively, you can select a client and product to view other analyses."
                   }
                 </TableCell>
               </TableRow>

@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "pnpm dlx prisma generate && next build",
+    "build": "next build",
     "start": "next start",
     "lint": "next lint"
   },
@@ -12,7 +12,6 @@
     "@google/generative-ai": "^0.24.0",
     "@heroicons/react": "^2.2.0",
     "@hookform/resolvers": "latest",
-    "@prisma/client": "^6.6.0",
     "@radix-ui/react-accordion": "^1.2.2",
     "@radix-ui/react-alert-dialog": "^1.1.4",
     "@radix-ui/react-aspect-ratio": "^1.1.1",
@@ -77,7 +76,6 @@
     "eslint": "^8.56.0",
     "eslint-config-next": "15.2.4",
     "postcss": "^8.4.39",
-    "prisma": "latest",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.5.3"
   }

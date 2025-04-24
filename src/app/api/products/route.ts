@@ -52,5 +52,4 @@ export async function GET(request: NextRequest) {
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
-  // No finally block needed for Prisma disconnect
 } 

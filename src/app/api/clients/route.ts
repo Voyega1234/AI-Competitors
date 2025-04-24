@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
 import supabaseAdmin from '@/lib/supabaseClient'; // Import the Supabase client
 
-// Remove Prisma imports and instantiation
-// import { PrismaClient, AnalysisRun } from '../../../generated/prisma';
-// const prisma = new PrismaClient();
 
 // Define the expected shape of the data from Supabase
 interface ClientNameResult {
@@ -29,7 +26,6 @@ export async function GET() {
                                   // Filter out null or empty names directly
                                   .filter((name: string | null): name is string => name != null && name.trim() !== '');
     
-    // Get unique names (select distinct isn't directly supported like Prisma, do it manually)
     const uniqueClientNames = Array.from(new Set(clientNames));
 
     console.log("Found unique client names:", uniqueClientNames); 
@@ -43,5 +39,4 @@ export async function GET() {
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   } 
-  // No finally block needed for Prisma disconnect
 } 

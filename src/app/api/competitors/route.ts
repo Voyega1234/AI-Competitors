@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-// Remove Prisma import
-// import { PrismaClient } from '../../../generated/prisma'; // Adjust path if needed
 import supabaseAdmin from '@/lib/supabaseClient'; // Import Supabase client
 
-// Remove Prisma instantiation
-// const prisma = new PrismaClient();
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -44,7 +40,6 @@ export async function GET(request: NextRequest) {
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   } finally {
-    // Optional: Disconnect Prisma (No longer needed for Supabase)
-    // await prisma.$disconnect();
+
   }
 } 
