@@ -3,10 +3,13 @@
     {
       "src": "package.json",
       "use": "@vercel/next"
-    },
+    }
+  ],
+  "buildCommand": "npm run build",
+  "routes": [
     {
-      "src": "src/node-DeepResearch/index.js",
-      "use": "@vercel/node"
+      "src": "/(.*)",
+      "dest": "/$1"
     }
   ]
 } 

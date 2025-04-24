@@ -5,7 +5,7 @@ const nextConfig = {
   },
   reactStrictMode: true,
   eslint: {
-    // Skip ESLint checks for the node-DeepResearch directory during build
+    // Skip ESLint checks during build
     ignoreDuringBuilds: true,
   },
   typescript: {
@@ -31,8 +31,24 @@ const nextConfig = {
         child_process: false
       };
     }
+    
+    // Simple configuration to ignore the node-DeepResearch directory
+    if (!config.watchOptions) {
+      config.watchOptions = {};
+    }
+    
+    config.watchOptions.ignored = config.watchOptions.ignored || [];
+    
+    if (Array.isArray(config.watchOptions.ignored)) {
+      config.watchOptions.ignored.push('**/src/node-DeepResearch/**');
+    } else {
+      config.watchOptions.ignored = ['**/src/node-DeepResearch/**'];
+    }
+    
     return config;
   },
+  // Skip building directories that have their own package.json
+  distDir: '.next'
 };
 
 module.exports = nextConfig; 

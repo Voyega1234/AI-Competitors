@@ -1,12 +1,6 @@
 import { NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import supabaseAdmin from '@/lib/supabaseClient'; // Import Supabase client
-import { exec } from 'child_process'; // Import exec
-import { promisify } from 'util'; // Import promisify
-import path from 'path'; // Import path for directory resolution
-import fs from 'fs'; // <-- Import Node.js File System module
-
-const execPromise = promisify(exec); // Promisify exec
 
 // Mark the route as dynamic
 export const dynamic = 'force-dynamic';
@@ -122,15 +116,19 @@ function ensureAbsoluteUrl(url: string | null | undefined): string | null {
 export async function POST(request: Request) {
   try {
     // Get API keys from environment variables
-    const JINA_API_KEY = process.env.JINA_API_KEY;
-    // Read the Gemini key used by the parent Next.js process
-    const PARENT_GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY; 
-    
-    if (!JINA_API_KEY || !PARENT_GEMINI_API_KEY) { // Check the parent key
-      console.error('API keys (Jina or Gemini) are not defined in the Next.js environment');
-      return NextResponse.json({ success: false, error: 'API key configuration error in Next.js backend' }, { status: 500 });
+    const PARENT_GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    const DEEP_RESEARCH_API_URL = process.env.DEEP_RESEARCH_API_URL; // URL of the deployed node-DeepResearch server
+    const DEEP_RESEARCH_API_KEY = process.env.DEEP_RESEARCH_API_KEY; // Optional API key for the server
+
+    if (!PARENT_GEMINI_API_KEY) {
+      console.error('NEXT_PUBLIC_GEMINI_API_KEY is not defined in the environment');
+      return NextResponse.json({ success: false, error: 'Gemini API key configuration error' }, { status: 500 });
     }
-    
+    if (!DEEP_RESEARCH_API_URL) {
+      console.error('DEEP_RESEARCH_API_URL is not defined in the environment');
+      return NextResponse.json({ success: false, error: 'DeepResearch API URL configuration error' }, { status: 500 });
+    }
+
     // Parse request body
     const body = await request.json();
     const { clientName, facebookUrl: clientFacebookUrl, websiteUrl: clientWebsiteUrl, market, productFocus, additionalInfo, userCompetitors } = body;
@@ -164,134 +162,122 @@ export async function POST(request: Request) {
 
     // Use the detailed query provided by the user for the script
     const detailedResearchPrompt = `
-กรุณาค้นคว้าและให้ข้อมูลโดยละเอียดเกี่ยวกับคู่แข่งแต่ละรายอย่างละเอียด โดยมีรายละเอียดดังต่อไปนี้:
-*ชื่อบริษัท
-*URL เว็บไซต์
-*บริการและฟีเจอร์หลักของพวกเขา (โดยเฉพาะที่เกี่ยวข้องกับ ${productFocusPhrase}) (สำคัญ)
-*กลุ่มเป้าหมาย / ฐานลูกค้าของพวกเขา (สำคัญ)
-*รูปแบบ / ภาพรวมราคาของพวกเขา (สำคัญ) - ต้องการตัวเลขราคาจริงจากแหล่งข้อมูลที่เชื่อถือได้ หากเป็นไปได้ ต้องเป็นตัวเลขที่ถูกต้อง ไม่ใช่ตัวเลขที่แต่งขึ้นมาเอง
-*จุดแข็งหลักหรือสิ่งที่ทำให้แตกต่าง (สำคัญ) ถ้าสามารถระบุตัวเลขหรือสถิติอะไรจะดีมากที่สุด
-*จุดอ่อนที่เป็นไปได้หรือช่องว่างทางการตลาด (สำคัญ) ถ้าสามารถระบุตัวเลขหรือสถิติอะไรจะดีมากที่สุด
-*ความเชี่ยวชาญของแบรนด์และจุดขายที่เป็นเอกลักษณ์ (USP)
-*น้ำเสียงของแบรนด์และการรับรู้ของสาธารณชน (ทั้งในแง่บวกและลบ)
-*ส่วนแบ่งการตลาดโดยประมาณ (หากหาข้อมูลได้)
-*ข้อร้องเรียนทั่วไปจากลูกค้า
-*แนวคิดหลัก / ธีมที่ใช้ในการโฆษณาโดยทั่วไป
-*ขอบคุณที่ช่วยค้นคว้าเพิ่มเติมเกี่ยวกับคู่แข่งของเรา
-PLEASE GIVE ME THE COMPLETELY DETIALS AS MUCH AS POSSIBLE
-FINAL ANSWER MUST BE IN THAI
+Please conduct thorough research and provide detailed information about each competitor with the following details:
+
+Company Name
+
+Website URL
+
+Their main services and features (especially those related to ${productFocusPhrase}) (Important)
+
+Target audience / customer base (Important)
+
+Their pricing model / general pricing overview (Important) – Actual price figures from reliable sources are required. If possible, they must be accurate and not fabricated.
+
+Key strengths or differentiators (Important) – If possible, include specific figures or statistics.
+
+Potential weaknesses or market gaps (Important) – If possible, include specific figures or statistics.
+
+Brand expertise and unique selling propositions (USP)
+
+Brand tone and public perception (both positive and negative)
+
+Estimated market share (if available)
+
+Common customer complaints
+
+General advertising themes or key concepts used in their campaigns
+
+Thank you for helping us research our competitors further.
+PLEASE GIVE ME THE COMPLETELY DETIALS AS MUCH AS POSSIBLE DO YOUR BEST
 `;
 
     // Combine the initial context with the detailed research points for the script query
     const queryForScript = `Analyze competitors for ${clientBaseInfo}, operating ${marketInfo}${clientProductInfo}. Focus on ${competitorFocusPhrase}. ${userCompetitorsSection} ${clientAdditionalContext}
 ${detailedResearchPrompt}`;
 
-    console.log('[node-DeepResearch] Query sent to script:', queryForScript);
+    console.log('[jina-search] Query constructed for DeepResearch API:', queryForScript.substring(0, 100) + '...');
 
-    // --- Execute node-DeepResearch Script --- 
+    // --- Call node-DeepResearch Server API ---
     let rawContent = '';
     try {
-        const scriptDir = path.resolve(process.cwd(), 'src/node-DeepResearch');
-        const escapedQuery = JSON.stringify(queryForScript);
-        const command = `npm run dev ${escapedQuery}`;
-        
-        console.log(`[node-DeepResearch] Executing command in ${scriptDir}: ${command}`);
-        
-        // Construct the environment for the child process
-        const scriptEnv = {
-            ...process.env, // Inherit parent environment (important for PATH etc.)
-            GEMINI_API_KEY: PARENT_GEMINI_API_KEY, // Pass Gemini key with the expected name
-            JINA_API_KEY: JINA_API_KEY // Pass Jina key
-        };
+      const deepResearchApiEndpoint = `${DEEP_RESEARCH_API_URL.replace(/\/$/, '')}/v1/chat/completions`; // Ensure correct endpoint path
+      console.log(`[jina-search] Calling DeepResearch API: ${deepResearchApiEndpoint}`);
 
-        // Execute the command with the specific environment
-        const { stdout, stderr } = await execPromise(command, { 
-            cwd: scriptDir, 
-            encoding: 'utf8',
-            timeout: 3000000, // 50 minutes timeout (Adjusted in previous step)
-            env: scriptEnv // <-- Pass the constructed environment
-        }); 
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      // Add Authorization header if API key is provided
+      if (DEEP_RESEARCH_API_KEY) {
+        headers['Authorization'] = `Bearer ${DEEP_RESEARCH_API_KEY}`;
+      }
 
-        // --- SUCCESS PATH (Script exited cleanly, exit code 0) --- 
-        if (stderr) {
-            console.warn('[node-DeepResearch] Script stderr (clean exit):', stderr);
-        }
-        console.log('[node-DeepResearch] Script stdout length (clean exit):', stdout.length);
-
-        const finalAnswerMarker = "Final Answer:";
-        const answerStartIndex = stdout.lastIndexOf(finalAnswerMarker);
-
-        if (answerStartIndex !== -1) {
-            rawContent = stdout.substring(answerStartIndex + finalAnswerMarker.length).trim();
-            console.log('[node-DeepResearch] Extracted Final Answer content length (clean exit):', rawContent.length);
-        } else {
-            console.warn('[node-DeepResearch] Could not find "Final Answer:" marker in script output (clean exit). Using full output.');
-            rawContent = stdout.trim(); 
-            if (!rawContent) {
-                 // If stdout is empty even on clean exit, something is wrong
-                 throw new Error('node-DeepResearch script exited cleanly but produced no output.');
+      const apiResponse = await fetch(deepResearchApiEndpoint, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({
+          model: "jina-deepsearch-v1", // Required by the API
+          messages: [
+            {
+              role: "user",
+              content: queryForScript // Send the constructed query
             }
-        }
-        // --- End Success Path --- 
+          ],
+          // stream: false // Assuming we want the full response, not streaming
+        }),
+        // Add a reasonable timeout
+        // signal: AbortSignal.timeout(300000) // 5 minutes (adjust as needed)
+      });
 
-    } catch (execError: any) {
-        // --- ERROR PATH (Script likely exited with non-zero code or other exec error) --- 
-        console.error('[node-DeepResearch] Script execution failed or exited with error:', execError.message);
-        if (execError.stderr) {
-             console.warn('[node-DeepResearch] Script stderr (on error):', execError.stderr);
-        }
+      if (!apiResponse.ok) {
+        const errorText = await apiResponse.text();
+        console.error(`[jina-search] DeepResearch API error response: ${apiResponse.status} - ${errorText}`);
+        throw new Error(`DeepResearch API error: ${apiResponse.status} - ${errorText.substring(0, 200)}`);
+      }
 
-        // IMPORTANT: Check if stdout exists in the error object and try to extract Final Answer anyway
-        const errorStdout = execError.stdout;
-        if (errorStdout && typeof errorStdout === 'string' && errorStdout.trim()) {
-            console.log('[node-DeepResearch] Attempting to extract Final Answer from stdout despite script error...');
-            const finalAnswerMarker = "Final Answer:";
-            const answerStartIndex = errorStdout.lastIndexOf(finalAnswerMarker);
+      const responseData = await apiResponse.json();
 
-            if (answerStartIndex !== -1) {
-                rawContent = errorStdout.substring(answerStartIndex + finalAnswerMarker.length).trim();
-                console.log('[node-DeepResearch] Successfully extracted Final Answer content length (from error stdout):', rawContent.length);
-                // We have the answer, so we proceed despite the script's exit code/errors
-            } else {
-                // Script errored AND we couldn't find the answer in its output.
-                console.error('[node-DeepResearch] Script errored AND "Final Answer:" marker not found in stdout.');
-                const errorDetails = execError.stderr || execError.stdout || execError.message;
-                throw new Error(`Failed to execute analysis script AND could not find Final Answer: ${errorDetails}`); 
-            }
-        } else {
-             // Script errored AND produced no stdout.
-             console.error('[node-DeepResearch] Script errored AND produced no stdout.');
-             const errorDetails = execError.stderr || execError.message;
-             throw new Error(`Failed to execute analysis script, no stdout produced: ${errorDetails}`); 
-        }
-        // --- End Error Path --- 
+      // Extract content from the OpenAI-compatible response structure
+      rawContent = responseData?.choices?.[0]?.message?.content?.trim() || '';
+
+      // The DeepSearch API might include <think>...</think> tags. We usually want the text *after* the last </think> tag.
+      const thinkTagEndMarker = '</think>';
+      const lastThinkTagIndex = rawContent.lastIndexOf(thinkTagEndMarker);
+      if (lastThinkTagIndex !== -1) {
+          rawContent = rawContent.substring(lastThinkTagIndex + thinkTagEndMarker.length).trim();
+          console.log('[jina-search] Extracted content after </think> tag.');
+      } else {
+          console.log('[jina-search] No </think> tag found, using full response content.');
+      }
+
+      if (!rawContent) {
+        console.warn('[jina-search] DeepResearch API returned successfully but content was empty or missing in the expected structure.');
+        // Decide if this is an error or just no result
+        // For now, treat as no result, but might need adjustment
+        rawContent = ''; // Ensure it's an empty string
+      } else {
+          console.log('[jina-search] Received content from DeepResearch API. Length:', rawContent.length);
+      }
+
+    } catch (apiError: any) {
+      console.error('[jina-search] Error calling DeepResearch API:', apiError);
+      // Re-throw the error to be caught by the main try-catch block
+      throw new Error(`Failed to get analysis from DeepResearch service: ${apiError.message}`);
     }
-    // --- End Script Execution --- 
-
-    // ---->>> SAVE RAW CONTENT TO FILE FOR DEBUGGING <<<----
-    // if (rawContent) {
-    //     try {
-    //         const debugFilePath = path.resolve(process.cwd(), 'tmp', `final-answer-debug-${Date.now()}.txt`);
-    //         // Ensure tmp directory exists (optional, adjust path if needed)
-    //         const tmpDir = path.dirname(debugFilePath);
-    //         if (!fs.existsSync(tmpDir)){
-    //             fs.mkdirSync(tmpDir, { recursive: true });
-    //         }
-    //         fs.writeFileSync(debugFilePath, rawContent, 'utf8');
-    //         console.log(`[jina-search] Saved raw 'Final Answer' content for debugging to: ${debugFilePath}`);
-    //     } catch (fileError: any) {
-    //         console.error(`[jina-search] Failed to write debug file: ${fileError.message}`);
-    //         // Don't stop the main process if logging fails
-    //     }
-    // }
-    // ---->>> END DEBUG FILE SAVE <<<----
+    // --- End API Call ---
 
     // ---->>> PARSE WITH GEMINI <<<---- (Using the extracted rawContent)
     if (!rawContent) {
-        console.error('[jina-search] Reached Gemini parsing step but rawContent is empty. This should not happen.');
-        throw new Error('Internal error: Failed to obtain content for Gemini parsing.');
+        // If DeepResearch returned nothing, maybe we skip Gemini? Or return an error?
+        // For now, let's return an empty competitor list gracefully.
+        console.warn('[jina-search] No content received from DeepResearch API, skipping Gemini parsing and database save.');
+        return NextResponse.json({
+          success: true,
+          competitors: [] // Return empty list
+        });
+        // Alternative: throw new Error('Failed to get analysis content from DeepResearch service.');
     }
-    
+
     console.log('[jina-search] Sending extracted content to Gemini for parsing...');
     const parsedData: GeminiOutput = await parseWithGemini(rawContent, PARENT_GEMINI_API_KEY, clientName, productFocus);
     
