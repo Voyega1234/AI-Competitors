@@ -79,10 +79,10 @@ Generated Image Prompt:
         }
 
         const geminiData = await geminiResponse.json();
-        const generatedIdeogramPrompt = geminiData?.candidates?.[0]?.content?.parts?.[1]?.text?.trim();
+        const generatedIdeogramPrompt = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
 
         if (!generatedIdeogramPrompt) {
-            console.error("Gemini response missing valid text content for Ideogram prompt:", geminiData);
+            console.error("Gemini response missing valid text content for Ideogram prompt:", JSON.stringify(geminiData, null, 2));
             throw new Error('Gemini failed to generate a usable image prompt.');
         }
 
