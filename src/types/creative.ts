@@ -12,6 +12,14 @@ export interface CreativeConcept {
     focusTarget: string; // e.g., "Competitor Brands", "New Users" (Thai, or keep English? TBD)
     keyMessage: string; // The main message/angle (Thai)
     topicIdeas: TopicIdeas; // Nested topic ideas
+    imagePrompt?: string | null;
+    imageUrl?: string | null;
+    isGeneratingImage?: boolean;
+    imageError?: string | null;
+    generatedConceptIdea?: string | null;
+    generatedCreativeBrief?: string | null;
+    isGeneratingConceptBrief?: boolean;
+    conceptBriefError?: string | null;
 }
 
 // Structure for data passed to the creative generation page

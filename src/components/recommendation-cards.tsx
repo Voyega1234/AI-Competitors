@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Bookmark, Share2, Loader2, AlertTriangle, BrainCircuit, X, Info, CheckSquare } from "lucide-react"
+import { Bookmark, Share2, Loader2, AlertTriangle, BrainCircuit, X, Info, CheckSquare, UploadCloud } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useState, useEffect } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -15,6 +15,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import ReactMarkdown from 'react-markdown';
 import { Skeleton } from "@/components/ui/skeleton";
 import { CreativeConcept, TopicIdeas, SelectedRecommendationForCreative } from "@/types/creative";
+import { ImageGenerationDialog } from "@/components/ImageGenerationDialog";
+import { useDropzone } from "react-dropzone";
 
 // --- Define Defaults for Editable Prompt Sections ---
 const DEFAULT_TASK_SECTION = `1. Spark and detail 7-10 fresh, distinctive, and engaging creative ideas for\`ClientName\` specifically focusing on concepts highly suitable for Facebook Ad campaigns. Focus on concepts that can present the client's specific productFocus from new perspectives that spark curiosity, drive engagement, or create a memorable impression within the market on social media. Ideas should build upon the client's strengths and available insights.
@@ -247,6 +249,11 @@ export function RecommendationCards() {
     const [isGeneratingConcepts, setIsGeneratingConcepts] = useState<boolean>(false);
     const [conceptsError, setConceptsError] = useState<string | null>(null);
 
+    // --- NEW State for Image Generation with References ---
+    const [selectedConceptForImage, setSelectedConceptForImage] = useState<CreativeConcept | null>(null);
+    const [productImages, setProductImages] = useState<File[]>([]);
+    const [adReferenceImages, setAdReferenceImages] = useState<File[]>([]);
+    const [isGeneratingImage, setIsGeneratingImage] = useState<boolean>(false);
 
     // --- Force re-render check ---
     useEffect(() => {
@@ -675,6 +682,94 @@ export function RecommendationCards() {
     // Check if journey generation has been attempted (success or fail) for *any* card since last selection/param change
     const hasGeneratedJourneysAttempted = Object.keys(customerJourneys).length > 0 || !!journeyError;
 
+    const handleGenerateImageWithReferences = async () => {
+        if (productImages.length === 0) {
+            setImageError("Please upload at least one product image");
+            return;
+        }
+        
+        setIsGeneratingImage(true);
+        setImageError(null);
+        
+        try {
+            const formData = new FormData();
+            
+            // Add product images
+            productImages.forEach((file, index) => {
+                formData.append(`productImage${index}`, file);
+            });
+            
+            // Add ad reference images
+            adReferenceImages.forEach((file, index) => {
+                formData.append(`adReferenceImage${index}`, file);
+            });
+            
+            // Add concept data
+            formData.append('concept', JSON.stringify({
+                focusTarget: selectedConceptForImage?.focusTarget,
+                keyMessage: selectedConceptForImage?.keyMessage,
+            }));
+            
+            // Add custom prompt if provided
+            if (userBrief) {
+                formData.append('customPrompt', userBrief);
+            }
+
+            const response = await fetch('/api/generate-image-with-references', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to generate image');
+            }
+
+            const result = await response.json();
+            setGeneratedImageUrl(result.imageUrl);
+            
+        } catch (err: any) {
+            console.error('Error generating image:', err);
+            setImageError(err.message || 'Failed to generate image');
+        } finally {
+            setIsGeneratingImage(false);
+        }
+    };
+
+    const {
+        getRootProps: getProductRootProps,
+        getInputProps: getProductInputProps,
+        isDragActive: isProductDragActive
+    } = useDropzone({
+        onDrop: (acceptedFiles) => {
+            setProductImages(prev => [...prev, ...acceptedFiles]);
+        },
+        accept: {
+            'image/png': ['.png']
+        },
+        maxFiles: 3,
+    });
+
+    const {
+        getRootProps: getAdReferenceRootProps,
+        getInputProps: getAdReferenceInputProps,
+        isDragActive: isAdReferenceDragActive
+    } = useDropzone({
+        onDrop: (acceptedFiles) => {
+            setAdReferenceImages(prev => [...prev, ...acceptedFiles]);
+        },
+        accept: {
+            'image/*': ['.jpg', '.jpeg', '.png']
+        },
+        maxFiles: 5,
+    });
+
+    const removeProductImage = (index: number) => {
+        setProductImages(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const removeAdReferenceImage = (index: number) => {
+        setAdReferenceImages(prev => prev.filter((_, i) => i !== index));
+    };
 
     return (
         <Dialog
@@ -1161,13 +1256,16 @@ export function RecommendationCards() {
                                         </div>
                                     )}
                                     {!isImageLoading && !imageError && generatedImageUrl && (
-                                        <Image
-                                            src={generatedImageUrl}
-                                            alt={selectedRecommendation?.concept_idea || 'Generated visual concept'}
-                                            width={512}
-                                            height={512 * (aspectRatio === 'ASPECT_9_16' ? (16 / 9) : aspectRatio === 'ASPECT_16_9' ? (9 / 16) : 1)}
-                                            className="rounded-md object-contain max-h-[400px]"
-                                        />
+                                        <div className="space-y-2">
+                                            <h4 className="font-semibold">Generated Image:</h4>
+                                            <div className="relative w-full h-96 border rounded-lg overflow-hidden">
+                                                <img
+                                                    src={generatedImageUrl}
+                                                    alt="Generated image"
+                                                    className="w-full h-full object-contain"
+                                                />
+                                            </div>
+                                        </div>
                                     )}
                                     {!isImageLoading && !imageError && !generatedImageUrl && (
                                         <span className="text-muted-foreground text-sm">Click "Generate Image" to visualize the concept.</span>
@@ -1225,54 +1323,250 @@ export function RecommendationCards() {
             {creativeConcepts && !isGeneratingConcepts && !conceptsError && (
                 <div className="mt-8 pt-6 border-t">
                     <h3 className="text-xl font-semibold mb-4 text-center">Generated Content Pillars / Focus Targets</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {creativeConcepts.map((concept, index) => (
-                            <Card key={index} className="shadow-sm flex flex-col">
-                                <CardHeader className="pb-3 bg-muted/30 rounded-t-lg">
-                                    <CardTitle className="text-base">
-                                        <Badge className="mr-2 mb-1 text-xs" variant="secondary">Focus Target</Badge>
-                                        {concept.focusTarget}
-                                    </CardTitle>
-                                    <CardDescription className="text-sm pt-1">
-                                        <span className="font-medium text-foreground">Key Message:</span> {concept.keyMessage}
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="pt-4 flex-grow">
-                                    <h4 className="text-sm font-semibold mb-2 text-muted-foreground">Topic Ideas:</h4>
-                                    <div className="space-y-3 text-xs">
-                                        {concept.topicIdeas.productBenefits && concept.topicIdeas.productBenefits.length > 0 && (
-                                            <div>
-                                                <h5 className="font-medium mb-1 text-primary/80">Product Benefits</h5>
-                                                <ul className="list-disc list-inside space-y-0.5 pl-1">
-                                                    {concept.topicIdeas.productBenefits.map((idea, i) => <li key={`ben-${i}`}>{idea}</li>)}
-                                                </ul>
-                                            </div>
-                                        )}
-                                        {concept.topicIdeas.painPointsEmotional && concept.topicIdeas.painPointsEmotional.length > 0 && (
-                                            <div>
-                                                <h5 className="font-medium mb-1 text-amber-700/80 dark:text-amber-500/80">Pain Points & Emotional</h5>
-                                                <ul className="list-disc list-inside space-y-0.5 pl-1">
-                                                    {concept.topicIdeas.painPointsEmotional.map((idea, i) => <li key={`pain-${i}`}>{idea}</li>)}
-                                                </ul>
-                                            </div>
-                                        )}
-                                        {concept.topicIdeas.promotionPricing && concept.topicIdeas.promotionPricing.length > 0 && (
-                                            <div>
-                                                <h5 className="font-medium mb-1 text-purple-700/80 dark:text-purple-500/80">Promotion & Pricing</h5>
-                                                <ul className="list-disc list-inside space-y-0.5 pl-1">
-                                                    {concept.topicIdeas.promotionPricing.map((idea, i) => <li key={`promo-${i}`}>{idea}</li>)}
-                                                </ul>
-                                            </div>
-                                        )}
+                    
+                    {/* First Step: Select a Content Pillar */}
+                    {!selectedConceptForImage && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {creativeConcepts.map((concept, index) => (
+                                <Card 
+                                    key={index} 
+                                    className={cn(
+                                        "shadow-sm flex flex-col cursor-pointer hover:border-primary transition-colors",
+                                        "hover:shadow-md"
+                                    )}
+                                    onClick={() => setSelectedConceptForImage(concept)}
+                                >
+                                    <CardHeader className="pb-3 bg-muted/30 rounded-t-lg">
+                                        <CardTitle className="text-base">
+                                            <Badge className="mr-2 mb-1 text-xs" variant="secondary">Focus Target</Badge>
+                                            {concept.focusTarget}
+                                        </CardTitle>
+                                        <CardDescription className="text-sm pt-1">
+                                            <span className="font-medium text-foreground">Key Message:</span> {concept.keyMessage}
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="pt-4 flex-grow">
+                                        <h4 className="text-sm font-semibold mb-2 text-muted-foreground">Topic Ideas:</h4>
+                                        <div className="space-y-3 text-xs">
+                                            {concept.topicIdeas.productBenefits && concept.topicIdeas.productBenefits.length > 0 && (
+                                                <div>
+                                                    <h5 className="font-medium mb-1 text-primary/80">Product Benefits</h5>
+                                                    <ul className="list-disc list-inside space-y-0.5 pl-1">
+                                                        {concept.topicIdeas.productBenefits.map((idea, i) => <li key={`ben-${i}`}>{idea}</li>)}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                            {concept.topicIdeas.painPointsEmotional && concept.topicIdeas.painPointsEmotional.length > 0 && (
+                                                <div>
+                                                    <h5 className="font-medium mb-1 text-amber-700/80 dark:text-amber-500/80">Pain Points & Emotional</h5>
+                                                    <ul className="list-disc list-inside space-y-0.5 pl-1">
+                                                        {concept.topicIdeas.painPointsEmotional.map((idea, i) => <li key={`pain-${i}`}>{idea}</li>)}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                            {concept.topicIdeas.promotionPricing && concept.topicIdeas.promotionPricing.length > 0 && (
+                                                <div>
+                                                    <h5 className="font-medium mb-1 text-purple-700/80 dark:text-purple-500/80">Promotion & Pricing</h5>
+                                                    <ul className="list-disc list-inside space-y-0.5 pl-1">
+                                                        {concept.topicIdeas.promotionPricing.map((idea, i) => <li key={`promo-${i}`}>{idea}</li>)}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Second Step: Image Generation Section */}
+                    {selectedConceptForImage && (
+                        <div className="mt-6 space-y-6">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-lg font-semibold">Generate Images for Selected Content Pillar</h3>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                        setSelectedConceptForImage(null);
+                                        setGeneratedImageUrl(null);
+                                        setImageError(null);
+                                        setProductImages([]);
+                                        setAdReferenceImages([]);
+                                    }}
+                                >
+                                    <X className="h-4 w-4 mr-2" />
+                                    Select Different Pillar
+                                </Button>
+                            </div>
+
+                            <div className="space-y-6">
+                                {/* Selected Concept Summary */}
+                                <Card className="bg-muted/30">
+                                    <CardHeader>
+                                        <CardTitle className="text-base">
+                                            <Badge className="mr-2" variant="secondary">Selected Focus Target</Badge>
+                                            {selectedConceptForImage.focusTarget}
+                                        </CardTitle>
+                                        <CardDescription>
+                                            <span className="font-medium">Key Message:</span> {selectedConceptForImage.keyMessage}
+                                        </CardDescription>
+                                    </CardHeader>
+                                </Card>
+
+                                {/* Custom Prompt Input */}
+                                <div className="space-y-2">
+                                    <Label htmlFor="image-prompt">Custom Prompt (Optional)</Label>
+                                    <Textarea
+                                        id="image-prompt"
+                                        placeholder="Enter additional prompt details to guide the image generation..."
+                                        className="min-h-[100px]"
+                                        value={userBrief}
+                                        onChange={(e) => setUserBrief(e.target.value)}
+                                    />
+                                </div>
+
+                                {/* Product Images Upload */}
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="font-medium text-sm">1. Product/Material Images (PNG only)</h4>
+                                        <span className="text-xs text-muted-foreground">Required • Max 3 files</span>
                                     </div>
-                                </CardContent>
-                                {/* Optional CardFooter if actions per concept are needed */}
-                            </Card>
-                        ))}
-                    </div>
+                                    <div
+                                        {...getProductRootProps()}
+                                        className={cn(
+                                            "border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors",
+                                            isProductDragActive ? "border-primary bg-primary/10" : "border-muted-foreground/25"
+                                        )}
+                                    >
+                                        <input {...getProductInputProps()} />
+                                        <div className="space-y-2">
+                                            <div className="flex justify-center">
+                                                <UploadCloud className="h-8 w-8 text-muted-foreground" />
+                                            </div>
+                                            <p>Drop product images here, or click to select</p>
+                                            <p className="text-sm text-muted-foreground">PNG format only</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Product Images Preview */}
+                                    {productImages.length > 0 && (
+                                        <div className="grid grid-cols-3 gap-4">
+                                            {productImages.map((file, index) => (
+                                                <div key={index} className="relative group">
+                                                    <img
+                                                        src={URL.createObjectURL(file)}
+                                                        alt={`Product ${index + 1}`}
+                                                        className="w-full h-32 object-cover rounded-lg border"
+                                                    />
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            removeProductImage(index);
+                                                        }}
+                                                        className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    >
+                                                        <X className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Ad Reference Images Upload */}
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="font-medium text-sm">2. Ad Reference Images</h4>
+                                        <span className="text-xs text-muted-foreground">Optional • Max 5 files</span>
+                                    </div>
+                                    <div
+                                        {...getAdReferenceRootProps()}
+                                        className={cn(
+                                            "border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors",
+                                            isAdReferenceDragActive ? "border-primary bg-primary/10" : "border-muted-foreground/25"
+                                        )}
+                                    >
+                                        <input {...getAdReferenceInputProps()} />
+                                        <div className="space-y-2">
+                                            <div className="flex justify-center">
+                                                <UploadCloud className="h-8 w-8 text-muted-foreground" />
+                                            </div>
+                                            <p>Drop reference ad images here, or click to select</p>
+                                            <p className="text-sm text-muted-foreground">JPG, JPEG, PNG accepted</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Ad Reference Images Preview */}
+                                    {adReferenceImages.length > 0 && (
+                                        <div className="grid grid-cols-3 gap-4">
+                                            {adReferenceImages.map((file, index) => (
+                                                <div key={index} className="relative group">
+                                                    <img
+                                                        src={URL.createObjectURL(file)}
+                                                        alt={`Reference ${index + 1}`}
+                                                        className="w-full h-32 object-cover rounded-lg border"
+                                                    />
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            removeAdReferenceImage(index);
+                                                        }}
+                                                        className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    >
+                                                        <X className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Generate Button */}
+                                <Button
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        handleGenerateImageWithReferences();
+                                    }}
+                                    disabled={productImages.length === 0 || isGeneratingImage}
+                                    className="w-full"
+                                >
+                                    {isGeneratingImage ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            Generating...
+                                        </>
+                                    ) : (
+                                        'Generate Image'
+                                    )}
+                                </Button>
+
+                                {/* Error Display */}
+                                {imageError && (
+                                    <div className="p-4 border border-destructive/50 bg-destructive/10 rounded-lg text-destructive">
+                                        <p className="font-semibold">Error generating image:</p>
+                                        <p className="text-sm">{imageError}</p>
+                                    </div>
+                                )}
+
+                                {/* Generated Image Display */}
+                                {generatedImageUrl && (
+                                    <div className="space-y-2">
+                                        <h4 className="font-semibold">Generated Image:</h4>
+                                        <div className="relative w-full h-96 border rounded-lg overflow-hidden">
+                                            <img
+                                                src={generatedImageUrl}
+                                                alt="Generated image"
+                                                className="w-full h-full object-contain"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
-            {/* --- End Generated Concepts Section --- */}
 
         </Dialog>
     )
