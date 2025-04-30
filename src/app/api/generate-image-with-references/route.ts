@@ -31,6 +31,9 @@ export async function POST(req: Request) {
         // Get custom prompt if any
         const customPrompt = formData.get('customPrompt') as string;
 
+        // Get selected image size
+        const imageSize = formData.get('size') as string || 'auto'; // Default to auto if not provided
+
         // Validate inputs
         if (productImages.length === 0) {
             return NextResponse.json(
@@ -79,13 +82,7 @@ ${concept.adCopy?.bubblePoints?.map((point: string) => `• ${point}`).join('\n'
 
 Description: ${concept.description || ''}
 Competitive Advantage: ${concept.competitiveGap || ''}
-
-Style Guidelines:
-- Create a professional and polished advertisement layout
-- Ensure text is clear and readable
-- Maintain brand consistency
-- Use high-quality, photorealistic imagery
-- Incorporate dynamic visual elements that grab attention`;
+`;
 
         // Add reference image guidance if reference images are provided
         if (adReferenceImages.length > 0) {
@@ -106,6 +103,11 @@ Style Guidelines:
         console.log('=== End of Prompt ===');
 
         openaiFormData.append('prompt', prompt);
+
+        // Add size parameter if provided (including 'auto')
+        if (imageSize) {
+             openaiFormData.append('size', imageSize);
+        }
 
         // Call OpenAI API
         const openaiResponse = await fetch('https://api.openai.com/v1/images/edits', {

@@ -131,6 +131,7 @@ export interface CustomerJourneyStructured {
 }
 
 // Update CustomerJourneysMap type
+// Store journey per tempId even with single selection for potential future multi-select re-enablement
 type CustomerJourneysMap = Record<string, CustomerJourneyStructured | null>; // tempId -> structured object or null
 
 // --- NEW: Component to Render the Visual Journey Layout ---
@@ -239,7 +240,7 @@ export function RecommendationCards() {
     const [selectedRecommendation, setSelectedRecommendation] = useState<Recommendation | null>(null);
     // --- State for Image Generation in Dialog ---
     const [aspectRatio, setAspectRatio] = useState<string>('ASPECT_16_9');
-    const [generatedImageUrl, setGeneratedImageUrl] = useState<string | undefined>(undefined);
+    const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
     const [isImageLoading, setIsImageLoading] = useState<boolean>(false);
     const [imageError, setImageError] = useState<string | null>(null);
 
@@ -258,10 +259,11 @@ export function RecommendationCards() {
     // --- NEW: State for Model Selection ---
     const [selectedModels, setSelectedModels] = useState<string[]>(['gemini']); // Default to Gemini
 
-    // --- NEW: State for Card Selection ---
-    const [selectedCards, setSelectedCards] = useState<Record<string, Recommendation>>({});
+    // --- UPDATED: State for Card Selection (Single Selection) ---
+    const [selectedCard, setSelectedCard] = useState<Recommendation | null>(null);
+
     // --- NEW State for Customer Journeys ---
-    const [customerJourneys, setCustomerJourneys] = useState<CustomerJourneysMap>({});
+    const [customerJourneys, setCustomerJourneys] = useState<CustomerJourneysMap>({}); // Keep map to store by tempId
     const [isGeneratingJourneys, setIsGeneratingJourneys] = useState<boolean>(false);
     const [journeyError, setJourneyError] = useState<string | null>(null);
     // --- RE-ADD State for Journey Details Dialog ---
@@ -277,12 +279,11 @@ export function RecommendationCards() {
     const [productImages, setProductImages] = useState<File[]>([]);
     const [adReferenceImages, setAdReferenceImages] = useState<File[]>([]);
     const [isGeneratingImage, setIsGeneratingImage] = useState<boolean>(false);
+    // Add state for image size
+    const [imageSize, setImageSize] = useState<string>('auto'); // Default to auto
 
     // Add new state for custom prompt
     const [customPrompt, setCustomPrompt] = useState<string>('');
-
-    // Add new state for full image dialog
-    const [isFullImageDialogOpen, setIsFullImageDialogOpen] = useState(false);
 
     // --- Force re-render check ---
     useEffect(() => {
@@ -321,7 +322,7 @@ export function RecommendationCards() {
             setError({});
             setIsLoading({});
             setModelsRequestedInLastRun([]);
-            setSelectedCards({});
+            setSelectedCard(null); // Clear selection
             setCustomerJourneys({});
             setIsGeneratingJourneys(false);
             setJourneyError(null);
@@ -341,7 +342,7 @@ export function RecommendationCards() {
             setError({});
             setIsLoading({});
             setModelsRequestedInLastRun([]);
-            setSelectedCards({});
+            setSelectedCard(null); // Clear selection
             setCustomerJourneys({});
             setIsGeneratingJourneys(false);
             setJourneyError(null);
@@ -375,7 +376,7 @@ export function RecommendationCards() {
         setError({});
         setIsLoading({});
         setModelsRequestedInLastRun([]);
-        setSelectedCards({});
+        setSelectedCard(null); // Clear selection
         setCustomerJourneys({});
         setIsGeneratingJourneys(false);
         setJourneyError(null);
@@ -435,7 +436,7 @@ export function RecommendationCards() {
         setResultsByModel({});
         setSelectedRecommendation(null);
         setModelsRequestedInLastRun(selectedModels);
-        setSelectedCards({});
+        setSelectedCard(null); // Clear selection
         setCustomerJourneys({});
         setIsGeneratingJourneys(false);
         setJourneyError(null);
@@ -508,26 +509,29 @@ export function RecommendationCards() {
         });
     };
 
-    // --- UPDATED Card Click Handler (Toggle Selection) ---
+    // --- UPDATED Card Click Handler (Toggle Single Selection) ---
     const handleCardSelectionToggle = (recommendation: Recommendation) => {
         if (!recommendation.tempId) return;
 
-        setSelectedCards(prevSelected => {
-            const newSelected = { ...prevSelected };
-            if (newSelected[recommendation.tempId!]) {
-                delete newSelected[recommendation.tempId!];
-            } else {
-                newSelected[recommendation.tempId!] = recommendation;
-            }
-            return newSelected;
-        });
+        // If clicking the already selected card, deselect it
+        if (selectedCard?.tempId === recommendation.tempId) {
+            setSelectedCard(null);
+        } else {
+            // Otherwise, select the new card
+            setSelectedCard(recommendation);
+        }
+        // Reset concepts when selection changes
+        setCreativeConcepts(null);
+        setIsGeneratingConcepts(false);
+        setConceptsError(null);
+        setSelectedConceptForImage(null); // Deselect concept if changing recommendation
     };
 
     // --- Handler for Opening Details Dialog ---
     const handleOpenDetails = (recommendation: Recommendation, event: React.MouseEvent) => {
         event.stopPropagation();
         setSelectedRecommendation(recommendation);
-        setGeneratedImageUrl(undefined);
+        setGeneratedImageUrl(null);
         setIsImageLoading(false);
         setImageError(null);
         setAspectRatio('ASPECT_16_9');
@@ -548,38 +552,46 @@ export function RecommendationCards() {
         }));
     };
 
-    // --- Handler for the first button -> Generate Journeys ---
+    // --- UPDATED Handler for the first button -> Generate Journey for the single selected card ---
     const handleGenerateCustomerJourneys = async () => {
-        const selectedData = Object.values(selectedCards);
-        if (selectedData.length === 0 || !selectedClientName) return;
+        if (!selectedCard || !selectedClientName) {
+            console.log("[ui] Cannot generate journey: No card selected or client name missing.");
+            setJourneyError("Please select a recommendation card first.");
+            return;
+        }
 
-        setIsGeneratingJourneys(true);
-        setJourneyError(null);
-        // Don't clear customerJourneys state here - allow adding journeys for newly selected cards later
-        // setCustomerJourneys({});
+        const cardTempId = selectedCard.tempId;
+        if (!cardTempId) {
+            console.error("[ui] Selected card is missing tempId.");
+            setJourneyError("Internal error: Selected card identifier missing.");
+            return;
+        }
 
-        const recommendationsForApi = selectedData
-            .filter(rec => !customerJourneys[rec.tempId!]) // Only generate for selected cards without existing journey data
-            .map(rec => ({
-            title: rec.title,
-            concept: rec.concept_idea,
-            description: rec.description,
-            tempId: rec.tempId,
-        }));
-
-        if (recommendationsForApi.length === 0) {
-             console.log("[ui] No new journeys to generate for selected cards.");
-             setIsGeneratingJourneys(false); // Already generated for all selected
+        // Check if journey already exists or is being generated for this specific card
+        if (customerJourneys[cardTempId] || isGeneratingJourneys) {
+             console.log(`[ui] Journey already generated or generation in progress for ${cardTempId}.`);
+             // Optionally, you might want to allow regeneration, but for now, we skip.
+             // If allowing regeneration, ensure isGeneratingJourneys is handled correctly.
              return;
         }
 
+        setIsGeneratingJourneys(true);
+        setJourneyError(null);
+
+        const recommendationForApi = {
+            title: selectedCard.title,
+            concept: selectedCard.concept_idea,
+            description: selectedCard.description,
+            tempId: cardTempId,
+        };
+
         try {
-            console.log(`[ui] Calling API to generate journeys for ${recommendationsForApi.length} new ideas...`);
+            console.log(`[ui] Calling API to generate journey for idea: ${recommendationForApi.title}`);
             const response = await fetch('/api/generate-customer-journey', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    selectedRecommendations: recommendationsForApi,
+                    selectedRecommendations: [recommendationForApi], // Send as array even for single item
                     clientName: selectedClientName,
                     productFocus: selectedProductFocus === 'placeholder-for-empty' ? null : selectedProductFocus,
                 })
@@ -591,33 +603,45 @@ export function RecommendationCards() {
                 throw new Error(result.error || `API Error: ${response.status}`);
             }
 
-            // Merge new journeys with existing ones
-            setCustomerJourneys(prev => ({ ...prev, ...(result.customerJourneys || {}) }));
-            console.log("[ui] Successfully received and merged customer journeys.");
+            // Update the journey map with the result for the specific tempId
+            setCustomerJourneys(prev => ({
+                ...prev,
+                ...(result.customerJourneys || {}) // API should return map { tempId: journey }
+            }));
+            console.log(`[ui] Successfully received customer journey for ${cardTempId}.`);
 
         } catch (err: any) {
-            console.error("[ui] Error generating customer journeys:", err);
-            setJourneyError(err.message || "Failed to generate customer journeys.");
+            console.error("[ui] Error generating customer journey:", err);
+            setJourneyError(err.message || "Failed to generate customer journey.");
+            // Optionally clear the journey entry for this card if it failed
+            // setCustomerJourneys(prev => {
+            //     const newState = { ...prev };
+            //     delete newState[cardTempId];
+            //     return newState;
+            // });
         } finally {
-            setIsGeneratingJourneys(false);
+            setIsGeneratingJourneys(false); // Set loading false regardless of success/fail
         }
     };
 
-    // --- NEW Handler for Generating Content Pillars/Creative Concepts --- 
+    // --- UPDATED Handler for Generating Content Pillars/Creative Concepts for the single selected card ---
     const handleGenerateCreativeConcepts = async () => {
-        const selectedData = Object.values(selectedCards);
-        // Filter selected cards to include only those with a generated journey
-        const dataWithJourneys = selectedData.filter(rec => rec.tempId && customerJourneys[rec.tempId!]);
-
-        if (dataWithJourneys.length === 0) {
-            console.error("[handleGenerateCreativeConcepts] No selected cards have a generated customer journey.");
-            // Optionally set an error state here to inform the user
-            setConceptsError("Please generate customer journeys for selected cards first, or select cards with existing journeys.");
-            setCreativeConcepts(null); // Clear any previous results
+        if (!selectedCard || !selectedCard.tempId) {
+            console.error("[handleGenerateCreativeConcepts] No card selected.");
+            setConceptsError("Please select a recommendation card first.");
+            setCreativeConcepts(null);
             return;
         }
 
-        if (!selectedClientName) { // Keep client name check
+        const journeyData = customerJourneys[selectedCard.tempId];
+        if (!journeyData) {
+            console.error("[handleGenerateCreativeConcepts] Customer journey has not been successfully generated for the selected card.");
+            setConceptsError("Please generate the customer journey for the selected card first.");
+            setCreativeConcepts(null);
+            return;
+        }
+
+        if (!selectedClientName) {
              console.error("[handleGenerateCreativeConcepts] Client name missing.");
              setConceptsError("Client name is missing.");
              return;
@@ -627,24 +651,24 @@ export function RecommendationCards() {
         setConceptsError(null);
         setCreativeConcepts(null); // Clear previous concepts
 
-        // Format data for the API using only cards with journeys
-        const recommendationsForApi: SelectedRecommendationForCreative[] = dataWithJourneys.map(rec => ({
-            title: rec.title,
-            concept: rec.concept_idea, 
-            description: rec.description,
-            tempId: rec.tempId,
-            customerJourney: customerJourneys[rec.tempId!] || null,
-            content_pillar: rec.content_pillar,
-            product_focus: rec.product_focus,
-        }));
+        // Format data for the API using only the selected card
+        const recommendationForApi: SelectedRecommendationForCreative = {
+            title: selectedCard.title,
+            concept: selectedCard.concept_idea,
+            description: selectedCard.description,
+            tempId: selectedCard.tempId,
+            customerJourney: journeyData, // We already checked this exists
+            content_pillar: selectedCard.content_pillar,
+            product_focus: selectedCard.product_focus,
+        };
 
         try {
-            console.log(`[ui] Calling API to generate creative concepts for ${recommendationsForApi.length} selected items...`);
+            console.log(`[ui] Calling API to generate creative concepts for: ${recommendationForApi.title}`);
             const response = await fetch('/api/generate-creative-concepts', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    selectedRecommendations: recommendationsForApi,
+                    selectedRecommendations: [recommendationForApi], // Send as array
                     clientName: selectedClientName,
                     productFocus: selectedProductFocus === 'placeholder-for-empty' ? null : selectedProductFocus,
                 })
@@ -677,7 +701,7 @@ export function RecommendationCards() {
 
         setIsImageLoading(true);
         setImageError(null);
-        setGeneratedImageUrl(undefined);
+        setGeneratedImageUrl(null);
 
         let imagePrompt = selectedRecommendation.concept_idea || '';
         if (selectedRecommendation.copywriting?.headline) {
@@ -724,7 +748,9 @@ export function RecommendationCards() {
     const defaultTab = modelsRequestedInLastRun.length > 0 ? modelsRequestedInLastRun[0] : (selectedModels.length > 0 ? selectedModels[0] : AVAILABLE_MODELS[0]);
 
     // Check if journey generation has been attempted (success or fail) for *any* card since last selection/param change
-    const hasGeneratedJourneysAttempted = Object.keys(customerJourneys).length > 0 || !!journeyError;
+    const hasGeneratedJourneysAttempted = selectedCard?.tempId ? (!!customerJourneys[selectedCard.tempId] || !!journeyError) : false;
+    // Check if journey exists for the currently selected card
+    const journeyExistsForSelected = selectedCard?.tempId ? !!customerJourneys[selectedCard.tempId] : false;
 
     const handleGenerateImageWithReferences = async () => {
         if (productImages.length === 0) {
@@ -790,6 +816,9 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
 
             // Add the full prompt
             formData.append('prompt', fullPrompt);
+
+            // Add the selected image size
+            formData.append('size', imageSize);
 
             const response = await fetch('/api/generate-image-with-references', {
                 method: 'POST',
@@ -889,85 +918,1016 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
     };
 
     return (
-        <>
-            <Dialog
-                open={isDialogOpen}
-                onOpenChange={(open) => {
-                    setIsDialogOpen(open);
-                    if (!open) {
-                        setSelectedRecommendation(null);
-                        setViewingJourneyId(null);
-                        setGeneratedImageUrl(undefined);
-                        setIsImageLoading(false);
-                        setImageError(null);
-                        setAspectRatio('ASPECT_16_9');
-                        setAdCopyDetails({
-                            description: '',
-                            competitiveGap: '',
-                            headline: '',
-                            subHeadline1: '',
-                            subHeadline2: '',
-                            subHeadline3: '',
-                            subHeadlineCta: '',
-                            bubblePoints: []
-                        });
-                    }
-                }}
-            >
-                <DialogContent className="max-w-4xl">
-                    {selectedRecommendation && !viewingJourneyId && (
-                        <>
-                            <DialogHeader>
-                                <DialogTitle>{selectedRecommendation.title}</DialogTitle>
-                                <DialogDescription>
-                                    {selectedRecommendation.description}
-                                </DialogDescription>
-                            </DialogHeader>
+        <Dialog
+            open={isDialogOpen}
+            onOpenChange={(open) => {
+                setIsDialogOpen(open);
+                if (!open) {
+                    setSelectedRecommendation(null);
+                    setViewingJourneyId(null);
+                    setGeneratedImageUrl(null);
+                    setIsImageLoading(false);
+                    setImageError(null);
+                    setAspectRatio('ASPECT_16_9');
+                    setAdCopyDetails({
+                        description: '',
+                        competitiveGap: '',
+                        headline: '',
+                        subHeadline1: '',
+                        subHeadline2: '',
+                        subHeadline3: '',
+                        subHeadlineCta: '',
+                        bubblePoints: []
+                    });
+                }
+            }}
+        >
+            <div>
+                {/* --- Selection UI --- */}
+                <div className="flex flex-col gap-4 p-4 border rounded-lg mb-6 bg-muted/40">
+                    <div className="flex items-end gap-2 flex-wrap">
+                        {/* Client Selector */}
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="rec-client-select" className="text-sm font-medium">Select Client</Label>
+                            <Select
+                                value={selectedClientName ?? ""}
+                                onValueChange={(value) => setSelectedClientName(value || null)}
+                                disabled={isMetaLoading || isAnyModelLoading}
+                            >
+                                <SelectTrigger className="h-9 w-[200px] bg-background" id="rec-client-select">
+                                    <SelectValue placeholder="Select Client..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {clientNames.length > 0 ? (
+                                        clientNames.map(name => (
+                                            <SelectItem key={name} value={name}>{name}</SelectItem>
+                                        ))
+                                    ) : (
+                                        <SelectItem value="loading-clients" disabled>Loading clients...</SelectItem>
+                                    )}
+                                </SelectContent>
+                            </Select>
+                        </div>
 
-                            <div className="py-4">
-                                {/* Generated Image Display */}
-                                {generatedImageUrl !== undefined && (
-                                    <div className="mt-4">
-                                        <img
-                                            src={generatedImageUrl}
-                                            alt="Generated image"
-                                            className="w-full h-auto rounded-lg"
-                                            style={{ maxWidth: '100%' }}
+                        {/* Product Focus Selector */}
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="rec-product-select" className="text-sm font-medium">Select Product</Label>
+                            <Select
+                                value={selectedProductFocus ?? ""}
+                                onValueChange={(value) => setSelectedProductFocus(value || null)}
+                                disabled={!selectedClientName || isMetaLoading || productFocuses.length === 0 || isAnyModelLoading}
+                            >
+                                <SelectTrigger className="h-9 w-[200px] bg-background" id="rec-product-select">
+                                    <SelectValue placeholder={!selectedClientName ? "Select client first" : "Select Product..."} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {selectedClientName && productFocuses.length > 0 ? (
+                                        productFocuses.map(focus => (
+                                            <SelectItem key={focus} value={focus || "placeholder-for-empty"}>{focus || "N/A"}</SelectItem>
+                                        ))
+                                    ) : selectedClientName ? (
+                                        <SelectItem value="loading-products" disabled>Loading products...</SelectItem>
+                                    ) : null}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {/* Generate Button */}
+                        <Button
+                            onClick={handleGenerateRecommendations}
+                            disabled={!selectedRunId || selectedModels.length === 0 || isAnyModelLoading || isMetaLoading}
+                            className="h-9"
+                        >
+                            <BrainCircuit className="mr-2 h-4 w-4" />
+                            {isAnyModelLoading ? "Generating..." : "Generate Ideas"}
+                        </Button>
+
+                        {/* Meta Loading/Error Display */}
+                        {isMetaLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground ml-2" />}
+                        {metaError && !isMetaLoading && <span className="text-xs text-destructive ml-2">{metaError}</span>}
+                    </div>
+
+                    {/* --- Model Selection Checkboxes --- */}
+                    <div className="grid gap-1.5 w-full">
+                       <Label className="text-sm font-medium">Select Models to Run</Label>
+                       <div className="flex items-center space-x-4 mt-1">
+                           {AVAILABLE_MODELS.map(model => (
+                               <div key={model} className="flex items-center space-x-2">
+                                   <Checkbox
+                                       id={`model-${model}`}
+                                       checked={selectedModels.includes(model)}
+                                       onCheckedChange={(checked) => handleModelSelectionChange(model, checked)}
+                                       disabled={isAnyModelLoading || isMetaLoading}
+                                   />
+                                   <Label
+                                       htmlFor={`model-${model}`}
+                                       className="text-sm font-medium capitalize cursor-pointer"
+                                   >
+                                       {model}
+                                   </Label>
+                               </div>
+                           ))}
+                       </div>
+                    </div>
+
+                    {/* User Brief Input */}
+                    <div className="grid gap-1.5 w-full">
+                        <Label htmlFor="rec-user-brief" className="text-sm font-medium">Optional Brief</Label>
+                        <Textarea
+                            id="rec-user-brief"
+                            placeholder="Provide additional context or specific instructions..."
+                            value={userBrief}
+                            onChange={(e) => setUserBrief(e.target.value)}
+                            className="min-h-[80px] bg-background"
+                            disabled={isAnyModelLoading || isMetaLoading}
+                        />
+                    </div>
+
+                    {/* Editable Task Section */}
+                    <div className="grid gap-1.5 w-full">
+                        <Label htmlFor="editable-task-section" className="text-sm font-medium">Editable Prompt: Task Section</Label>
+                        <Textarea
+                            id="editable-task-section"
+                            placeholder="Define the core task for the AI..."
+                            value={editableTaskSection}
+                            onChange={(e) => setEditableTaskSection(e.target.value)}
+                            className="min-h-[150px] bg-background font-mono text-xs"
+                            disabled={isAnyModelLoading || isMetaLoading}
+                        />
+                    </div>
+
+                    {/* Editable Details Section */}
+                    <div className="grid gap-1.5 w-full">
+                        <Label htmlFor="editable-details-section" className="text-sm font-medium">Editable Prompt: Creative Execution Details Section</Label>
+                        <Textarea
+                            id="editable-details-section"
+                            placeholder="Define the structure and requirements..."
+                            value={editableDetailsSection}
+                            onChange={(e) => setEditableDetailsSection(e.target.value)}
+                            className="min-h-[150px] bg-background font-mono text-xs"
+                            disabled={isAnyModelLoading || isMetaLoading}
+                        />
+                    </div>
+                </div>
+
+                {/* --- Display Area (Updated for Tabs) --- */}
+                {modelsRequestedInLastRun.length > 0 ? (
+                    <Tabs defaultValue={defaultTab} className="w-full">
+                        <TabsList className="grid w-full grid-cols-3"> {/* Adjust grid-cols based on number of models */}
+                            {modelsRequestedInLastRun.map(modelName => (
+                                <TabsTrigger key={modelName} value={modelName} className="capitalize">{modelName}</TabsTrigger>
+                            ))}
+                        </TabsList>
+
+                        {modelsRequestedInLastRun.map(modelName => (
+                            <TabsContent key={modelName} value={modelName} className="mt-4">
+                                {/* Loading State for this model */}
+                                {isLoading[modelName] && (
+                                    <div className="flex flex-col items-center justify-center gap-4 p-8 border rounded-lg text-muted-foreground min-h-[200px]">
+                                        <Loader2 className="h-8 w-8 animate-spin" />
+                                        <span className="capitalize">Generating recommendations with {modelName}...</span>
+                                    </div>
+                                )}
+
+                                {/* Error State for this model */}
+                                {error[modelName] && !isLoading[modelName] && (
+                                    <div className="flex flex-col justify-center items-center p-10 border border-destructive bg-destructive/10 rounded-lg min-h-[200px] text-destructive">
+                                        <AlertTriangle className="h-8 w-8 mb-2" />
+                                        <p className="font-semibold mb-1 capitalize">Error Generating with {modelName}</p>
+                                        <p className="text-sm text-center">{error[modelName]}</p>
+                                    </div>
+                                )}
+
+                                {/* No Recommendations or Initial State for this model */}
+                                {!isLoading[modelName] && !error[modelName] && (!resultsByModel[modelName] || (resultsByModel[modelName]?.length ?? 0) === 0) && (
+                                    <div className="flex flex-col items-center justify-center gap-4 p-8 border rounded-lg text-muted-foreground min-h-[200px]">
+                                        <AlertTriangle className="h-8 w-8" />
+                                        <span className="capitalize">No recommendations generated by {modelName}.</span>
+                                    </div>
+                                )}
+
+                                {/* Display Recommendations for this model */}
+                                {!isLoading[modelName] && !error[modelName] && resultsByModel[modelName] && (resultsByModel[modelName]?.length ?? 0) > 0 && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        {(resultsByModel[modelName] ?? []).map((rec) => {
+                                            const isSelected = selectedCard?.tempId === rec.tempId;
+                                            // Check journey status specifically for this card, even if it's not the currently selected one for actions
+                                            const cardJourneyData = customerJourneys[rec.tempId!];
+                                            const cardJourneyIsAvailable = !!cardJourneyData;
+                                            // We only show loading/failed status for the *currently* selected card related to the journey buttons
+                                            const journeyIsLoadingForThisCard = isSelected && isGeneratingJourneys && !cardJourneyIsAvailable;
+                                            const journeyHasFailedForThisCard = isSelected && !!journeyError && !cardJourneyIsAvailable && !isGeneratingJourneys;
+
+                                            return (
+                                                <Card
+                                                    key={rec.tempId}
+                                                    onClick={() => handleCardSelectionToggle(rec)}
+                                                    className={cn(
+                                                        "cursor-pointer hover:shadow-md transition-shadow duration-200 flex flex-col h-full relative",
+                                                        isSelected ? "border-2 border-primary shadow-md" : "border",
+                                                        !isSelected && rec.impact === 'High' ? 'border-green-500' :
+                                                        !isSelected && rec.impact === 'Medium' ? 'border-yellow-500' :
+                                                        ''
+                                                    )}
+                                                >
+                                                    {isSelected && (
+                                                        <div className="absolute top-2 right-2 p-1 bg-primary text-primary-foreground rounded-full z-10">
+                                                            <CheckSquare size={16} />
+                                                        </div>
+                                                    )}
+                                                    <CardHeader className="pb-2">
+                                                        <CardTitle className="text-base leading-tight pr-8">{rec.title}</CardTitle>
+                                                        <CardDescription className="pt-1 text-sm">
+                                                            <Badge variant="secondary" className="mr-1">{rec.category}</Badge>
+                                                            <Badge variant={rec.impact === 'High' ? 'default' : rec.impact === 'Medium' ? 'outline' : 'secondary'} className={cn(
+                                                                rec.impact === 'High' ? 'bg-green-600 text-white' :
+                                                                rec.impact === 'Medium' ? 'border-yellow-600 text-yellow-700' :
+                                                                ''
+                                                            )}>{rec.impact} Impact</Badge>
+                                                        </CardDescription>
+                                                    </CardHeader>
+                                                    <CardContent className="flex-grow text-sm text-muted-foreground pb-3">
+                                                        <p className="line-clamp-4 mb-2">{rec.description}</p>
+
+                                                        {/* RE-ADD View Journey Button - Conditional - Now shows if journey exists for *this* card */}
+                                                        {cardJourneyIsAvailable && (
+                                                            <div className="mt-3 pt-3 border-t">
+                                                                <div className="mt-1 space-y-1">
+                                                                    <h5 className="text-xs font-semibold text-foreground">Journey Breakdown:</h5>
+                                                                    <VisualJourneyLayout journey={cardJourneyData} />
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        {/* Show loading/error status only if this card is the currently selected one */}
+                                                        {isSelected && (journeyIsLoadingForThisCard || journeyHasFailedForThisCard) && (
+                                                            <div className="mt-3 pt-3 border-t">
+                                                                {journeyIsLoadingForThisCard && (
+                                                                    <div className="flex items-center text-xs text-muted-foreground py-2">
+                                                                        <Loader2 className="h-3 w-3 mr-1 animate-spin"/>
+                                                                        <span>Generating journey...</span>
+                                                                    </div>
+                                                                )}
+                                                                {journeyHasFailedForThisCard && (
+                                                                    <div className="flex items-center text-xs text-destructive py-2">
+                                                                        <AlertTriangle className="h-3 w-3 mr-1"/>
+                                                                        <span>Journey generation failed. Retry?</span> {/* Maybe add retry? */}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </CardContent>
+                                                    <CardFooter className="flex justify-between items-center pt-2 pb-3">
+                                                        <div className="flex flex-wrap gap-1 items-center">
+                                                            {(rec.tags || []).map(tag => (
+                                                                <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
+                                                            ))}
+                                                            {/* RE-ADD View Journey Button - Show if available for THIS card */}
+                                                            {cardJourneyIsAvailable && (
+                                                                <Button
+                                                                    variant={"secondary"}
+                                                                    size="sm"
+                                                                    className="h-6 px-2 py-1 text-xs ml-1"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation(); // Prevent card deselection
+                                                                        setViewingJourneyId(rec.tempId!);
+                                                                        setIsDialogOpen(true);
+                                                                    }}
+                                                                >
+                                                                    View Journey
+                                                                </Button>
+                                                            )}
+                                                        </div>
+                                                        <DialogTrigger asChild>
+                                                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => handleOpenDetails(rec, e)}>
+                                                                <Info size={16} />
+                                                                <span className="sr-only">View Details / Generate Image</span>
+                                                            </Button>
+                                                        </DialogTrigger>
+                                                    </CardFooter>
+                                                </Card>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </TabsContent>
+                        ))}
+                    </Tabs>
+                ) : (
+                   // Show initial message if no models have been run yet
+                   !isAnyModelLoading && <div className="flex flex-col items-center justify-center gap-4 p-8 border rounded-lg text-muted-foreground min-h-[200px]">
+                       <BrainCircuit className="h-8 w-8" />
+                       <span>Select models and click "Generate Ideas".</span>
+                   </div>
+                )}
+
+                {/* --- Action Buttons --- */}
+                <div className="mt-6 flex flex-col items-center gap-4">
+                    {/* Button 1: Generate Journey for the selected card */}
+                     <Button
+                        onClick={handleGenerateCustomerJourneys}
+                        disabled={!selectedCard || isGeneratingJourneys || journeyExistsForSelected} // Disable if no card, loading, or journey already exists
+                    >
+                         {isGeneratingJourneys ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                         {isGeneratingJourneys ? 'Generating Journey...' :
+                         journeyExistsForSelected ? 'Customer Journey Generated' :
+                         selectedCard ? `Generate Customer Journey for Selected Idea` :
+                         'Select an Idea to Generate Journey'}
+                     </Button>
+                     {journeyError && !isGeneratingJourneys && selectedCard && ( // Show error related to journey gen if a card is selected
+                        <p className="text-center text-sm text-destructive -mt-2">Error: {journeyError}</p>
+                     )}
+
+                     {/* Button 2: Generate Content Pillars (Requires selected card AND successful journey) */}
+                     <Button
+                         onClick={handleGenerateCreativeConcepts}
+                         disabled={isGeneratingConcepts ||
+                                   !selectedCard || // Disabled if no card selected
+                                   !journeyExistsForSelected // Disabled if journey doesn't exist for the selected card
+                                  }
+                     >
+                          {isGeneratingConcepts ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                          {isGeneratingConcepts ? 'Generating Content Pillars...' :
+                           !selectedCard ? 'Select Idea & Generate Journey First' :
+                           !journeyExistsForSelected ? 'Generate Customer Journey First' :
+                           'Generate Content Pillars for Selected Idea'}
+                     </Button>
+                     {conceptsError && !isGeneratingConcepts && selectedCard && ( // Show concept error if card is selected
+                         <p className="text-center text-sm text-destructive -mt-2">Error: {conceptsError}</p>
+                     )}
+                </div>
+                {/* Remove general journey error display here, handled below buttons */}
+                {/* {journeyError && !isGeneratingJourneys && (
+                    <p className="text-center text-sm text-destructive mt-2">Error during journey generation: {journeyError}</p>
+                )} */}
+
+            </div>
+
+            {/* Dialog Content - Recommendation Details */}
+            {selectedRecommendation && !viewingJourneyId && ( // Show only if NOT viewing journey
+                <DialogContent className="max-w-3xl">
+                    <ScrollArea className="max-h-[80vh] pr-6">
+                        <DialogHeader>
+                            <DialogTitle className="text-2xl mb-2">{selectedRecommendation.title}</DialogTitle>
+                            <DialogDescription className="space-x-2">
+                                <Badge variant="secondary" className="mr-1">{selectedRecommendation.category}</Badge>
+                                <Badge variant={selectedRecommendation.impact === 'High' ? 'default' : selectedRecommendation.impact === 'Medium' ? 'outline' : 'secondary'} className={cn(
+                                    selectedRecommendation.impact === 'High' ? 'bg-green-600 text-white' :
+                                    selectedRecommendation.impact === 'Medium' ? 'border-yellow-600 text-yellow-700' :
+                                    ''
+                                )}>{selectedRecommendation.impact} Impact</Badge>
+                                {(selectedRecommendation.tags || []).map(tag => (
+                                    <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
+                                ))}
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="py-4 space-y-6">
+                            <section>
+                                <h4>รายละเอียด (Description)</h4>
+                                <p className="text-sm">{selectedRecommendation.description}</p>
+                                {selectedRecommendation.competitiveGap && (
+                                <>
+                                    <h5 className="mt-3 font-semibold text-sm">ช่องว่างทางการแข่งขัน (Competitive Gap Addressed)</h5>
+                                    <p className="text-sm">{selectedRecommendation.competitiveGap}</p>
+                                </>
+                                )}
+                            </section>
+
+                            {/* --- Marketing Execution Section --- */}
+                            {(selectedRecommendation.promoted_product_th || selectedRecommendation.mood_and_tone_th || selectedRecommendation.key_message_th || selectedRecommendation.execution_example_th) && (
+                                <section className="space-y-2">
+                                <h4>แนวทางการสื่อสารการตลาด (Marketing Execution Concepts)</h4>
+                                {selectedRecommendation.promoted_product_th && (
+                                    <div>
+                                    <h5 className="inline-block font-semibold text-sm mr-2">สินค้า/บริการที่จะเน้น (Promoted Product/Service):</h5>
+                                    <span className="text-sm">{selectedRecommendation.promoted_product_th}</span>
+                                    </div>
+                                )}
+                                {selectedRecommendation.mood_and_tone_th && (
+                                    <div>
+                                    <h5 className="inline-block font-semibold text-sm mr-2">อารมณ์และโทน (Mood & Tone):</h5>
+                                    <span className="text-sm">{selectedRecommendation.mood_and_tone_th}</span>
+                                    </div>
+                                )}
+                                {selectedRecommendation.key_message_th && (
+                                    <div>
+                                    <h5 className="inline-block font-semibold text-sm mr-2">ข้อความหลัก/สโลแกน (Key Message/Tagline):</h5>
+                                    <span className="text-sm">{selectedRecommendation.key_message_th}</span>
+                                    </div>
+                                )}
+                                {selectedRecommendation.execution_example_th && (
+                                    <div className="mt-2">
+                                    <h5 className="font-semibold text-sm mb-1">ตัวอย่างการนำไปใช้ (Execution Example):</h5>
+                                    <p className="text-sm whitespace-pre-wrap">{selectedRecommendation.execution_example_th}</p>
+                                    </div>
+                                )}
+                                </section>
+                            )}
+
+                            {/* --- Creative Execution Details Section --- */}
+                            {(selectedRecommendation.content_pillar || selectedRecommendation.product_focus || selectedRecommendation.concept_idea || selectedRecommendation.copywriting) && (
+                                <section className="space-y-3 pt-4 border-t mt-4">
+                                <h4 className="font-semibold">Creative Execution Details</h4>
+                                {selectedRecommendation.content_pillar && (
+                                    <div className="text-sm">
+                                    <h5 className="inline-block font-medium text-sm mr-2 text-muted-foreground">Content Pillar:</h5>
+                                    <span>{selectedRecommendation.content_pillar}</span>
+                                    </div>
+                                )}
+                                {selectedRecommendation.product_focus && (
+                                    <div className="text-sm">
+                                    <h5 className="inline-block font-medium text-sm mr-2 text-muted-foreground">Product Focus:</h5>
+                                    <span>{selectedRecommendation.product_focus}</span>
+                                    </div>
+                                )}
+                                {selectedRecommendation.concept_idea && (
+                                    <div className="text-sm">
+                                    <h5 className="inline-block font-medium text-sm mr-2 text-muted-foreground">Concept Idea:</h5>
+                                    <span>{selectedRecommendation.concept_idea}</span>
+                                    </div>
+                                )}
+
+                                {/* Display Copywriting Details */}
+                                {selectedRecommendation.copywriting && (
+                                    <div className="mt-3 space-y-2 border p-3 rounded-md bg-muted/20">
+                                    <h5 className="font-medium text-sm mb-1">Draft Copywriting:</h5>
+                                    {selectedRecommendation.copywriting.headline && (
+                                        <p className="text-sm"><strong>Headline:</strong> {selectedRecommendation.copywriting.headline}</p>
+                                    )}
+                                    {selectedRecommendation.copywriting.sub_headline_1 && (
+                                        <p className="text-sm text-muted-foreground"><strong>Sub-Headline 1:</strong> {selectedRecommendation.copywriting.sub_headline_1}</p>
+                                    )}
+                                    {selectedRecommendation.copywriting.sub_headline_2 && (
+                                        <p className="text-sm text-muted-foreground"><strong>Sub-Headline 2:</strong> {selectedRecommendation.copywriting.sub_headline_2}</p>
+                                    )}
+                                    {selectedRecommendation.copywriting.bullets && selectedRecommendation.copywriting.bullets.length > 0 && (
+                                        <div className="text-sm mt-1">
+                                        <strong className="block text-xs text-muted-foreground mb-0.5">Bullets:</strong>
+                                        <ul className="list-disc list-inside pl-2 space-y-0.5">
+                                            {selectedRecommendation.copywriting.bullets.map((bullet, idx) => (
+                                            <li key={idx}>{bullet}</li>
+                                            ))}
+                                        </ul>
+                                        </div>
+                                    )}
+                                    {selectedRecommendation.copywriting.cta && (
+                                        <p className="text-sm mt-2"><strong>CTA:</strong> <Badge variant="outline">{selectedRecommendation.copywriting.cta}</Badge></p>
+                                    )}
+                                    </div>
+                                )}
+                                </section>
+                            )}
+
+
+                            {/* --- Image Generation Section --- */}
+                            <section className="space-y-3 pt-4 border-t mt-4">
+                                <h4 className="font-semibold">Generate Visual Concept (Ideogram)</h4>
+                                <div className="flex items-center gap-4">
+                                    <Label htmlFor="aspect-ratio-select" className="text-sm whitespace-nowrap">Aspect Ratio:</Label>
+                                    <Select
+                                        value={aspectRatio}
+                                        onValueChange={setAspectRatio}
+                                        disabled={isImageLoading}
+                                    >
+                                        <SelectTrigger className="h-9 w-[150px] bg-background" id="aspect-ratio-select">
+                                            <SelectValue placeholder="Select Ratio..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="ASPECT_16_9">16:9 (Landscape)</SelectItem>
+                                            <SelectItem value="ASPECT_1_1">1:1 (Square)</SelectItem>
+                                            <SelectItem value="ASPECT_9_16">9:16 (Portrait)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <Button
+                                        onClick={handleGenerateImage}
+                                        disabled={isImageLoading || !selectedRecommendation}
+                                        size="sm"
+                                    >
+                                        {isImageLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                        {isImageLoading ? 'Generating...' : 'Generate Image'}
+                                    </Button>
+                                </div>
+
+                                <div className="mt-4 min-h-[200px] border rounded-md flex items-center justify-center bg-muted/20 p-4">
+                                    {isImageLoading && (
+                                        <div className="flex flex-col items-center text-muted-foreground">
+                                            <Loader2 className="h-8 w-8 animate-spin mb-2" />
+                                            <span>Generating image...</span>
+                                        </div>
+                                    )}
+                                    {imageError && !isImageLoading && (
+                                        <div className="flex flex-col items-center text-destructive text-center">
+                                            <AlertTriangle className="h-8 w-8 mb-2" />
+                                            <span className="font-semibold">Image Generation Failed</span>
+                                            <span className="text-xs mt-1">{imageError}</span>
+                                        </div>
+                                    )}
+                                    {!isImageLoading && !imageError && generatedImageUrl && (
+                                        <div className="w-full">
+                                            <h4 className="font-semibold mb-2">Generated Image:</h4>
+                                            <div className="relative w-full border rounded-lg overflow-hidden bg-muted/20">
+                                                <img
+                                                    src={generatedImageUrl}
+                                                    alt="Generated image"
+                                                    className="w-full object-contain mx-auto"
+                                                    style={{ maxHeight: '600px' }}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                    {!isImageLoading && !imageError && !generatedImageUrl && (
+                                        <span className="text-muted-foreground text-sm">Click "Generate Image" to visualize the concept.</span>
+                                    )}
+                                </div>
+                            </section>
+
+                        </div>
+                    </ScrollArea>
+                     <DialogFooter className="mt-4 pr-6"> {/* Added pr-6 to align with ScrollArea */}
+                        <DialogClose asChild>
+                        <Button type="button" variant="secondary">
+                            Close
+                        </Button>
+                        </DialogClose>
+                    </DialogFooter>
+                </DialogContent>
+            )}
+
+            {/* RE-ADD Journey Details Dialog Content */}
+            {viewingJourneyId && (
+                <DialogContent className="max-w-5xl"> {/* Use wider dialog for journey */} 
+                    <DialogHeader>
+                        {/* Find title based on viewingJourneyId from ALL results, not just selected */}
+                        <DialogTitle>Customer Journey: {Object.values(resultsByModel).flat().find(r => r?.tempId === viewingJourneyId)?.title || 'Analysis'}</DialogTitle>
+                        <DialogDescription>
+                          Visual breakdown of the structured journey analysis.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="mt-4 max-h-[70vh] overflow-y-auto pr-2"> 
+                        {/* Use the VisualJourneyLayout component */}
+                        <VisualJourneyLayout journey={customerJourneys[viewingJourneyId] || null} />
+                    </div>
+                    <DialogFooter className="mt-4">
+                        <DialogClose asChild>
+                         <Button type="button" variant="outline">Close</Button>
+                        </DialogClose>
+                    </DialogFooter>
+                </DialogContent>
+            )}
+
+            {/* --- NEW Section: Generated Creative Concepts --- */}
+            {isGeneratingConcepts && (
+                <div className="mt-8 pt-6 border-t flex flex-col items-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary mb-3" />
+                    <p className="text-muted-foreground">Generating Content Pillars / Focus Targets...</p>
+                </div>
+            )}
+            {conceptsError && !isGeneratingConcepts && (
+                 <div className="mt-8 pt-6 border-t flex flex-col items-center text-destructive">
+                     <AlertTriangle className="h-8 w-8 mb-2" />
+                     <p className="font-semibold">Error Generating Concepts</p>
+                     <p className="text-sm mt-1 text-center">{conceptsError}</p>
+                 </div>
+            )}
+            {creativeConcepts && !isGeneratingConcepts && !conceptsError && selectedCard && ( // Only show if a card is selected and concepts generated
+                <div className="mt-8 pt-6 border-t">
+                    <h3 className="text-xl font-semibold mb-4 text-center">Generated Content Pillars / Focus Targets for: <span className="font-normal italic">{selectedCard.title}</span></h3>
+                    
+                    {/* First Step: Select a Content Pillar */}
+                    {!selectedConceptForImage && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {creativeConcepts.map((concept, index) => (
+                                <Card 
+                                    key={index} 
+                                    className={cn(
+                                        "shadow-sm flex flex-col cursor-pointer hover:border-primary transition-colors",
+                                        "hover:shadow-md"
+                                    )}
+                                    onClick={() => {
+                                        setSelectedConceptForImage(concept);
+                                        // --- CORRECTED: Pre-populate ad copy details from selected card ---
+                                        setAdCopyDetails(prevDetails => ({
+                                            ...prevDetails, // Keep existing details like headline etc.
+                                            description: selectedCard?.description || '',
+                                            competitiveGap: selectedCard?.competitiveGap || ''
+                                            // Reset specific fields if needed, e.g.:
+                                            // headline: '', 
+                                            // subHeadline1: '',
+                                            // subHeadline2: '',
+                                            // subHeadline3: '',
+                                            // subHeadlineCta: '',
+                                            // bubblePoints: []
+                                        }));
+                                        // Reset image-specific states
+                                        setGeneratedImageUrl(null);
+                                        setImageError(null);
+                                        setCustomPrompt(''); // Reset custom prompt when concept changes
+                                    }}
+                                >
+                                    <CardHeader className="pb-3 bg-muted/30 rounded-t-lg">
+                                        <CardTitle className="text-base">
+                                            <Badge className="mr-2 mb-1 text-xs" variant="secondary">Focus Target</Badge>
+                                            {concept.focusTarget}
+                                        </CardTitle>
+                                        <CardDescription className="text-sm pt-1">
+                                            <span className="font-medium text-foreground">Key Message:</span> {concept.keyMessage}
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="pt-4 flex-grow">
+                                        <h4 className="text-sm font-semibold mb-2 text-muted-foreground">Topic Ideas:</h4>
+                                        <div className="space-y-3 text-xs">
+                                            {concept.topicIdeas.productBenefits && concept.topicIdeas.productBenefits.length > 0 && (
+                                                <div>
+                                                    <h5 className="font-medium mb-1 text-primary/80">Product Benefits</h5>
+                                                    <ul className="list-disc list-inside space-y-0.5 pl-1">
+                                                        {concept.topicIdeas.productBenefits.map((idea, i) => <li key={`ben-${i}`}>{idea}</li>)}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                            {concept.topicIdeas.painPointsEmotional && concept.topicIdeas.painPointsEmotional.length > 0 && (
+                                                <div>
+                                                    <h5 className="font-medium mb-1 text-amber-700/80 dark:text-amber-500/80">Pain Points & Emotional</h5>
+                                                    <ul className="list-disc list-inside space-y-0.5 pl-1">
+                                                        {concept.topicIdeas.painPointsEmotional.map((idea, i) => <li key={`pain-${i}`}>{idea}</li>)}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                            {concept.topicIdeas.promotionPricing && concept.topicIdeas.promotionPricing.length > 0 && (
+                                                <div>
+                                                    <h5 className="font-medium mb-1 text-purple-700/80 dark:text-purple-500/80">Promotion & Pricing</h5>
+                                                    <ul className="list-disc list-inside space-y-0.5 pl-1">
+                                                        {concept.topicIdeas.promotionPricing.map((idea, i) => <li key={`promo-${i}`}>{idea}</li>)}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Second Step: Image Generation Section */}
+                    {selectedConceptForImage && (
+                        <div className="mt-6 space-y-6">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-lg font-semibold">Generate Images for Selected Content Pillar</h3>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                        setSelectedConceptForImage(null);
+                                        setGeneratedImageUrl(null);
+                                        setImageError(null);
+                                        setProductImages([]);
+                                        setAdReferenceImages([]);
+                                        setUserBrief("As an expert photographer and creator, create a new ad image for the product on the right, using the mood and tone of the reference image on the left. I want it to have an outstanding ad design with high-quality details.");
+                                    }}
+                                >
+                                    <X className="h-4 w-4 mr-2" />
+                                    Select Different Pillar
+                                </Button>
+                            </div>
+
+                            <div className="space-y-6">
+                                {/* Selected Concept Summary - Now Editable */}
+                                <Card className="bg-muted/30">
+                                    <CardHeader>
+                                        <CardTitle className="text-base flex flex-col gap-2">
+                                            <Badge className="w-fit" variant="secondary">Selected Focus Target</Badge>
+                                            <Textarea
+                                                value={selectedConceptForImage.focusTarget}
+                                                onChange={(e) => setSelectedConceptForImage(prev => ({
+                                                    ...prev!,
+                                                    focusTarget: e.target.value
+                                                }))}
+                                                className="min-h-[60px] text-base"
+                                                placeholder="Enter focus target..."
+                                            />
+                                        </CardTitle>
+                                        <CardDescription>
+                                            <span className="font-medium">Key Message:</span>
+                                            <Textarea
+                                                value={selectedConceptForImage.keyMessage}
+                                                onChange={(e) => setSelectedConceptForImage(prev => ({
+                                                    ...prev!,
+                                                    keyMessage: e.target.value
+                                                }))}
+                                                className="mt-2 min-h-[60px]"
+                                                placeholder="Enter key message..."
+                                            />
+                                        </CardDescription>
+                                    </CardHeader>
+                                </Card>
+
+                                {/* Ad Copy Inputs */}
+                                <div className="space-y-4 border rounded-lg p-4 bg-muted/10">
+                                    <h4 className="font-semibold">Ad Copy Details</h4>
+                                    
+                                    {/* Description */}
+                                    <div className="space-y-2">
+                                        <Label htmlFor="description">รายละเอียด (Description)</Label>
+                                        <Textarea
+                                            id="description"
+                                            placeholder="นำเสนอเนื้อหาเชิงลึกที่แสดงให้เห็นถึงคุณภาพและความทนทานของบล็อกไฟฟ้า iMan โดยอาจเปรียบเทียบกับเครื่องมือราคาถูกทั่วไป หรือแสดงการทดสอบความแข็งแรง เพื่อสร้างความน่าเชื่อถือและทักษ์ใจต่ออนของผู้..."
+                                            className="min-h-[100px]"
+                                            value={adCopyDetails.description}
+                                            onChange={(e) => setAdCopyDetails(prev => ({
+                                                ...prev,
+                                                description: e.target.value
+                                            }))}
                                         />
+                                    </div>
+
+                                    {/* Competitive Gap */}
+                                    <div className="space-y-2">
+                                        <Label htmlFor="competitiveGap">ช่องว่างทางการแข่งขัน (Competitive Gap Addressed)</Label>
+                                        <Textarea
+                                            id="competitiveGap"
+                                            placeholder="ความกังวลเรื่องความทนทานของบล็อกไฟฟ้า กลัวซื้อมาแล้วใช้งานได้ไม่นาน เสียเงินโดยเปล่าประโยชน์"
+                                            className="min-h-[100px]"
+                                            value={adCopyDetails.competitiveGap}
+                                            onChange={(e) => setAdCopyDetails(prev => ({
+                                                ...prev,
+                                                competitiveGap: e.target.value
+                                            }))}
+                                        />
+                                    </div>
+
+                                    {/* Headline */}
+                                    <div className="space-y-2">
+                                        <Label htmlFor="headline">Headline</Label>
+                                        <Textarea
+                                            id="headline"
+                                            placeholder="e.g., เปิดอู่รถชนิดนี้ ต้องใช้บล็อกรุ่นไหน?"
+                                            className="min-h-[60px]"
+                                            value={adCopyDetails.headline}
+                                            onChange={(e) => setAdCopyDetails(prev => ({
+                                                ...prev,
+                                                headline: e.target.value
+                                            }))}
+                                        />
+                                    </div>
+
+                                    {/* Sub-Headlines */}
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="subheadline1">Sub-Headline 1</Label>
+                                            <Input
+                                                id="subheadline1"
+                                                placeholder="e.g., IW-400"
+                                                value={adCopyDetails.subHeadline1}
+                                                onChange={(e) => setAdCopyDetails(prev => ({
+                                                    ...prev,
+                                                    subHeadline1: e.target.value
+                                                }))}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="subheadline2">Sub-Headline 2</Label>
+                                            <Input
+                                                id="subheadline2"
+                                                placeholder="e.g., IW-800"
+                                                value={adCopyDetails.subHeadline2}
+                                                onChange={(e) => setAdCopyDetails(prev => ({
+                                                    ...prev,
+                                                    subHeadline2: e.target.value
+                                                }))}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="subheadline3">Sub-Headline 3</Label>
+                                            <Input
+                                                id="subheadline3"
+                                                placeholder="e.g., IW-X6"
+                                                value={adCopyDetails.subHeadline3}
+                                                onChange={(e) => setAdCopyDetails(prev => ({
+                                                    ...prev,
+                                                    subHeadline3: e.target.value
+                                                }))}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Sub-Headline + CTA */}
+                                    <div className="space-y-2">
+                                        <Label htmlFor="subheadline-cta">Sub-Headline + CTA</Label>
+                                        <Textarea
+                                            id="subheadline-cta"
+                                            placeholder="e.g., บล็อกไฟฟ้าไร้สายจาก iMan พร้อมตอบโจทย์&#10;เลือกซื้อได้เลย!"
+                                            className="min-h-[80px]"
+                                            value={adCopyDetails.subHeadlineCta}
+                                            onChange={(e) => setAdCopyDetails(prev => ({
+                                                ...prev,
+                                                subHeadlineCta: e.target.value
+                                            }))}
+                                        />
+                                    </div>
+
+                                    {/* Bubble Points */}
+                                    <div className="space-y-2">
+                                        <Label htmlFor="bubble-points">Bubble Points</Label>
+                                        <Textarea
+                                            id="bubble-points"
+                                            placeholder="e.g.,&#10;2 Years Warranty&#10;Free & Fast Maintenance&#10;Online Support 24/7"
+                                            className="min-h-[100px]"
+                                            value={adCopyDetails.bubblePoints.join('\n')}
+                                            onChange={(e) => setAdCopyDetails(prev => ({
+                                                ...prev,
+                                                bubblePoints: e.target.value.split('\n').filter(point => point.trim() !== '')
+                                            }))}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Custom Prompt Input - Now with Default Value */}
+                                {/* <div className="space-y-2">
+                                    <Label htmlFor="image-prompt">Custom Prompt</Label>
+                                    <Textarea
+                                        id="image-prompt"
+                                        placeholder="Enter additional prompt details to guide the image generation..."
+                                        className="min-h-[100px]"
+                                        value={userBrief || "As an expert photographer and creator, create a new ad image for the product on the right, using the mood and tone of the reference image on the left. I want it to have an outstanding ad design with high-quality details."}
+                                        onChange={(e) => setUserBrief(e.target.value)}
+                                    />
+                                </div> */}
+
+                                {/* Custom Prompt Input */}
+                                <div className="space-y-4 border rounded-lg p-4 bg-muted/10">
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="font-semibold">Image Generation Instructions</h4>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="custom-prompt">Custom Instructions (Optional)</Label>
+                                        <Textarea
+                                            id="custom-prompt"
+                                            placeholder="Add any additional instructions for image generation..."
+                                            className="min-h-[100px] font-mono text-sm"
+                                            value={customPrompt}
+                                            onChange={(e) => setCustomPrompt(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Image Size Selection */}      
+                                <div className="space-y-2">
+                                    <Label htmlFor="image-size-select">Image Size</Label>
+                                    <Select value={imageSize} onValueChange={setImageSize} disabled={isGeneratingImage}>
+                                        <SelectTrigger className="w-[180px]" id="image-size-select">
+                                            <SelectValue placeholder="Select size..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="auto">Auto (Default)</SelectItem>
+                                            <SelectItem value="1024x1024">1024x1024 (Square)</SelectItem>
+                                            <SelectItem value="1536x1024">1536x1024 (Landscape)</SelectItem>
+                                            <SelectItem value="1024x1536">1024x1536 (Portrait)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                {/* Product Images Upload */}
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="font-medium text-sm">1. Product/Material Images (PNG only)</h4>
+                                        <span className="text-xs text-muted-foreground">Required • Max 3 files</span>
+                                    </div>
+                                    <div
+                                        {...getProductRootProps()}
+                                        className={cn(
+                                            "border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors",
+                                            isProductDragActive ? "border-primary bg-primary/10" : "border-muted-foreground/25"
+                                        )}
+                                    >
+                                        <input {...getProductInputProps()} />
+                                        <div className="space-y-2">
+                                            <div className="flex justify-center">
+                                                <UploadCloud className="h-8 w-8 text-muted-foreground" />
+                                            </div>
+                                            <p>Drop product images here, or click to select</p>
+                                            <p className="text-sm text-muted-foreground">PNG format only</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Product Images Preview */}
+                                    {productImages.length > 0 && (
+                                        <div className="grid grid-cols-3 gap-4">
+                                            {productImages.map((file, index) => (
+                                                <div key={index} className="relative group">
+                                                    <img
+                                                        src={URL.createObjectURL(file)}
+                                                        alt={`Product ${index + 1}`}
+                                                        className="w-full h-32 object-cover rounded-lg border"
+                                                    />
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            removeProductImage(index);
+                                                        }}
+                                                        className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    >
+                                                        <X className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Ad Reference Images Upload */}
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="font-medium text-sm">2. Ad Reference Images</h4>
+                                        <span className="text-xs text-muted-foreground">Optional • Max 5 files</span>
+                                    </div>
+                                    <div
+                                        {...getAdReferenceRootProps()}
+                                        className={cn(
+                                            "border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors",
+                                            isAdReferenceDragActive ? "border-primary bg-primary/10" : "border-muted-foreground/25"
+                                        )}
+                                    >
+                                        <input {...getAdReferenceInputProps()} />
+                                        <div className="space-y-2">
+                                            <div className="flex justify-center">
+                                                <UploadCloud className="h-8 w-8 text-muted-foreground" />
+                                            </div>
+                                            <p>Drop reference ad images here, or click to select</p>
+                                            <p className="text-sm text-muted-foreground">JPG, JPEG, PNG accepted</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Ad Reference Images Preview */}
+                                    {adReferenceImages.length > 0 && (
+                                        <div className="grid grid-cols-3 gap-4">
+                                            {adReferenceImages.map((file, index) => (
+                                                <div key={index} className="relative group">
+                                                    <img
+                                                        src={URL.createObjectURL(file)}
+                                                        alt={`Reference ${index + 1}`}
+                                                        className="w-full h-32 object-cover rounded-lg border"
+                                                    />
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            removeAdReferenceImage(index);
+                                                        }}
+                                                        className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    >
+                                                        <X className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Generate Button */}
+                                <Button
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        handleGenerateImageWithReferences();
+                                    }}
+                                    disabled={productImages.length === 0 || isGeneratingImage}
+                                    className="w-full"
+                                >
+                                    {isGeneratingImage ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            Generating...
+                                        </>
+                                    ) : (
+                                        'Generate Image'
+                                    )}
+                                </Button>
+
+                                {/* Error Display */}
+                                {imageError && (
+                                    <div className="p-4 border border-destructive/50 bg-destructive/10 rounded-lg text-destructive">
+                                        <p className="font-semibold">Error generating image:</p>
+                                        <p className="text-sm">{imageError}</p>
+                                    </div>
+                                )}
+
+                                {/* Generated Image Display */}
+                                {generatedImageUrl && (
+                                    <div className="space-y-2">
+                                        <h4 className="font-semibold">Generated Image:</h4>
+                                        <div className="relative w-full border rounded-lg overflow-hidden bg-muted/20">
+                                            <img
+                                                src={generatedImageUrl}
+                                                alt="Generated image"
+                                                className="w-full object-contain mx-auto"
+                                                style={{ maxHeight: '600px' }}
+                                            />
+                                        </div>
                                     </div>
                                 )}
                             </div>
-
-                            <DialogFooter>
-                                <DialogClose asChild>
-                                    <Button variant="secondary">Close</Button>
-                                </DialogClose>
-                            </DialogFooter>
-                        </>
+                        </div>
                     )}
-                </DialogContent>
-            </Dialog>
+                </div>
+            )}
 
-            {/* Full Image Dialog */}
-            <Dialog open={isFullImageDialogOpen} onOpenChange={setIsFullImageDialogOpen}>
-                <DialogContent className="max-w-[90vw] max-h-[90vh] p-0">
-                    <div className="relative">
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="absolute top-2 right-2 z-10"
-                            onClick={() => setIsFullImageDialogOpen(false)}
-                        >
-                            <X className="h-4 w-4" />
-                        </Button>
-                        <img
-                            src={generatedImageUrl}
-                            alt="Generated image full view"
-                            className="w-full h-full object-contain"
-                        />
-                    </div>
-                </DialogContent>
-            </Dialog>
-        </>
+        </Dialog>
     )
 }
