@@ -60,13 +60,50 @@ export async function POST(req: Request) {
             openaiFormData.append('image[]', file);
         });
 
-        // Construct the prompt
-        let prompt = `Generate a photorealistic advertisement image based on the concept: ${concept.focusTarget}. `;
-        prompt += `Key message to convey: "${concept.keyMessage}". `;
-        
-        if (customPrompt) {
-            prompt += customPrompt;
+        // Construct a comprehensive prompt that includes all key elements
+        let prompt = `Create a professional, photorealistic advertisement image that effectively communicates the following:
+
+Main Focus: ${concept.focusTarget}
+Key Message: ${concept.keyMessage}
+
+Ad Structure:
+- Headline: ${concept.adCopy?.headline || ''}
+- Sub-Headlines: 
+  ${concept.adCopy?.subHeadline1 ? `• ${concept.adCopy.subHeadline1}` : ''}
+  ${concept.adCopy?.subHeadline2 ? `• ${concept.adCopy.subHeadline2}` : ''}
+  ${concept.adCopy?.subHeadline3 ? `• ${concept.adCopy.subHeadline3}` : ''}
+- Call to Action: ${concept.adCopy?.subHeadlineCta || ''}
+
+Key Features to Highlight:
+${concept.adCopy?.bubblePoints?.map((point: string) => `• ${point}`).join('\n') || ''}
+
+Description: ${concept.description || ''}
+Competitive Advantage: ${concept.competitiveGap || ''}
+
+Style Guidelines:
+- Create a professional and polished advertisement layout
+- Ensure text is clear and readable
+- Maintain brand consistency
+- Use high-quality, photorealistic imagery
+- Incorporate dynamic visual elements that grab attention`;
+
+        // Add reference image guidance if reference images are provided
+        if (adReferenceImages.length > 0) {
+            prompt += `\n\nReference Image Guidelines:
+- Use the provided reference images as inspiration for the visual style and mood
+- Adapt the composition and layout while maintaining the product's focus
+- Incorporate similar lighting techniques and color schemes where appropriate`;
         }
+
+        // Add custom prompt if provided
+        if (customPrompt) {
+            prompt += `\n\nAdditional Requirements:\n${customPrompt}`;
+        }
+
+        // Log the final prompt
+        console.log('=== Generated Prompt for OpenAI ===');
+        console.log(prompt);
+        console.log('=== End of Prompt ===');
 
         openaiFormData.append('prompt', prompt);
 
