@@ -35,12 +35,14 @@ export async function POST(req: Request) {
         const imageSize = formData.get('size') as string || 'auto'; // Default to auto if not provided
 
         // Validate inputs
+        /* // Commented out: Make product images optional (potential API issue with /edits)
         if (productImages.length === 0) {
             return NextResponse.json(
                 { error: 'At least one product image is required' },
                 { status: 400 }
             );
         }
+        */
 
         if (!concept) {
             return NextResponse.json(
@@ -51,7 +53,7 @@ export async function POST(req: Request) {
 
         // Prepare data for OpenAI API
         const openaiFormData = new FormData();
-        openaiFormData.append('model', 'gpt-image-1');
+        openaiFormData.append('model', 'gpt-image-1'); // TODO: Change to gpt-image-1 for production
 
         // Add all product images
         productImages.forEach((file) => {
@@ -128,12 +130,23 @@ Competitive Advantage: ${concept.competitiveGap || ''}
         }
 
         const result = await openaiResponse.json();
-        
-        // OpenAI returns base64 encoded image
-        const imageUrl = result.data[0].b64_json;
 
-        return NextResponse.json({
-            imageUrl: `data:image/png;base64,${imageUrl}`,
+        // Log the raw response from OpenAI for debugging
+        console.log("Raw OpenAI Response:", JSON.stringify(result, null, 2));
+        
+        // Revert to extracting b64_json as /edits doesn't support response_format: url
+        const imageUrl = result.data[0].b64_json; 
+
+        if (!imageUrl) {
+            console.error('OpenAI response did not contain b64_json image data.', result);
+            return NextResponse.json(
+                { error: 'Failed to get image data from OpenAI.' },
+                { status: 500 }
+            );
+        }
+
+        return NextResponse.json({ 
+            imageUrl: `data:image/png;base64,${imageUrl}`, // Return data URI
             metadata: {
                 generatedAt: new Date().toISOString(),
                 concept: concept,

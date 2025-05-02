@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Bookmark, Share2, Loader2, AlertTriangle, BrainCircuit, X, Info, CheckSquare, UploadCloud } from "lucide-react"
+import { Bookmark, Share2, Loader2, AlertTriangle, BrainCircuit, X, Info, CheckSquare, UploadCloud, ExternalLink } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useState, useEffect } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -1769,6 +1769,17 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                     </div>
                                 </div>
 
+                                {/* --- Guidance Text --- */}
+                                <div className="p-3 my-4 border rounded-md bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-sm space-y-1">
+                                    <p className="font-semibold">Tips for Best Image Results:</p>
+                                    <ul className="list-disc list-inside text-xs space-y-0.5">
+                                        <li>Providing a <strong>Product/Material Image (PNG)</strong> (ideally with transparency) allows the AI to edit it directly (uses `/edits` API).</li>
+                                        <li>If no Product/Material Image is provided, the AI generates an image purely from the prompt (uses `/generations` API).</li>
+                                        <li>Upload <strong>Ad Reference Images</strong> (e.g., existing ads, logos, style guides) to guide the visual style, mood, and composition (influence via prompt text).</li>
+                                        <li>Use the <strong>Custom Instructions</strong> field for specific requirements (e.g., "place product on a wooden table", "add a beach background").</li>
+                                    </ul>
+                                </div>
+
                                 {/* Image Size Selection */}      
                                 <div className="space-y-2">
                                     <Label htmlFor="image-size-select">Image Size</Label>
@@ -1789,7 +1800,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between">
                                         <h4 className="font-medium text-sm">1. Product/Material Images (PNG only)</h4>
-                                        <span className="text-xs text-muted-foreground">Required • Max 3 files</span>
+                                        <span className="text-xs text-muted-foreground">Optional • Max 3 files</span> {/* Changed from Required */}
                                     </div>
                                     <div
                                         {...getProductRootProps()}
@@ -1887,7 +1898,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                         e.preventDefault();
                                         handleGenerateImageWithReferences();
                                     }}
-                                    disabled={productImages.length === 0 || isGeneratingImage}
+                                    disabled={isGeneratingImage} // Removed productImages.length === 0 check
                                     className="w-full"
                                 >
                                     {isGeneratingImage ? (
@@ -1914,7 +1925,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                         <h4 className="font-semibold">Generated Image:</h4>
                                         <div className="relative w-full border rounded-lg overflow-hidden bg-muted/20">
                                             <img
-                                                src={generatedImageUrl}
+                                                src={generatedImageUrl} // Expecting data URI
                                                 alt="Generated image"
                                                 className="w-full object-contain mx-auto"
                                                 style={{ maxHeight: '600px' }}
