@@ -18,6 +18,7 @@ import { CreativeConcept, TopicIdeas, SelectedRecommendationForCreative } from "
 import { ImageGenerationDialog } from "@/components/ImageGenerationDialog";
 import { useDropzone } from "react-dropzone";
 import { Input } from "@/components/ui/input";
+import React from 'react';
 
 // Define interfaces
 interface AdCopyDetails {
@@ -235,6 +236,53 @@ export function RecommendationCards() {
     const [error, setError] = useState<ModelErrorState>({});
     const [modelsRequestedInLastRun, setModelsRequestedInLastRun] = useState<string[]>([]); // Track models for current results
 
+    // --- NEW: State for Competitor Analysis ---
+    const [competitorAnalysis, setCompetitorAnalysis] = useState<any>(null);
+    const [isCompetitorAnalysisLoading, setIsCompetitorAnalysisLoading] = useState<boolean>(false);
+    const [competitorAnalysisError, setCompetitorAnalysisError] = useState<string | null>(null);
+    const [showCompetitorAnalysis, setShowCompetitorAnalysis] = useState<boolean>(false);
+
+    // --- Helper function to fetch competitor analysis ---
+    const fetchCompetitorAnalysis = async () => {
+        if (!selectedClientName || !selectedProductFocus) return;
+        
+        setIsCompetitorAnalysisLoading(true);
+        setCompetitorAnalysisError(null);
+        setCompetitorAnalysis(null);
+        
+        try {
+            console.log(`Fetching competitor analysis for ${selectedClientName}, ${selectedProductFocus}`);
+            // Include runId if available
+            const queryParams = new URLSearchParams();
+            queryParams.set('clientName', selectedClientName);
+            queryParams.set('productFocus', selectedProductFocus);
+            if (selectedRunId) {
+                queryParams.set('runId', selectedRunId);
+            }
+            
+            const response = await fetch(`/api/competitor-analysis?${queryParams.toString()}`);
+            
+            if (!response.ok) {
+                throw new Error(`Error fetching competitor analysis: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            console.log("Competitor analysis data received:", JSON.stringify(data, null, 2));
+            
+            // Store the entire response object
+            setCompetitorAnalysis(data);
+            setShowCompetitorAnalysis(true);
+            
+            return data; // Return the data for use in other functions
+        } catch (error) {
+            console.error("Error fetching competitor analysis:", error);
+            setCompetitorAnalysisError(error instanceof Error ? error.message : String(error));
+            return null;
+        } finally {
+            setIsCompetitorAnalysisLoading(false);
+        }
+    };
+
     // --- State for Dialog (Recommendation Details Only) ---
     const [selectedRecommendation, setSelectedRecommendation] = useState<Recommendation | null>(null);
     // --- State for Image Generation in Dialog ---
@@ -243,53 +291,6 @@ export function RecommendationCards() {
     const [isImageLoading, setIsImageLoading] = useState<boolean>(false);
     const [imageError, setImageError] = useState<string | null>(null);
 
-    // --- NEW: State for Competitor Analysis ---
-        const [competitorAnalysis, setCompetitorAnalysis] = useState<any>(null);
-        const [isCompetitorAnalysisLoading, setIsCompetitorAnalysisLoading] = useState<boolean>(false);
-        const [competitorAnalysisError, setCompetitorAnalysisError] = useState<string | null>(null);
-        const [showCompetitorAnalysis, setShowCompetitorAnalysis] = useState<boolean>(false);
-    
-        // --- Helper function to fetch competitor analysis ---
-        const fetchCompetitorAnalysis = async () => {
-            if (!selectedClientName || !selectedProductFocus) return;
-            
-            setIsCompetitorAnalysisLoading(true);
-            setCompetitorAnalysisError(null);
-            setCompetitorAnalysis(null);
-            
-            try {
-                console.log(`Fetching competitor analysis for ${selectedClientName}, ${selectedProductFocus}`);
-                // Include runId if available
-                const queryParams = new URLSearchParams();
-                queryParams.set('clientName', selectedClientName);
-                queryParams.set('productFocus', selectedProductFocus);
-                if (selectedRunId) {
-                    queryParams.set('runId', selectedRunId);
-                }
-                
-                const response = await fetch(`/api/competitor-analysis?${queryParams.toString()}`);
-                
-                if (!response.ok) {
-                    throw new Error(`Error fetching competitor analysis: ${response.status}`);
-                }
-                
-                const data = await response.json();
-                console.log("Competitor analysis data received:", JSON.stringify(data, null, 2));
-                
-                // Store the entire response object
-                setCompetitorAnalysis(data);
-                setShowCompetitorAnalysis(true);
-                
-                return data; // Return the data for use in other functions
-            } catch (error) {
-                console.error("Error fetching competitor analysis:", error);
-                setCompetitorAnalysisError(error instanceof Error ? error.message : String(error));
-                return null;
-            } finally {
-                setIsCompetitorAnalysisLoading(false);
-            }
-        };
-    
     // --- State for Client/Product Selection ---
     const [clientNames, setClientNames] = useState<string[]>([]);
     const [productFocuses, setProductFocuses] = useState<string[]>([]);
@@ -430,9 +431,9 @@ export function RecommendationCards() {
         setIsGeneratingConcepts(false);
         setConceptsError(null);
         // Clear competitor analysis data
-
         setCompetitorAnalysis(null);
         setCompetitorAnalysisError(null);
+
         try {
             const productFocusForQuery = selectedProductFocus === 'placeholder-for-empty' ? null : selectedProductFocus;
             const queryParams = new URLSearchParams({ clientName: selectedClientName });
@@ -448,8 +449,9 @@ export function RecommendationCards() {
             if (!runData.id) throw new Error('Analysis run ID missing from response.');
             setSelectedRunId(runData.id);
             console.log("Found runId for recommendations:", runData.id);
+            
+            // After getting the runId, fetch competitor analysis
             fetchCompetitorAnalysis();
-
         } catch (err: any) {
             console.error("Error fetching analysis run ID:", err);
             setMetaError(err.message);
@@ -468,54 +470,100 @@ export function RecommendationCards() {
         }
     }, [selectedClientName, selectedProductFocus]);
 
-    // --- Generate Recommendations (Updated for Multi-Model) ---
-    const handleGenerateRecommendations = async () => {
-        if (!selectedRunId) {
-            setMetaError("Please select a valid Client and Product combination first.");
+    // --- Handle Generate Ideas Button Click ---
+    const handleGenerateIdeas = async () => {
+        if (!selectedClientName || !selectedProductFocus) {
+            setMetaError("Please select both a client name and product focus.");
             return;
         }
+
         if (!competitorAnalysis) {
             setMetaError("Please wait for competitor analysis to complete before generating ideas.");
             return;
         }
 
         if (selectedModels.length === 0) {
-            setMetaError("Please select at least one generation model.");
+            setMetaError("Please select at least one model to generate ideas.");
             return;
         }
 
+        // Clear previous results
+        setResultsByModel({});
+        setError({});
+        
         // Reset state for the selected models
         const initialLoadingState: ModelLoadingState = {};
         const initialErrorState: ModelErrorState = {};
         selectedModels.forEach(model => {
-            initialLoadingState[model] = true;
+            initialLoadingState[model] = false;
             initialErrorState[model] = null;
         });
+        
         setIsLoading(initialLoadingState);
-        setError(initialErrorState);
-        setResultsByModel({});
-        setSelectedRecommendation(null);
         setModelsRequestedInLastRun(selectedModels);
-        setSelectedCard(null); // Clear selection
-        setCustomerJourneys({});
-        setIsGeneratingJourneys(false);
-        setJourneyError(null);
-        setCreativeConcepts(null); // Clear concepts
-        setIsGeneratingConcepts(false);
-        setConceptsError(null);
 
         try {
-            console.log(`Fetching recommendations for runId: ${selectedRunId}, Models: ${selectedModels.join(', ')}`);
-            let apiUrl = `/api/generate-recommendations?runId=${selectedRunId}`;
-            apiUrl += `&models=${encodeURIComponent(selectedModels.join(','))}`;
-            if (userBrief.trim()) {
-                apiUrl += `&brief=${encodeURIComponent(userBrief.trim())}`;
+            if (!selectedRunId) {
+                throw new Error("Could not find or create analysis run ID.");
             }
-            apiUrl += `&taskSection=${encodeURIComponent(editableTaskSection)}`;
-            apiUrl += `&detailsSection=${encodeURIComponent(editableDetailsSection)}`;
 
-            const response = await fetch(apiUrl);
+            // Format competitor analysis for the prompt
+            let competitorAnalysisForPrompt = "";
+            if (competitorAnalysis && competitorAnalysis.analysis) {
+                // Format the competitor analysis for the prompt
+                const analysis = competitorAnalysis.analysis;
+                try {
+                    // If it's a structured object, format it nicely
+                    if (typeof analysis === 'object') {
+                        competitorAnalysisForPrompt = `
+Strengths: ${Array.isArray(analysis.strengths) ? analysis.strengths.join(", ") : "N/A"}
+Weaknesses: ${Array.isArray(analysis.weaknesses) ? analysis.weaknesses.join(", ") : "N/A"}
+Shared Patterns: ${Array.isArray(analysis.shared_patterns) ? analysis.shared_patterns.join(", ") : "N/A"}
+Market Gaps: ${Array.isArray(analysis.market_gaps) ? analysis.market_gaps.join(", ") : "N/A"}
+Differentiation Strategies: ${Array.isArray(analysis.differentiation_strategies) ? analysis.differentiation_strategies.join(", ") : "N/A"}
+Summary: ${analysis.summary || "N/A"}
+`;
+                    } else if (typeof analysis === 'string') {
+                        // If it's a string, use it directly
+                        competitorAnalysisForPrompt = analysis;
+                    }
+                } catch (err) {
+                    console.error("Error formatting competitor analysis:", err);
+                    competitorAnalysisForPrompt = JSON.stringify(analysis);
+                }
+            }
+
+            // Generate Recommendations using Competitor Analysis as input
+            console.log(`Fetching recommendations for runId: ${selectedRunId}, Models: ${selectedModels.join(', ')}`);
+            
+            // Update loading state for selected models
+            const newLoadingState = { ...initialLoadingState };
+            selectedModels.forEach(model => {
+                newLoadingState[model] = true;
+            });
+            setIsLoading(newLoadingState);
+            
+            const apiUrl = `/api/generate-recommendations`;
+            const body = {
+                runId: selectedRunId,
+                models: selectedModels,
+                brief: userBrief.trim(),
+                taskSection: editableTaskSection,
+                detailsSection: editableDetailsSection,
+                competitorAnalysis: competitorAnalysisForPrompt
+            };
+
+            console.log("Sending request to generate recommendations:", body);
+            
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            
+            console.log("Response status:", response.status);
             const data = await response.json();
+            console.log("Response data:", data);
 
             if (!response.ok) {
                 const errorMsg = data.error || `API Error: ${response.status}`;
@@ -526,35 +574,19 @@ export function RecommendationCards() {
                 });
                 setError(newErrorState);
                 setResultsByModel({});
-            } else {
-                const processedResults: ModelResults = {};
-                Object.entries(data.results || {}).forEach(([modelName, recommendations]) => {
-                    if (Array.isArray(recommendations)) {
-                        processedResults[modelName] = recommendations.map((rec, index) => ({
-                            ...rec,
-                            tempId: `${modelName}-${selectedRunId}-${index}`
-                        }));
-                    }
-                });
-                setResultsByModel(processedResults);
-                setError(prevErrors => ({ ...prevErrors, ...(data.errors || {}) }));
+                return;
             }
 
+            // Set the results by model
+            setResultsByModel(data.results || {});
+            setError({});
+            
+            // Reset loading state
+            setIsLoading(initialLoadingState);
         } catch (err: any) {
-            console.error("Failed to fetch recommendations:", err);
-            const errorMsg = err.message || "An unknown error occurred while generating recommendations.";
-            const newErrorState = { ...initialErrorState };
-            selectedModels.forEach(model => {
-                newErrorState[model] = errorMsg;
-            });
-            setError(newErrorState);
-            setResultsByModel({});
-        } finally {
-            const finalLoadingState: ModelLoadingState = {};
-            selectedModels.forEach(model => {
-                finalLoadingState[model] = false;
-            });
-            setIsLoading(finalLoadingState);
+            console.error("Error in handleGenerateIdeas:", err);
+            setMetaError(err.message || "Failed to generate ideas.");
+            setIsLoading(initialLoadingState);
         }
     };
 
@@ -726,30 +758,27 @@ export function RecommendationCards() {
             console.log(`[ui] Calling API to generate creative concepts for: ${recommendationForApi.title}`);
             const response = await fetch('/api/generate-creative-concepts', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                },
                 body: JSON.stringify({
-                    selectedRecommendations: [recommendationForApi], // Send as array
+                    selectedRecommendations: [recommendationForApi],
                     clientName: selectedClientName,
-                    productFocus: selectedProductFocus === 'placeholder-for-empty' ? null : selectedProductFocus,
-                })
+                    productFocus: selectedProductFocus,
+                    competitorAnalysis: competitorAnalysis?.analysis || null
+                }),
             });
 
-            const result = await response.json();
-
             if (!response.ok) {
-                throw new Error(result.error || `API Error: ${response.status}`);
+                throw new Error(`Failed to generate creative concepts: ${response.status}`);
             }
 
-            if (!result.concepts || !Array.isArray(result.concepts)) {
-                 throw new Error('Invalid response structure from concepts API.');
-            }
-
-            setCreativeConcepts(result.concepts);
-            console.log("[ui] Successfully received creative concepts:", result.concepts);
-
-        } catch (err: any) {
-            console.error("[ui] Error generating creative concepts:", err);
-            setConceptsError(err.message || "Failed to generate creative concepts.");
+            const data = await response.json();
+            console.log("[ui] Creative concepts generated:", data);
+            setCreativeConcepts(data.concepts);
+        } catch (error) {
+            console.error("[ui] Error generating creative concepts:", error);
+            setConceptsError(`Failed to generate creative concepts: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
             setIsGeneratingConcepts(false);
         }
@@ -977,6 +1006,9 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
         }));
     };
 
+    // --- Helper: Disable Generate Ideas if Competitor Analysis is loading or errored ---
+    const isGenerateIdeasDisabled = isCompetitorAnalysisLoading || !!competitorAnalysisError || !competitorAnalysis;
+
     return (
         <Dialog
             open={isDialogOpen}
@@ -1054,8 +1086,8 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
 
                         {/* Generate Button */}
                         <Button
-                            onClick={handleGenerateRecommendations}
-                            disabled={!selectedRunId || selectedModels.length === 0 || isAnyModelLoading || isMetaLoading}
+                            onClick={handleGenerateIdeas}
+                            disabled={!selectedRunId || selectedModels.length === 0 || isAnyModelLoading || isMetaLoading || isGenerateIdeasDisabled}
                             className="h-9"
                         >
                             <BrainCircuit className="mr-2 h-4 w-4" />
@@ -1128,7 +1160,9 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                             disabled={isAnyModelLoading || isMetaLoading}
                         />
                     </div>
-                                       {(competitorAnalysis || isCompetitorAnalysisLoading) && (
+
+                    {/* --- NEW: Competitor Analysis Section --- */}
+                    {(competitorAnalysis || isCompetitorAnalysisLoading) && (
                         <div className="grid gap-1.5 w-full mb-6 border-2 border-primary/20 rounded-lg p-4 bg-primary/5 shadow-sm">
                             <div className="flex items-center justify-between">
                                 <Label className="text-lg font-semibold text-primary">Competitor Analysis</Label>
@@ -1312,7 +1346,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                 {/* No Recommendations or Initial State for this model */}
                                 {!isLoading[modelName] && !error[modelName] && (!resultsByModel[modelName] || (resultsByModel[modelName]?.length ?? 0) === 0) && (
                                     <div className="flex flex-col items-center justify-center gap-4 p-8 border rounded-lg text-muted-foreground min-h-[200px]">
-                                        <AlertTriangle className="h-8 w-8" />
+                                        <BrainCircuit className="h-8 w-8" />
                                         <span className="capitalize">No recommendations generated by {modelName}.</span>
                                     </div>
                                 )}
@@ -1355,6 +1389,9 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                                                 rec.impact === 'Medium' ? 'border-yellow-600 text-yellow-700' :
                                                                 ''
                                                             )}>{rec.impact} Impact</Badge>
+                                                            {(rec.tags || []).map(tag => (
+                                                                <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
+                                                            ))}
                                                         </CardDescription>
                                                     </CardHeader>
                                                     <CardContent className="flex-grow text-sm text-muted-foreground pb-3">
@@ -1575,9 +1612,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                         <div className="text-sm mt-1">
                                         <strong className="block text-xs text-muted-foreground mb-0.5">Bullets:</strong>
                                         <ul className="list-disc list-inside pl-2 space-y-0.5">
-                                            {selectedRecommendation.copywriting.bullets.map((bullet, idx) => (
-                                            <li key={idx}>{bullet}</li>
-                                            ))}
+                                            {selectedRecommendation.copywriting.bullets.map((bullet, idx) => <li key={idx}>{bullet}</li>)}
                                         </ul>
                                         </div>
                                     )}
@@ -1638,7 +1673,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                             <h4 className="font-semibold mb-2">Generated Image:</h4>
                                             <div className="relative w-full border rounded-lg overflow-hidden bg-muted/20">
                                                 <img
-                                                    src={generatedImageUrl}
+                                                    src={generatedImageUrl} // Expecting data URI
                                                     alt="Generated image"
                                                     className="w-full object-contain mx-auto"
                                                     style={{ maxHeight: '600px' }}
@@ -2149,7 +2184,6 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                     )}
                 </div>
             )}
-
         </Dialog>
     )
 }

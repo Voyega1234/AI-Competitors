@@ -11,6 +11,7 @@ interface CreativeConceptsRequestInput {
     selectedRecommendations: SelectedRecommendationForCreative[]; // Now expects an array
     clientName: string;
     productFocus: string | null;
+    competitorAnalysis?: any; // Add competitor analysis data
     // Add any other context needed for the prompt
 }
 
@@ -124,6 +125,26 @@ Journey Context: ${journeyContext}
 `;
     }).join("\n");
 
+    // Format competitor analysis data if available
+    let competitorAnalysisContext = "No competitor analysis data provided.";
+    if (input.competitorAnalysis) {
+        try {
+            // Extract the most relevant parts for creative concepts
+            const analysis = input.competitorAnalysis;
+            competitorAnalysisContext = `
+--- Competitor Analysis Insights ---
+Key Strengths in Market: ${Array.isArray(analysis.strengths) ? analysis.strengths.join(", ") : "N/A"}
+Market Weaknesses: ${Array.isArray(analysis.weaknesses) ? analysis.weaknesses.join(", ") : "N/A"}
+Market Gaps: ${Array.isArray(analysis.market_gaps) ? analysis.market_gaps.join(", ") : "N/A"}
+Differentiation Strategies: ${Array.isArray(analysis.differentiation_strategies) ? analysis.differentiation_strategies.join(", ") : "N/A"}
+Summary: ${analysis.summary || "N/A"}
+`;
+        } catch (e) {
+            competitorAnalysisContext = "Error processing competitor analysis data.";
+            console.error("[creative-concepts] Error formatting competitor analysis:", e);
+        }
+    }
+
     // --- Construct the new prompt ---
     const prompt = `
 Analyze the following collection of ${selectedRecommendations.length} selected marketing recommendations and their customer journey analyses for ${clientName} (focusing on ${productFocus || 'their main offerings'}).
@@ -131,7 +152,10 @@ Analyze the following collection of ${selectedRecommendations.length} selected m
 **Recent Context & Trends (from Web Search):**
 ${groundedContext ? groundedContext : "No specific recent context provided."}
 
-Synthesize ALL inputs (recommendations, journeys, AND recent context) to generate 3-5 distinct, high-level Content Pillars / Focus Targets suitable for guiding Facebook Ad creative development.
+**Competitor Analysis:**
+${competitorAnalysisContext}
+
+Synthesize ALL inputs (recommendations, journeys, competitor analysis, AND recent context) to generate 3-5 distinct, high-level Content Pillars / Focus Targets suitable for guiding Facebook Ad creative development.
 
 **Input Recommendations & Journeys Collection:**
 ${recommendationsContext}
