@@ -29,6 +29,75 @@ interface GeminiRecommendationOutput {
 const booksDirectory = path.join(process.cwd(), 'src', 'app', 'api', 'generate-recommendations', 'books_prompts');
 
 // Helper function to create a concise summary of competitor data
+function analyzeCompetitors(competitors: Competitor[]): string {
+    if (!competitors || competitors.length === 0) {
+        return "No competitor data available.";
+    }
+
+    let analysis = `Detailed analysis of ${competitors.length} competitors:\n\n`;
+
+    // Analyze each competitor individually
+    competitors.forEach((competitor, index) => {
+        if (!competitor.name) return;
+        
+        analysis += `## ${index + 1}. ${competitor.name}\n`;
+        
+        // Marketing and ad strategies
+        if (competitor.adThemes && competitor.adThemes.length > 0) {
+            analysis += `- **Ad Themes/Strategies**: ${competitor.adThemes.join(', ')}\n`;
+        }
+        
+        // USP and positioning
+        if (competitor.usp) {
+            analysis += `- **Unique Selling Proposition**: ${competitor.usp}\n`;
+        }
+        
+        // Strengths
+        if (competitor.strengths && competitor.strengths.length > 0) {
+            analysis += `- **Strengths**: ${competitor.strengths.join(', ')}\n`;
+        }
+        
+        // Weaknesses
+        if (competitor.weaknesses && competitor.weaknesses.length > 0) {
+            analysis += `- **Weaknesses**: ${competitor.weaknesses.join(', ')}\n`;
+        }
+        
+        // Target audience
+        if (competitor.targetAudience) {
+            analysis += `- **Target Audience**: ${competitor.targetAudience}\n`;
+        }
+        
+        // Brand tone
+        if (competitor.brandTone) {
+            analysis += `- **Brand Tone**: ${competitor.brandTone}\n`;
+        }
+        
+        analysis += '\n';
+    });
+
+    // Add differentiation guidance
+    analysis += `\n## Differentiation Opportunities\n`;
+    analysis += `Based on the competitor analysis above, consider these differentiation opportunities:\n`;
+    
+    // Extract common themes across competitors
+    const allAdThemes = new Set<string>();
+    const allStrengths = new Set<string>();
+    
+    competitors.forEach(c => {
+        if (c.adThemes) c.adThemes.forEach(theme => allAdThemes.add(theme.toLowerCase()));
+        if (c.strengths) c.strengths.forEach(strength => allStrengths.add(strength.toLowerCase()));
+    });
+    
+    analysis += `- **Common Ad Themes to Differentiate From**: ${Array.from(allAdThemes).join(', ')}\n`;
+    analysis += `- **Common Strengths Already Claimed**: ${Array.from(allStrengths).join(', ')}\n`;
+    
+    // Identify potential gaps
+    analysis += `- **Consider exploring themes and angles that competitors are NOT currently using**\n`;
+    analysis += `- **Look for weaknesses across competitors that could be positioned as your client's strengths**\n`;
+
+    return analysis;
+}
+
 function summarizeCompetitors(competitors: Competitor[]): string {
     if (!competitors || competitors.length === 0) {
         return "No competitor data available.";
@@ -83,6 +152,9 @@ interface Competitor {
   strengths?: string[] | null;
   weaknesses?: string[] | null;
   targetAudience?: string | null;
+  adThemes?: string[] | null;
+  usp?: string | null;
+  brandTone?: string | null;
   // Add other fields from your Competitor table
 }
 
@@ -141,8 +213,8 @@ export async function GET(request: NextRequest) {
   console.log(`Handling GET /api/generate-recommendations for runId: ${runId}, Models: ${requestedModels.join(', ')}`);
 
   // --- Initialize result holders ---
-  let finalResults: ModelResults = {};
-  let finalErrors: ModelErrorState = {};
+  let finalResults: Record<string, any> = {};
+  let finalErrors: Record<string, any> = {};
 
   try {
     // --- Fetch common data (needed by all models) ---
@@ -211,6 +283,7 @@ export async function GET(request: NextRequest) {
     // --- Prepare Common Prompt Components (Build ONCE) ---
     const clientInfo = { clientName: analysisRunData.clientName, market: analysisRunData.market, productFocus: analysisRunData.productFocus, };
     const competitorSummary = summarizeCompetitors(competitorsData || []);
+    const competitorAnalysis = analyzeCompetitors(competitorsData || []); // NEW: Detailed competitor analysis
     const bookSummarySection = bookSummaryContent ? `
 **Optional Book Summary Contexts:**
 ${bookSummaryContent}
@@ -228,7 +301,7 @@ ${userBrief}
   5. Populate the corresponding fields in the final JSON object. Ensure all text output is original for this request
   6. Ideas to include but not limited to: why the solutions from ${clientInfo.clientName} are different than what is being offered in the market currently. Talk about the differentiation of the product if and when it makes the client's product or service more appealing. `;
     const defaultDetailsText = `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** (เช่น "เคล็ดลับฮาวทู", "เบื้องหลังการทำงาน", "เรื่องราวความสำเร็จลูกค้า", "การหักล้างความเชื่อผิดๆ", "ไลฟ์สไตล์และการใช้งาน", "ปัญหาและการแก้ไข").
-                                b.  **\`product_focus\`:** ระบุ ${clientInfo.productFocus} หรือฟีเจอร์เฉพาะที่ต้องการเน้น **(ภาษาไทย)**.
+                                b.  **\`product_focus\`:** ระบุ ${clientInfo.productFocus || 'ผลิตภัณฑ์/บริการ'} ที่ระบุใน Input **(ภาษาไทย)**.
                                 c.  **\`concept_idea\`:** สรุปแนวคิดสร้างสรรค์หลัก (1-2 ประโยค) สำหรับการนำเสนอไอเดียนี้ **(ภาษาไทย)**.
                                 d.  **\`copywriting\`:** สร้างสรรค์องค์ประกอบข้อความโฆษณาเบื้องต้น **(ภาษาไทย)**:
                                     *   **\`headline\`:** พาดหัวที่ดึงดูดความสนใจ **(ภาษาไทย)**.
@@ -311,8 +384,18 @@ ${bookSummarySection}
 ${competitorSummary}
 *(Analyze the competitor summary, recent client info, and optional book context...)*
 
+**Competitor Analysis:**
+${competitorAnalysis}
+
 **Task:**
 ${taskSectionContent} use ${groundedClientInfoCommon} to generate recommendations ideas that respresent จุดเด่น, ผลิตภัณฑ์เด่น, โปรโมชั่น แคมเปญล่าสุด หรือ กิจกรรมล่าสุด หรือ ข้อมูลสำคัญต่างๆ 
+
+**IMPORTANT: Create Differentiated Recommendations**
+1. Review the competitor analysis carefully to understand what themes, strengths, and marketing approaches competitors are already using.
+2. Create recommendations that are DIFFERENT from what competitors are doing - avoid suggesting ideas that use the same themes or approaches.
+3. Look for unique angles, untapped opportunities, and competitor weaknesses that your client can leverage.
+4. Ensure at least 50% of your recommendations offer truly differentiated approaches from what competitors are already doing.
+5. For any recommendation that might overlap with competitor approaches, clearly explain how your client's version is different or better.
 
 **Creative Execution Details (Per Recommendation - Populate these fields IN THAI for the JSON):**
 ${detailsSectionContent}
@@ -342,7 +425,7 @@ ${detailsSectionContent}
       "concept_idea": "สรุปแนวคิดสร้างสรรค์หลักสำหรับไอเดียนี้ (1-2 ประโยค)", // Thai - Must be original
       "copywriting": {
         "headline": "พาดหัวหลักที่น่าสนใจ", // Thai - Must be original
-        "sub_headline_1": "พาดหัวรองสนับสนุน", // Thai - Must be original
+        "sub_headline_1": "พาดหัวรองที่ขยายความหรือเน้นประโยชน์", // Thai - Must be original
         "sub_headline_2": "พาดหัวรองที่สอง (ถ้ามี) หรือ null", // Thai - Must be original or null
         "bullets": [
           "จุดเด่นที่ 1", // Thai - Must be original
@@ -628,3 +711,42 @@ ${detailsSectionContent}
     // Optional: Disconnect Supabase client if needed
   }
 } 
+
+export async function POST(request: NextRequest) {
+    try {
+        const body = await request.json();
+        const runId = body.runId;
+        const models = body.models;
+        const brief = body.brief;
+        const taskSection = body.taskSection;
+        const detailsSection = body.detailsSection;
+        const competitorAnalysis = body.competitorAnalysis || "";
+
+        // Use competitorAnalysis as context in the prompt
+        // Example: Inject it at the top of the prompt
+        const promptWithCompetitor = `\n## Competitor Analysis Context\n${competitorAnalysis}\n\n` +
+            `${taskSection}\n${detailsSection}\n${brief ? `\nUser Brief: ${brief}` : ''}`;
+
+        // (Assume you have logic to select/generate for each model, similar to GET)
+        // For brevity, only show Gemini as example
+        let finalResults: Record<string, any> = {};
+        let finalErrors: Record<string, any> = {};
+        try {
+            // Call Gemini or other models here, passing promptWithCompetitor as the prompt
+            // ... (your existing model call logic, using promptWithCompetitor)
+            // Example:
+            // const geminiResult = await callGeminiAPI(promptWithCompetitor);
+            // finalResults['gemini'] = geminiResult;
+        } catch (err: any) {
+            finalErrors['gemini'] = err.message || 'Error in Gemini generation';
+            finalResults['gemini'] = null;
+        }
+        return NextResponse.json({ results: finalResults, errors: finalErrors });
+    } catch (error) {
+        console.error('Error in POST /api/generate-recommendations:', error);
+        return new NextResponse(
+            JSON.stringify({ results: {}, errors: { general: 'Server error in POST /api/generate-recommendations' } }),
+            { status: 500, headers: { 'Content-Type': 'application/json' } }
+        );
+    }
+}

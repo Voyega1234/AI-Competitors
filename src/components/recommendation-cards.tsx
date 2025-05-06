@@ -236,6 +236,50 @@ export function RecommendationCards() {
     const [error, setError] = useState<ModelErrorState>({});
     const [modelsRequestedInLastRun, setModelsRequestedInLastRun] = useState<string[]>([]); // Track models for current results
 
+    // --- NEW: State for Competitor Analysis ---
+    const [competitorAnalysis, setCompetitorAnalysis] = useState<any>(null);
+    const [isCompetitorAnalysisLoading, setIsCompetitorAnalysisLoading] = useState<boolean>(false);
+    const [competitorAnalysisError, setCompetitorAnalysisError] = useState<string | null>(null);
+    const [showCompetitorAnalysis, setShowCompetitorAnalysis] = useState<boolean>(false);
+
+    // --- Helper function to fetch competitor analysis ---
+    const fetchCompetitorAnalysis = async () => {
+        if (!selectedClientName || !selectedProductFocus) return;
+        
+        setIsCompetitorAnalysisLoading(true);
+        setCompetitorAnalysisError(null);
+        setCompetitorAnalysis(null);
+        
+        try {
+            console.log(`Fetching competitor analysis for ${selectedClientName}, ${selectedProductFocus}`);
+            // Include runId if available
+            const queryParams = new URLSearchParams();
+            queryParams.set('clientName', selectedClientName);
+            queryParams.set('productFocus', selectedProductFocus);
+            if (selectedRunId) {
+                queryParams.set('runId', selectedRunId);
+            }
+            
+            const response = await fetch(`/api/competitor-analysis?${queryParams.toString()}`);
+            
+            if (!response.ok) {
+                throw new Error(`Error fetching competitor analysis: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            console.log("Competitor analysis data received:", JSON.stringify(data, null, 2));
+            
+            // Store the entire response object
+            setCompetitorAnalysis(data);
+            setShowCompetitorAnalysis(true);
+        } catch (error) {
+            console.error("Error fetching competitor analysis:", error);
+            setCompetitorAnalysisError(error instanceof Error ? error.message : String(error));
+        } finally {
+            setIsCompetitorAnalysisLoading(false);
+        }
+    };
+
     // --- State for Dialog (Recommendation Details Only) ---
     const [selectedRecommendation, setSelectedRecommendation] = useState<Recommendation | null>(null);
     // --- State for Image Generation in Dialog ---
@@ -383,6 +427,9 @@ export function RecommendationCards() {
         setCreativeConcepts(null); // Clear concepts
         setIsGeneratingConcepts(false);
         setConceptsError(null);
+        // Clear competitor analysis data
+        setCompetitorAnalysis(null);
+        setCompetitorAnalysisError(null);
 
         try {
             const productFocusForQuery = selectedProductFocus === 'placeholder-for-empty' ? null : selectedProductFocus;
@@ -399,6 +446,9 @@ export function RecommendationCards() {
             if (!runData.id) throw new Error('Analysis run ID missing from response.');
             setSelectedRunId(runData.id);
             console.log("Found runId for recommendations:", runData.id);
+            
+            // After getting the runId, fetch competitor analysis
+            fetchCompetitorAnalysis();
         } catch (err: any) {
             console.error("Error fetching analysis run ID:", err);
             setMetaError(err.message);
@@ -407,13 +457,14 @@ export function RecommendationCards() {
         }
     };
 
+    // --- NEW: Fetch Competitor Analysis ---
     useEffect(() => {
         if (selectedClientName && selectedProductFocus) {
             fetchAnalysisRunId();
         }
     }, [selectedClientName, selectedProductFocus]);
 
-    // --- Generate Recommendations (Updated for Multi-Model) ---
+    // --- Generate Recommendations Handler ---
     const handleGenerateRecommendations = async () => {
         if (!selectedRunId) {
             setMetaError("Please select a valid Client and Product combination first.");
@@ -445,16 +496,41 @@ export function RecommendationCards() {
         setConceptsError(null);
 
         try {
-            console.log(`Fetching recommendations for runId: ${selectedRunId}, Models: ${selectedModels.join(', ')}`);
-            let apiUrl = `/api/generate-recommendations?runId=${selectedRunId}`;
-            apiUrl += `&models=${encodeURIComponent(selectedModels.join(','))}`;
-            if (userBrief.trim()) {
-                apiUrl += `&brief=${encodeURIComponent(userBrief.trim())}`;
+            // 1. Fetch Competitor Analysis FIRST
+            setIsCompetitorAnalysisLoading(true);
+            setCompetitorAnalysisError(null);
+            let competitorAnalysisResult = "";
+            try {
+                const competitorRes = await fetch(`/api/competitor-analysis?runId=${selectedRunId}`);
+                const competitorData = await competitorRes.json();
+                if (competitorRes.ok && competitorData.analysis) {
+                    competitorAnalysisResult = competitorData.analysis;
+                    setCompetitorAnalysis(competitorData.analysis);
+                } else {
+                    setCompetitorAnalysisError(competitorData.error || "No competitor analysis available.");
+                }
+            } catch (err: any) {
+                setCompetitorAnalysisError("Failed to fetch competitor analysis");
             }
-            apiUrl += `&taskSection=${encodeURIComponent(editableTaskSection)}`;
-            apiUrl += `&detailsSection=${encodeURIComponent(editableDetailsSection)}`;
+            setIsCompetitorAnalysisLoading(false);
 
-            const response = await fetch(apiUrl);
+            // 2. Generate Recommendations using Competitor Analysis as input
+            console.log(`Fetching recommendations for runId: ${selectedRunId}, Models: ${selectedModels.join(', ')}`);
+            const apiUrl = `/api/generate-recommendations`;
+            const body = {
+                runId: selectedRunId,
+                models: selectedModels,
+                brief: userBrief.trim(),
+                taskSection: editableTaskSection,
+                detailsSection: editableDetailsSection,
+                competitorAnalysis: competitorAnalysisResult
+            };
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
             const data = await response.json();
 
             if (!response.ok) {
@@ -466,35 +542,22 @@ export function RecommendationCards() {
                 });
                 setError(newErrorState);
                 setResultsByModel({});
-            } else {
-                const processedResults: ModelResults = {};
-                Object.entries(data.results || {}).forEach(([modelName, recommendations]) => {
-                    if (Array.isArray(recommendations)) {
-                        processedResults[modelName] = recommendations.map((rec, index) => ({
-                            ...rec,
-                            tempId: `${modelName}-${selectedRunId}-${index}`
-                        }));
-                    }
-                });
-                setResultsByModel(processedResults);
-                setError(prevErrors => ({ ...prevErrors, ...(data.errors || {}) }));
+                return;
             }
 
+            // Set the results by model
+            setResultsByModel(data.results || {});
+            setError({});
         } catch (err: any) {
-            console.error("Failed to fetch recommendations:", err);
-            const errorMsg = err.message || "An unknown error occurred while generating recommendations.";
+            console.error("Error generating recommendations:", err);
             const newErrorState = { ...initialErrorState };
             selectedModels.forEach(model => {
-                newErrorState[model] = errorMsg;
+                newErrorState[model] = err.message || "Failed to generate recommendations";
             });
             setError(newErrorState);
             setResultsByModel({});
         } finally {
-            const finalLoadingState: ModelLoadingState = {};
-            selectedModels.forEach(model => {
-                finalLoadingState[model] = false;
-            });
-            setIsLoading(finalLoadingState);
+            setIsLoading({});
         }
     };
 
@@ -917,6 +980,9 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
         }));
     };
 
+    // --- Helper: Disable Generate Ideas if Competitor Analysis is loading or errored ---
+    const isGenerateIdeasDisabled = isCompetitorAnalysisLoading || !!competitorAnalysisError || !competitorAnalysis;
+
     return (
         <Dialog
             open={isDialogOpen}
@@ -995,7 +1061,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                         {/* Generate Button */}
                         <Button
                             onClick={handleGenerateRecommendations}
-                            disabled={!selectedRunId || selectedModels.length === 0 || isAnyModelLoading || isMetaLoading}
+                            disabled={!selectedRunId || selectedModels.length === 0 || isAnyModelLoading || isMetaLoading || isGenerateIdeasDisabled}
                             className="h-9"
                         >
                             <BrainCircuit className="mr-2 h-4 w-4" />
@@ -1068,6 +1134,159 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                             disabled={isAnyModelLoading || isMetaLoading}
                         />
                     </div>
+
+                    {/* --- NEW: Competitor Analysis Section --- */}
+                    {(competitorAnalysis || isCompetitorAnalysisLoading) && (
+                        <div className="grid gap-1.5 w-full mb-6 border-2 border-primary/20 rounded-lg p-4 bg-primary/5 shadow-sm">
+                            <div className="flex items-center justify-between">
+                                <Label className="text-lg font-semibold text-primary">Competitor Analysis</Label>
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    onClick={() => setShowCompetitorAnalysis(!showCompetitorAnalysis)}
+                                    className="border-primary text-primary hover:bg-primary/10"
+                                >
+                                    {showCompetitorAnalysis ? "Hide Analysis" : "Show Analysis"}
+                                </Button>
+                            </div>
+                            
+                            {isCompetitorAnalysisLoading && (
+                                <div className="flex items-center justify-center h-20 border rounded-md bg-white">
+                                    <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                                    <span className="text-sm">Loading competitor analysis...</span>
+                                </div>
+                            )}
+                            
+                            {competitorAnalysisError && !isCompetitorAnalysisLoading && (
+                                <div className="flex items-center justify-center h-20 border rounded-md bg-destructive/10 text-destructive">
+                                    <AlertTriangle className="h-5 w-5 mr-2" />
+                                    <span className="text-sm">{competitorAnalysisError}</span>
+                                </div>
+                            )}
+                            
+                            {showCompetitorAnalysis && competitorAnalysis && !isCompetitorAnalysisLoading && (
+                                <div className="border rounded-md bg-white p-4 max-h-[500px] overflow-y-auto">
+                                    {(() => {
+                                        console.log("Rendering competitor analysis:", JSON.stringify(competitorAnalysis, null, 2));
+                                        return null;
+                                    })()}
+                                    <div className="grid gap-6 grid-cols-1 md:grid-cols-2">
+                                        {/* Strengths Section */}
+                                        <div className="p-4 border rounded-lg bg-green-50 shadow-sm">
+                                            <h3 className="text-lg font-semibold text-green-700 mb-3 flex items-center">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                                Key Strengths
+                                            </h3>
+                                            <ul className="list-disc pl-5 space-y-2 text-sm">
+                                                {competitorAnalysis && competitorAnalysis.analysis && Array.isArray(competitorAnalysis.analysis.strengths) && competitorAnalysis.analysis.strengths.length > 0 ? 
+                                                    competitorAnalysis.analysis.strengths.map((item: string, i: number) => (
+                                                        <li key={i} className="text-gray-700">{item}</li>
+                                                    )) : 
+                                                    <li className="text-gray-500">No strengths data available</li>
+                                                }
+                                            </ul>
+                                        </div>
+                                        
+                                        {/* Weaknesses Section */}
+                                        <div className="p-4 border rounded-lg bg-red-50 shadow-sm">
+                                            <h3 className="text-lg font-semibold text-red-700 mb-3 flex items-center">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                                Weaknesses
+                                            </h3>
+                                            <ul className="list-disc pl-5 space-y-2 text-sm">
+                                                {competitorAnalysis && competitorAnalysis.analysis && Array.isArray(competitorAnalysis.analysis.weaknesses) && competitorAnalysis.analysis.weaknesses.length > 0 ? 
+                                                    competitorAnalysis.analysis.weaknesses.map((item: string, i: number) => (
+                                                        <li key={i} className="text-gray-700">{item}</li>
+                                                    )) : 
+                                                    <li className="text-gray-500">No weaknesses data available</li>
+                                                }
+                                            </ul>
+                                        </div>
+                                        
+                                        {/* Shared Patterns Section */}
+                                        <div className="p-4 border rounded-lg bg-blue-50 shadow-sm">
+                                            <h3 className="text-lg font-semibold text-blue-700 mb-3 flex items-center">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                                </svg>
+                                                Shared Patterns
+                                            </h3>
+                                            <ul className="list-disc pl-5 space-y-2 text-sm">
+                                                {competitorAnalysis && competitorAnalysis.analysis && Array.isArray(competitorAnalysis.analysis.shared_patterns) && competitorAnalysis.analysis.shared_patterns.length > 0 ? 
+                                                    competitorAnalysis.analysis.shared_patterns.map((item: string, i: number) => (
+                                                        <li key={i} className="text-gray-700">{item}</li>
+                                                    )) : 
+                                                    <li className="text-gray-500">No shared patterns data available</li>
+                                                }
+                                            </ul>
+                                        </div>
+                                        
+                                        {/* Market Gaps Section */}
+                                        <div className="p-4 border rounded-lg bg-yellow-50 shadow-sm">
+                                            <h3 className="text-lg font-semibold text-yellow-700 mb-3 flex items-center">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                                Market Gaps
+                                            </h3>
+                                            <ul className="list-disc pl-5 space-y-2 text-sm">
+                                                {competitorAnalysis && competitorAnalysis.analysis && Array.isArray(competitorAnalysis.analysis.market_gaps) && competitorAnalysis.analysis.market_gaps.length > 0 ? 
+                                                    competitorAnalysis.analysis.market_gaps.map((item: string, i: number) => (
+                                                        <li key={i} className="text-gray-700">{item}</li>
+                                                    )) : 
+                                                    <li className="text-gray-500">No market gaps data available</li>
+                                                }
+                                            </ul>
+                                        </div>
+                                        
+                                        {/* Differentiation Strategies Section */}
+                                        <div className="p-4 border rounded-lg bg-purple-50 shadow-sm col-span-2">
+                                            <h3 className="text-lg font-semibold text-purple-700 mb-3 flex items-center">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                                </svg>
+                                                Differentiation Strategies
+                                            </h3>
+                                            <ul className="list-disc pl-5 space-y-2 text-sm">
+                                                {competitorAnalysis && competitorAnalysis.analysis && Array.isArray(competitorAnalysis.analysis.differentiation_strategies) && competitorAnalysis.analysis.differentiation_strategies.length > 0 ? 
+                                                    competitorAnalysis.analysis.differentiation_strategies.map((item: string, i: number) => (
+                                                        <li key={i} className="text-gray-700">{item}</li>
+                                                    )) : 
+                                                    <li className="text-gray-500">No differentiation strategies data available</li>
+                                                }
+                                            </ul>
+                                        </div>
+                                        
+                                        {/* Summary Section - Full Width */}
+                                        {competitorAnalysis && competitorAnalysis.analysis && competitorAnalysis.analysis.summary && (
+                                            <div className="p-4 border rounded-lg bg-gray-50 shadow-sm col-span-2">
+                                                <h3 className="text-lg font-semibold text-gray-700 mb-3 flex items-center">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                    Summary
+                                                </h3>
+                                                <p className="text-sm text-gray-600 leading-relaxed">
+                                                    {competitorAnalysis.analysis.summary}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {!showCompetitorAnalysis && competitorAnalysis && !isCompetitorAnalysisLoading && (
+                                <div className="flex items-center justify-center h-10 border rounded-md bg-white text-muted-foreground">
+                                    <Info className="h-4 w-4 mr-2" />
+                                    <span className="text-sm">Click "Show Analysis" to view detailed competitor insights</span>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* --- Display Area (Updated for Tabs) --- */}
@@ -1101,7 +1320,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                 {/* No Recommendations or Initial State for this model */}
                                 {!isLoading[modelName] && !error[modelName] && (!resultsByModel[modelName] || (resultsByModel[modelName]?.length ?? 0) === 0) && (
                                     <div className="flex flex-col items-center justify-center gap-4 p-8 border rounded-lg text-muted-foreground min-h-[200px]">
-                                        <AlertTriangle className="h-8 w-8" />
+                                        <BrainCircuit className="h-8 w-8" />
                                         <span className="capitalize">No recommendations generated by {modelName}.</span>
                                     </div>
                                 )}
@@ -1144,6 +1363,9 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                                                 rec.impact === 'Medium' ? 'border-yellow-600 text-yellow-700' :
                                                                 ''
                                                             )}>{rec.impact} Impact</Badge>
+                                                            {(rec.tags || []).map(tag => (
+                                                                <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
+                                                            ))}
                                                         </CardDescription>
                                                     </CardHeader>
                                                     <CardContent className="flex-grow text-sm text-muted-foreground pb-3">
@@ -1364,9 +1586,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                         <div className="text-sm mt-1">
                                         <strong className="block text-xs text-muted-foreground mb-0.5">Bullets:</strong>
                                         <ul className="list-disc list-inside pl-2 space-y-0.5">
-                                            {selectedRecommendation.copywriting.bullets.map((bullet, idx) => (
-                                            <li key={idx}>{bullet}</li>
-                                            ))}
+                                            {selectedRecommendation.copywriting.bullets.map((bullet, idx) => <li key={idx}>{bullet}</li>)}
                                         </ul>
                                         </div>
                                     )}
@@ -1427,7 +1647,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                             <h4 className="font-semibold mb-2">Generated Image:</h4>
                                             <div className="relative w-full border rounded-lg overflow-hidden bg-muted/20">
                                                 <img
-                                                    src={generatedImageUrl}
+                                                    src={generatedImageUrl} // Expecting data URI
                                                     alt="Generated image"
                                                     className="w-full object-contain mx-auto"
                                                     style={{ maxHeight: '600px' }}
@@ -1938,7 +2158,6 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                     )}
                 </div>
             )}
-
         </Dialog>
     )
 }
