@@ -296,3 +296,206 @@ IMPORTANT: Your response must be valid, parseable JSON. Do not include any text 
         );
     }
 }
+
+// Add a POST handler to support requests from generate-recommendations route
+export async function POST(request: NextRequest) {
+    console.log("[API /competitor-analysis] POST request received");
+    
+    try {
+        // Parse request body
+        const body = await request.json();
+        const { clientName, productFocus, runId } = body;
+        
+        console.log(`[API /competitor-analysis] POST Parameters: clientName=${clientName}, productFocus=${productFocus}, runId=${runId}`);
+
+        // --- Validation ---
+        if (!clientName || !productFocus) {
+            return new NextResponse(JSON.stringify({ error: 'Both clientName and productFocus are required in the request body' }), { status: 400 });
+        }
+
+        console.log(`Handling POST /api/competitor-analysis for clientName: ${clientName}, productFocus: ${productFocus}`);
+
+        // If runId is provided, use it directly
+        if (runId) {
+            console.log(`Using provided runId: ${runId}`);
+            
+            // Query Competitor table by analysisRunId
+            console.log(`Fetching competitors from database for analysisRunId: ${runId}`);
+            const { data: competitorsData, error: competitorError } = await supabaseAdmin
+                .from('Competitor')
+                .select('*')
+                .eq('analysisRunId', runId);
+
+            if (competitorError) {
+                console.error(`Supabase error fetching Competitors for analysisRunId ${runId}:`, competitorError);
+                throw new Error(competitorError.message || 'Failed to fetch competitor data');
+            }
+
+            console.log(`Retrieved ${competitorsData?.length || 0} competitors from database for analysisRunId: ${runId}`);
+
+            // If competitors found, analyze them
+            if (competitorsData && competitorsData.length > 0) {
+                console.log("Competitors found in database, generating analysis");
+                const analysis = await analyzeCompetitorsWithGemini(competitorsData);
+                return NextResponse.json({ 
+                    ...analysis,
+                    isJson: !analysis.error // If no error, analysis is JSON
+                });
+            }
+        }
+        
+        // If no runId provided or no competitors found with the runId, look up by clientName and productFocus
+        const { data: analysisRunRows, error: analysisRunError } = await supabaseAdmin
+            .from('AnalysisRun')
+            .select('id')
+            .eq('clientName', clientName)
+            .eq('productFocus', productFocus)
+            .limit(1);
+
+        if (analysisRunError) {
+            console.error(`Supabase error fetching AnalysisRun for clientName ${clientName}, productFocus ${productFocus}:`, analysisRunError);
+            throw new Error(analysisRunError.message || 'Failed to fetch analysis run');
+        }
+
+        if (!analysisRunRows || analysisRunRows.length === 0) {
+            console.log('No AnalysisRun found for this clientName/productFocus, using Gemini direct analysis');
+            // Fallback to Gemini direct analysis
+            if (!GEMINI_API_KEY) {
+                throw new Error("Missing GEMINI_API_KEY environment variable");
+            }
+            const directAnalysisPrompt = `
+As an expert marketing analyst, I need a detailed analysis of competitors for ${clientName} in the ${productFocus} space.
+
+I need your analysis in JSON format for direct parsing by my application.
+Return ONLY the following JSON structure with no markdown formatting, no code blocks, no backticks, and no explanatory text:
+
+{
+  "strengths": ["..."], // Key strengths of competitors in this market
+  "weaknesses": ["..."], // Key weaknesses of competitors in this market
+  "shared_patterns": ["..."], // Shared marketing patterns or themes
+  "market_gaps": ["..."], // Market gaps or unmet needs
+  "differentiation_strategies": ["..."], // Actionable differentiation strategies for content and brand positioning
+  "summary": "..." // One-paragraph summary of the competitive landscape
+}
+
+IMPORTANT: Your response must be valid, parseable JSON. Do not include any text outside the JSON object. Do not wrap the JSON in code blocks or backticks.`;
+            try {
+                console.log("[API /competitor-analysis] Calling Gemini for direct competitor analysis via HTTP API...");
+                const analysisText = await callGeminiAPI(directAnalysisPrompt, GEMINI_API_KEY, "gemini-2.0-flash");
+                
+                // Clean the response before parsing
+                const cleanedText = cleanGeminiResponse(analysisText);
+                
+                try {
+                    const analysis = JSON.parse(cleanedText);
+                    console.log("[API /competitor-analysis] Successfully parsed Gemini response as JSON");
+                    return NextResponse.json(analysis);
+                } catch (e) {
+                    console.error("[API /competitor-analysis] Failed to parse Gemini response as JSON:", e);
+                    return NextResponse.json({ 
+                        error: "Gemini response was not valid JSON", 
+                        strengths: ["No data available"],
+                        weaknesses: ["No data available"],
+                        shared_patterns: ["No data available"],
+                        market_gaps: ["No data available"],
+                        differentiation_strategies: ["No data available"],
+                        summary: "No data available"
+                    });
+                }
+            } catch (geminiError) {
+                console.error("[API /competitor-analysis] Error calling Gemini for direct analysis:", geminiError);
+                throw new Error("Failed to generate direct competitor analysis via Gemini.");
+            }
+        }
+
+        const analysisRunId = analysisRunRows[0].id;
+
+        // Query Competitor table by analysisRunId
+        console.log(`Fetching competitors from database for analysisRunId: ${analysisRunId}`);
+        const { data: competitorsData, error: competitorError } = await supabaseAdmin
+            .from('Competitor')
+            .select('*')
+            .eq('analysisRunId', analysisRunId);
+
+        if (competitorError) {
+            console.error(`Supabase error fetching Competitors for analysisRunId ${analysisRunId}:`, competitorError);
+            throw new Error(competitorError.message || 'Failed to fetch competitor data');
+        }
+
+        console.log(`Retrieved ${competitorsData?.length || 0} competitors from database for analysisRunId: ${analysisRunId}`);
+
+        // If competitors found, analyze them
+        if (competitorsData && competitorsData.length > 0) {
+            console.log("Competitors found in database, generating analysis");
+            const analysis = await analyzeCompetitorsWithGemini(competitorsData);
+            return NextResponse.json(analysis);
+        } else {
+            // If no competitors found, do direct Gemini analysis
+            console.log("No competitors found in database, using Gemini direct analysis");
+            if (!GEMINI_API_KEY) {
+                throw new Error("Missing GEMINI_API_KEY environment variable");
+            }
+            const directAnalysisPrompt = `
+As an expert marketing analyst, I need a detailed analysis of competitors for ${clientName} in the ${productFocus} space.
+
+I need your analysis in JSON format for direct parsing by my application.
+Return ONLY the following JSON structure with no markdown formatting, no code blocks, no backticks, and no explanatory text:
+
+{
+  "strengths": ["..."], // Key strengths of competitors in this market
+  "weaknesses": ["..."], // Key weaknesses of competitors in this market
+  "shared_patterns": ["..."], // Shared marketing patterns or themes
+  "market_gaps": ["..."], // Market gaps or unmet needs
+  "differentiation_strategies": ["..."], // Actionable differentiation strategies for content and brand positioning
+  "summary": "..." // One-paragraph summary of the competitive landscape
+}
+
+IMPORTANT: Your response must be valid, parseable JSON. Do not include any text outside the JSON object. Do not wrap the JSON in code blocks or backticks.`;
+            try {
+                console.log("[API /competitor-analysis] Calling Gemini for direct competitor analysis via HTTP API...");
+                const analysisText = await callGeminiAPI(directAnalysisPrompt, GEMINI_API_KEY, "gemini-2.0-flash");
+                
+                // Clean the response before parsing
+                const cleanedText = cleanGeminiResponse(analysisText);
+                
+                try {
+                    const analysis = JSON.parse(cleanedText);
+                    console.log("[API /competitor-analysis] Successfully parsed Gemini response as JSON");
+                    return NextResponse.json(analysis);
+                } catch (e) {
+                    console.error("[API /competitor-analysis] Failed to parse Gemini response as JSON:", e);
+                    return NextResponse.json({ 
+                        error: "Gemini response was not valid JSON", 
+                        strengths: ["No data available"],
+                        weaknesses: ["No data available"],
+                        shared_patterns: ["No data available"],
+                        market_gaps: ["No data available"],
+                        differentiation_strategies: ["No data available"],
+                        summary: "No data available"
+                    });
+                }
+            } catch (geminiError) {
+                console.error("[API /competitor-analysis] Error calling Gemini for direct analysis:", geminiError);
+                throw new Error("Failed to generate direct competitor analysis via Gemini.");
+            }
+        }
+    } catch (error) {
+        console.error("Error in POST /api/competitor-analysis:", error);
+        let errorMessage = "Unknown error";
+        if (error instanceof Error) {
+            errorMessage = error.message;
+        }
+        return new NextResponse(
+            JSON.stringify({ 
+                error: errorMessage,
+                strengths: ["No data available due to server error"],
+                weaknesses: ["No data available due to server error"],
+                shared_patterns: ["No data available due to server error"],
+                market_gaps: ["No data available due to server error"],
+                differentiation_strategies: ["No data available due to server error"],
+                summary: "No competitor data available due to server error."
+            }),
+            { status: 500, headers: { 'Content-Type': 'application/json' } }
+        );
+    }
+}

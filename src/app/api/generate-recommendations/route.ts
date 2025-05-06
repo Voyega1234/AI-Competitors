@@ -235,44 +235,64 @@ export async function GET(request: NextRequest) {
     }
     // --- End Book Summary Fetch ---
 
-    // --- Prepare Common Prompt Components (Build ONCE) ---
-    const clientInfo = { clientName: analysisRunData.clientName, market: analysisRunData.market, productFocus: analysisRunData.productFocus, };
-    const competitorSummary = summarizeCompetitors(competitorsData || []);
-    const bookSummarySection = bookSummaryContent ? `
-**Optional Book Summary Contexts:**
-${bookSummaryContent}
-` : '';
-    const userBriefSection = userBrief ? `
-**Additional User Brief/Context:**
-${userBrief}
-` : '';
-
-    // Define default prompt sections (using variables from frontend if passed)
-    const defaultTaskText = `1. Spark and detail 7-10 fresh, distinctive, and engaging creative ideas for ${clientInfo.clientName}, specifically focusing on concepts highly suitable for Facebook Ad campaigns. Focus on concepts that can present the client's specific ${clientInfo.productFocus} from new perspectives that spark curiosity, drive engagement, or create a memorable impression within the ${clientInfo.market} on social media. Ideas should build upon the client's strengths and available insights.
-  2. Focus on Actionable Creativity for Facebook: Ensure each recommendation translates into tangible marketing ideas easily adaptable into compelling Facebook Ad formats (e.g., single image/video, carousel, stories, reels). Include potential ad angles, visual directions, and calls-to-action. Prioritize ideas that are visually arresting, memorable, shareable, emotionally resonant, and push creative boundaries for this specific client on Facebook.
-  3. Informed by Context: Where available, let the \`groundedClientInfo\` and \`bookSummarySection\` inform the relevance, timeliness, or strategic angle of your ideas, but the core inspiration should stem from the client's fundamental product/service and market position. Use grounding to verify trends or competitor actions if needed.
-  4. For EACH recommendation, provide the Creative Execution Details below, specifically tailored for a Facebook Ad context. Generate specific, compelling content for each field IN THAI LANGUAGE, imagining how the core idea translates into ad components (e.g., Headline, Ad Copy, Visual Description, Call-to-Action).
-  5. Populate the corresponding fields in the final JSON object. Ensure all text output is original for this request
-  6. Ideas to include but not limited to: why the solutions from ${clientInfo.clientName} are different than what is being offered in the market currently. Talk about the differentiation of the product if and when it makes the client's product or service more appealing. `;
-    const defaultDetailsText = `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** (เช่น "เคล็ดลับฮาวทู", "เบื้องหลังการทำงาน", "เรื่องราวความสำเร็จลูกค้า", "การหักล้างความเชื่อผิดๆ", "ไลฟ์สไตล์และการใช้งาน", "ปัญหาและการแก้ไข").
-                                b.  **\`product_focus\`:** ระบุ ${clientInfo.productFocus || 'ผลิตภัณฑ์/บริการ'} ที่ต้องการเน้น **(ภาษาไทย)**.
-                                c.  **\`concept_idea\`:** สรุปแนวคิดสร้างสรรค์หลัก (1-2 ประโยค) สำหรับการนำเสนอไอเดียนี้ **(ภาษาไทย)**.
-                                d.  **\`copywriting\`:** สร้างสรรค์องค์ประกอบข้อความโฆษณาเบื้องต้น **(ภาษาไทย)**:
-                                    *   **\`headline\`:** พาดหัวที่ดึงดูดความสนใจ **(ภาษาไทย)**.
-                                    *   **\`sub_headline_1\`:** พาดหัวรองที่ขยายความหรือเน้นประโยชน์ **(ภาษาไทย)**.
-                                    *   **\`sub_headline_2\`:** พาดหัวรองที่สอง (ถ้ามี) เพื่อเพิ่มบริบทหรือความเร่งด่วน **(ภาษาไทย)** (ใช้ \`null\` หากไม่ต้องการ).
-                                    *   **\`bullets\`:** รายการจุดเด่น 2-4 ข้อที่เน้นประโยชน์หลัก, ฟีเจอร์ หรือเหตุผลที่น่าเชื่อถือ **(ภาษาไทย)**.
-                                    *   **\`cta\`:** ข้อความเรียกร้องให้ดำเนินการ (Call To Action) ที่ชัดเจน **(ภาษาไทย)** (เช่น "เรียนรู้เพิ่มเติม", "ซื้อเลย", "ดูเดโม", "เข้าร่วม Waiting List", "ดาวน์โหลดคู่มือ").`;
-
-    let taskSectionContent = taskSectionParam ? taskSectionParam.replace(/\{clientName\}/g, clientInfo.clientName).replace(/\{market\}/g, clientInfo.market).replace(/\{productFocus\}/g, clientInfo.productFocus || 'products/services') : defaultTaskText; // Use defaults directly if param missing
-    let detailsSectionContent = detailsSectionParam ? detailsSectionParam.replace(/\{productFocus\}/g, clientInfo.productFocus || 'products/services') : defaultDetailsText; // Use defaults directly if param missing
-
-    // Define the System Prompt (primarily for Claude, but can be logged for context)
-    const systemPrompt = "You are an AI assistant tasked with generating creative marketing recommendations. Your response MUST be a single, valid JSON object and nothing else. Do not include any text before or after the JSON object. All text content within the JSON object MUST be in THAI language.";
-
     // --- Perform Grounding Search (Run ONCE if Gemini Key exists, used by all models) ---
     let groundedClientInfoCommon = '';
+    let competitorAnalysisData = '';
+    
     if (GEMINI_API_KEY) { // Only attempt grounding if the key is available
+        // First, fetch competitor analysis from the competitor-analysis endpoint using POST
+        try {
+            console.log(`[Refactor] Fetching competitor analysis for client: ${analysisRunData.clientName}`);
+            
+            // Use POST request to competitor-analysis endpoint
+            const competitorAnalysisResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/competitor-analysis`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    clientName: analysisRunData.clientName,
+                    productFocus: analysisRunData.productFocus || '',
+                    runId: runId, // Pass the runId for context
+                }),
+            });
+            
+            if (!competitorAnalysisResponse.ok) {
+                console.warn(`[Refactor] Failed to fetch competitor analysis: ${competitorAnalysisResponse.status}`);
+            } else {
+                const competitorAnalysisResult = await competitorAnalysisResponse.json();
+                if (!competitorAnalysisResult.error) {
+                    // Format the competitor analysis data for the prompt
+                    competitorAnalysisData = `
+## Key Strengths
+${competitorAnalysisResult.strengths?.map((s: string) => `- ${s}`).join('\n') || 'No data available.'}
+
+## Weaknesses
+${competitorAnalysisResult.weaknesses?.map((w: string) => `- ${w}`).join('\n') || 'No data available.'}
+
+## Shared Patterns
+${competitorAnalysisResult.shared_patterns?.map((p: string) => `- ${p}`).join('\n') || 'No data available.'}
+
+## Market Gaps
+${competitorAnalysisResult.market_gaps?.map((g: string) => `- ${g}`).join('\n') || 'No data available.'}
+
+## Differentiation Strategies
+${competitorAnalysisResult.differentiation_strategies?.map((d: string) => `- ${d}`).join('\n') || 'No data available.'}
+
+## Summary
+${competitorAnalysisResult.summary || 'No summary available.'}
+`;
+                    console.log(`[Refactor] Successfully fetched competitor analysis. Length: ${competitorAnalysisData.length}`);
+                } else {
+                    console.warn(`[Refactor] Competitor analysis returned error: ${competitorAnalysisResult.error}`);
+                }
+            }
+        } catch (competitorAnalysisError: any) {
+            console.error("[Refactor] Error fetching competitor analysis:", competitorAnalysisError);
+            // Proceed without competitor analysis if fetch fails
+        }
+        
+        // Then perform grounding search as before
         const groundingPrompt = `ขอข้อมูลของ ${analysisRunData.clientName} ข้อมูลอัพเดทล่าสุด อยากได้ข้อมูลเช่น ราคา-ค่าใช้จ่าย, จุดเด่น ข้อมูลสำคัญต่างๆ โปรโมชั่น หรือ กิจกรรมและแคมเปญล่าสุด อยากได้ข้อมูลที่สดใหม่ที่สุด ตอบแค่คำตอบเท่านั้นห้ามตลอดอะไรมากกว่านี้`;
         console.log(`[Refactor] Performing common grounding search for client: ${analysisRunData.clientName}`);
         try {
@@ -318,31 +338,52 @@ ${userBrief}
     // --- End Grounding Search ---
 
     // --- Function to build the final user prompt (dynamically includes grounded info) ---
-    const buildFinalUserPrompt = (groundedInfo: string) => {
+    const buildFinalUserPrompt = (groundedInfo: string, competitorAnalysisText: string = '') => {
         const groundedSection = groundedInfo ? `
 ---
-*(This section provides recent context about ${clientInfo.clientName}. Consider these details alongside the core client information to ensure recommendations are timely and relevant. Use specific points from here where they offer a clear advantage or fresh angle.)*
+*(This section provides recent context about ${analysisRunData.clientName}. Consider these details alongside the core client information to ensure recommendations are timely and relevant. Use specific points from here where they offer a clear advantage or fresh angle.)*
 ` : '';
+
+        // Use provided competitorAnalysisText if available, otherwise fall back to competitorSummary
+        const competitorSection = competitorAnalysisText || summarizeCompetitors(competitorsData || []);
 
         return `
 Analyze the following client information, recent grounded search results (if available), competitor summary, and optional book context to conceptualize groundbreaking creative recommendations and their initial execution details **IN THAI**. **ALL TEXTUAL OUTPUT IN THE FINAL JSON RESPONSE MUST BE IN THAI.** **Crucially, leverage your access to real-time information via search grounding (if applicable to the model/call) to ensure ideas are timely, relevant, and informed by the latest digital landscape.**
 
 **Client Information:**
-*   Name: ${clientInfo.clientName}
-*   Market: ${clientInfo.market}
-*   Product Focus: ${clientInfo.productFocus}
-${userBriefSection}
+*   Name: ${analysisRunData.clientName}
+*   Market: ${analysisRunData.market}
+*   Product Focus: ${analysisRunData.productFocus}
+${userBrief ? `
+**Additional User Brief/Context:**
+${userBrief}
+` : ''}
 ${groundedSection}
-${bookSummarySection}
+${bookSummaryContent ? `
+**Optional Book Summary Contexts:**
+${bookSummaryContent}
+` : ''}
 **Competitor Landscape Summary:**
-${competitorSummary}
+${competitorSection}
 *(Analyze the competitor summary, recent client info, and optional book context...)*
 
 **Task:**
-${taskSectionContent} use ${groundedClientInfoCommon} to generate recommendations ideas that respresent จุดเด่น, ผลิตภัณฑ์เด่น, โปรโมชั่น แคมเปญล่าสุด หรือ กิจกรรมล่าสุด หรือ ข้อมูลสำคัญต่างๆ 
-
+${taskSectionParam ? taskSectionParam.replace(/\{clientName\}/g, analysisRunData.clientName).replace(/\{market\}/g, analysisRunData.market).replace(/\{productFocus\}/g, analysisRunData.productFocus || 'products/services') : `1. Spark and detail 7-10 fresh, distinctive, and engaging creative ideas for ${analysisRunData.clientName}, specifically focusing on concepts highly suitable for Facebook Ad campaigns. Focus on concepts that can present the client's specific ${analysisRunData.productFocus} from new perspectives that spark curiosity, drive engagement, or create a memorable impression within the ${analysisRunData.market} on social media. Ideas should build upon the client's strengths and available insights.
+  2. Focus on Actionable Creativity for Facebook: Ensure each recommendation translates into tangible marketing ideas easily adaptable into compelling Facebook Ad formats (e.g., single image/video, carousel, stories, reels). Include potential ad angles, visual directions, and calls-to-action. Prioritize ideas that are visually arresting, memorable, shareable, emotionally resonant, and push creative boundaries for this specific client on Facebook.
+  3. Informed by Context: Where available, let the \`groundedClientInfo\` and \`bookSummarySection\` inform the relevance, timeliness, or strategic angle of your ideas, but the core inspiration should stem from the client's fundamental product/service and market position. Use grounding to verify trends or competitor actions if needed.
+  4. For EACH recommendation, provide the Creative Execution Details below, specifically tailored for a Facebook Ad context. Generate specific, compelling content for each field IN THAI LANGUAGE, imagining how the core idea translates into ad components (e.g., Headline, Ad Copy, Visual Description, Call-to-Action).
+  5. Populate the corresponding fields in the final JSON object. Ensure all text output is original for this request
+  6. Ideas to include but not limited to: why the solutions from ${analysisRunData.clientName} are different than what is being offered in the market currently. Talk about the differentiation of the product if and when it makes the client's product or service more appealing. `}
 **Creative Execution Details (Per Recommendation - Populate these fields IN THAI for the JSON):**
-${detailsSectionContent}
+${detailsSectionParam ? detailsSectionParam.replace(/\{productFocus\}/g, analysisRunData.productFocus || 'products/services') : `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** (เช่น "เคล็ดลับฮาวทู", "เบื้องหลังการทำงาน", "เรื่องราวความสำเร็จลูกค้า", "การหักล้างความเชื่อผิดๆ", "ไลฟ์สไตล์และการใช้งาน", "ปัญหาและการแก้ไข").
+                                b.  **\`product_focus\`:** ระบุ ${analysisRunData.productFocus || 'ผลิตภัณฑ์/บริการ'} ที่ต้องการเน้น **(ภาษาไทย)**.
+                                c.  **\`concept_idea\`:** สรุปแนวคิดสร้างสรรค์หลัก (1-2 ประโยค) สำหรับการนำเสนอไอเดียนี้ **(ภาษาไทย)**.
+                                d.  **\`copywriting\`:** สร้างสรรค์องค์ประกอบข้อความโฆษณาเบื้องต้น **(ภาษาไทย)**:
+                                    *   **\`headline\`:** พาดหัวที่ดึงดูดความสนใจ **(ภาษาไทย)**.
+                                    *   **\`sub_headline_1\`:** พาดหัวรองที่ขยายความหรือเน้นประโยชน์ **(ภาษาไทย)**.
+                                    *   **\`sub_headline_2\`:** พาดหัวรองที่สอง (ถ้ามี) เพื่อเพิ่มบริบทหรือความเร่งด่วน **(ภาษาไทย)** (ใช้ \`null\` หากไม่ต้องการ).
+                                    *   **\`bullets\`:** รายการจุดเด่น 2-4 ข้อที่เน้นประโยชน์หลัก, ฟีเจอร์ หรือเหตุผลที่น่าเชื่อถือ **(ภาษาไทย)**.
+                                    *   **\`cta\`:** ข้อความเรียกร้องให้ดำเนินการ (Call To Action) ที่ชัดเจน **(ภาษาไทย)** (เช่น "เรียนรู้เพิ่มเติม", "ซื้อเลย", "ดูเดโม", "เข้าร่วม Waiting List", "ดาวน์โหลดคู่มือ").`}
 
 **Output Format Requirements:**
 *   Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting (like \`\`\`json\`\`).
@@ -365,11 +406,11 @@ ${detailsSectionContent}
       "competitiveGap": "ระบุช่องว่างทางการแข่งขันที่ไอเดียนี้เข้าไปตอบโจทย์ (ภาษาไทย)", // Thai - Must be original
       "tags": ["คำค้น1", "คำค้น2", "รูปแบบเนื้อหา"], // Thai - Must be original
       "content_pillar": "ตัวอย่าง: เคล็ดลับฮาวทู", // Thai - Must be original
-      "product_focus": "ระบุ ${clientInfo.productFocus || 'ผลิตภัณฑ์/บริการ'} ที่ระบุใน Input", // Thai - Must be original & specific to input
+      "product_focus": "ระบุ ${analysisRunData.productFocus || 'ผลิตภัณฑ์/บริการ'} ที่ระบุใน Input", // Thai - Must be original & specific to input
       "concept_idea": "สรุปแนวคิดสร้างสรรค์หลักสำหรับการนำเสนอไอเดียนี้ (1-2 ประโยค)", // Thai - Must be original
       "copywriting": {
         "headline": "พาดหัวหลักที่ดึงดูดความสนใจ", // Thai - Must be original
-        "sub_headline_1": "พาดหัวรองสนับสนุน", // Thai - Must be original
+        "sub_headline_1": "พาดหัวรองที่ขยายความหรือเน้นประโยชน์", // Thai - Must be original
         "sub_headline_2": "พาดหัวรองที่สอง (ถ้ามี) หรือ null", // Thai - Must be original or null
         "bullets": [
           "จุดเด่นที่ 1", // Thai - Must be original
@@ -386,7 +427,6 @@ ${detailsSectionContent}
 `;
     };
 
-
     // --- Model-Specific Generation ---
 
     // --- Gemini Generation (Conditional) ---
@@ -394,13 +434,12 @@ ${detailsSectionContent}
         console.log("Starting Gemini generation...");
         try {
             // --- Prepare Gemini Prompt (using common builder) ---
-            const finalGeminiPrompt = buildFinalUserPrompt(groundedClientInfoCommon);
+            const finalGeminiPrompt = buildFinalUserPrompt(groundedClientInfoCommon, competitorAnalysisData);
 
             // --- Log Gemini Prompt ---
             console.log("--- START FINAL GEMINI PROMPT ---");
             console.log(finalGeminiPrompt);
             console.log("--- END FINAL GEMINI PROMPT ---");
-
 
             // --- Call Gemini API ---
             console.log("Sending request to Gemini API...");
@@ -468,13 +507,12 @@ ${detailsSectionContent}
         console.log("Starting OpenAI generation...");
         try {
             // --- Prepare OpenAI Prompt (using common builder, no grounding needed here) ---
-            const finalOpenAIPrompt = buildFinalUserPrompt(groundedClientInfoCommon);
+            const finalOpenAIPrompt = buildFinalUserPrompt(groundedClientInfoCommon, competitorAnalysisData);
 
             // --- Log OpenAI Prompt ---
             console.log("--- START FINAL OPENAI PROMPT ---");
             console.log(finalOpenAIPrompt);
             console.log("--- END FINAL OPENAI PROMPT ---");
-
 
             // --- Call OpenAI API ---
             console.log("Sending request to OpenAI API...");
@@ -543,17 +581,16 @@ ${detailsSectionContent}
         console.log("Starting Claude generation...");
         try {
             // --- Prepare Claude Prompt (using common builder, no grounding needed here) ---
-            const finalClaudePrompt = buildFinalUserPrompt(groundedClientInfoCommon);
+            const finalClaudePrompt = buildFinalUserPrompt(groundedClientInfoCommon, competitorAnalysisData);
             
             // Use the predefined systemPrompt
-            const systemPromptClaude = systemPrompt; 
+            const systemPromptClaude = "You are an AI assistant tasked with generating creative marketing recommendations. Your response MUST be a single, valid JSON object and nothing else. Do not include any text before or after the JSON object. All text content within the JSON object MUST be in THAI language.";
 
             // --- Log Claude Prompt ---
             console.log("--- START FINAL CLAUDE PROMPT ---");
             console.log("System Prompt:", systemPromptClaude);
             console.log("User Prompt:", finalClaudePrompt);
             console.log("--- END FINAL CLAUDE PROMPT ---");
-
 
             // --- Call Claude API ---
             console.log("Sending request to Anthropic API...");
@@ -607,7 +644,7 @@ ${detailsSectionContent}
             let jsonString = '';
             try {
                 // Attempt to extract JSON even if wrapped
-                let potentiallyCleanedText = generatedText.trim().replace(/^```json\s*/, '').replace(/\s*```$/, '');
+                let potentiallyCleanedText = generatedText.trim().replace(/^```json\n/, '').replace(/\s*```$/, '');
                 const startIndex = potentiallyCleanedText.indexOf('{');
                 const endIndex = potentiallyCleanedText.lastIndexOf('}');
                 if (startIndex === -1 || endIndex === -1 || endIndex < startIndex) {
@@ -707,480 +744,122 @@ export async function POST(request: NextRequest) {
         }
 
         // --- Initialize result holders ---
-        const finalResults: Record<string, any> = {};
-        const finalErrors: Record<string, any> = {};
+        const results: Record<string, any> = {};
+        const errors: ModelErrorState = {};
+        let groundedClientInfo = ''; // Initialize groundedClientInfo variable
+
+        // Define the function to build the final user prompt (similar to GET handler)
+        const buildFinalUserPrompt = (groundedInfo: string, competitorAnalysisText: string = '') => {
+            // Fetch client info from runId
+            const clientInfo = {
+                clientName: body.clientName || "Client",
+                market: body.market || "Market",
+                productFocus: body.productFocus || "Products/Services"
+            };
+
+            const groundedSection = groundedInfo ? `
+---
+*(This section provides recent context about ${clientInfo.clientName}. Consider these details alongside the core client information to ensure recommendations are timely and relevant. Use specific points from here where they offer a clear advantage or fresh angle.)*
+` : '';
+
+            const userBriefSection = brief ? `
+**Additional User Brief/Context:**
+${brief}
+` : '';
+
+            // Define default prompt sections
+            const defaultTaskText = `1. Spark and detail 7-10 fresh, distinctive, and engaging creative ideas for ${clientInfo.clientName}, specifically focusing on concepts highly suitable for Facebook Ad campaigns. Focus on concepts that can present the client's specific ${clientInfo.productFocus} from new perspectives that spark curiosity, drive engagement, or create a memorable impression within the ${clientInfo.market} on social media. Ideas should build upon the client's strengths and available insights.
+  2. Focus on Actionable Creativity for Facebook: Ensure each recommendation translates into tangible marketing ideas easily adaptable into compelling Facebook Ad formats (e.g., single image/video, carousel, stories, reels). Include potential ad angles, visual directions, and calls-to-action. Prioritize ideas that are visually arresting, memorable, shareable, emotionally resonant, and push creative boundaries for this specific client on Facebook.
+  3. Informed by Context: Where available, let the \`groundedClientInfo\` and \`bookSummarySection\` inform the relevance, timeliness, or strategic angle of your ideas, but the core inspiration should stem from the client's fundamental product/service and market position. Use grounding to verify trends or competitor actions if needed.
+  4. For EACH recommendation, provide the Creative Execution Details below, specifically tailored for a Facebook Ad context. Generate specific, compelling content for each field IN THAI LANGUAGE, imagining how the core idea translates into ad components (e.g., Headline, Ad Copy, Visual Description, Call-to-Action).
+  5. Populate the corresponding fields in the final JSON object. Ensure all text output is original for this request
+  6. Ideas to include but not limited to: why the solutions from ${clientInfo.clientName} are different than what is being offered in the market currently. Talk about the differentiation of the product if and when it makes the client's product or service more appealing. `;
+            
+            const defaultDetailsText = `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** (เช่น "เคล็ดลับฮาวทู", "เบื้องหลังการทำงาน", "เรื่องราวความสำเร็จลูกค้า", "การหักล้างความเชื่อผิดๆ", "ไลฟ์สไตล์และการใช้งาน", "ปัญหาและการแก้ไข").
+                                b.  **\`product_focus\`:** ระบุ ${clientInfo.productFocus || 'ผลิตภัณฑ์/บริการ'} ที่ต้องการเน้น **(ภาษาไทย)**.
+                                c.  **\`concept_idea\`:** สรุปแนวคิดสร้างสรรค์หลัก (1-2 ประโยค) สำหรับการนำเสนอไอเดียนี้ **(ภาษาไทย)**.
+                                d.  **\`copywriting\`:** สร้างสรรค์องค์ประกอบข้อความโฆษณาเบื้องต้น **(ภาษาไทย)**:
+                                    *   **\`headline\`:** พาดหัวที่ดึงดูดความสนใจ **(ภาษาไทย)**.
+                                    *   **\`sub_headline_1\`:** พาดหัวรองที่ขยายความหรือเน้นประโยชน์ **(ภาษาไทย)**.
+                                    *   **\`sub_headline_2\`:** พาดหัวรองที่สอง (ถ้ามี) เพื่อเพิ่มบริบทหรือความเร่งด่วน **(ภาษาไทย)** (ใช้ \`null\` หากไม่ต้องการ).
+                                    *   **\`bullets\`:** รายการจุดเด่น 2-4 ข้อที่เน้นประโยชน์หลัก, ฟีเจอร์ หรือเหตุผลที่น่าเชื่อถือ **(ภาษาไทย)**.
+                                    *   **\`cta\`:** ข้อความเรียกร้องให้ดำเนินการ (Call To Action) ที่ชัดเจน **(ภาษาไทย)** (เช่น "เรียนรู้เพิ่มเติม", "ซื้อเลย", "ดูเดโม", "เข้าร่วม Waiting List", "ดาวน์โหลดคู่มือ").`;
+
+            const taskSectionContent = taskSection || defaultTaskText;
+            const detailsSectionContent = detailsSection || defaultDetailsText;
+
+            return `
+Analyze the following client information, recent grounded search results (if available), competitor summary, and optional book context to conceptualize groundbreaking creative recommendations and their initial execution details **IN THAI**. **ALL TEXTUAL OUTPUT IN THE FINAL JSON RESPONSE MUST BE IN THAI.** **Crucially, leverage your access to real-time information via search grounding (if applicable to the model/call) to ensure ideas are timely, relevant, and informed by the latest digital landscape.**
+
+**Client Information:**
+*   Name: ${clientInfo.clientName}
+*   Market: ${clientInfo.market}
+*   Product Focus: ${clientInfo.productFocus}
+${userBriefSection}
+${groundedSection}
+
+**Competitor Landscape Summary:**
+${competitorAnalysisText}
+*(Analyze the competitor summary, recent client info, and optional book context...)*
+
+**Task:**
+${taskSectionContent} use ${groundedInfo} to generate recommendations ideas that respresent จุดเด่น, ผลิตภัณฑ์เด่น, โปรโมชั่น แคมเปญล่าสุด หรือ กิจกรรมล่าสุด หรือ ข้อมูลสำคัญต่างๆ 
+**Creative Execution Details (Per Recommendation - Populate these fields IN THAI for the JSON):**
+${detailsSectionContent}
+
+**Output Format Requirements:**
+*   Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting (like \`\`\`json\`\`).
+*   The JSON object MUST strictly follow the structure below.
+*   **Crucially, the values for \`content_pillar\`, \`product_focus\`, \`concept_idea\`, and all fields within \`copywriting\` (\`headline\`, \`sub_headline_1\`, \`sub_headline_2\`, \`bullets\`, \`cta\`) MUST be generated in THAI LANGUAGE.**
+*   \`title\` and \`description\` fields should also be generated in THAI LANGUAGE.
+*   Use "High", "Medium", or "Low" for the impact field (bias towards "High").
+*   Provide a concise "competitiveGap" string (in THAI LANGUAGE).
+*   Include 2-4 relevant and specific keyword strings in the "tags" array (in THAI LANGUAGE).
+
+**Required JSON Structure:**
+\`\`\`json
+{
+  "recommendations": [
+    {
+      "title": "หัวข้อแนะนำ (ภาษาไทย)", // Thai - Must be original
+      "description": "รายละเอียดแนวคิดสร้างสรรค์ ที่ไม่ซ้ำใคร และมีประสิทธิภาพ (ภาษาไทย)", // Thai - Must be original
+      "category": "Campaign", // Keep category identifier standard
+      "impact": "High",
+      "competitiveGap": "ระบุช่องว่างทางการแข่งขันที่ไอเดียนี้เข้าไปตอบโจทย์ (ภาษาไทย)", // Thai - Must be original
+      "tags": ["คำค้น1", "คำค้น2", "รูปแบบเนื้อหา"], // Thai - Must be original
+      "content_pillar": "ตัวอย่าง: เคล็ดลับฮาวทู", // Thai - Must be original
+      "product_focus": "ระบุ ${clientInfo.productFocus || 'ผลิตภัณฑ์/บริการ'} ที่ระบุใน Input", // Thai - Must be original & specific to input
+      "concept_idea": "สรุปแนวคิดสร้างสรรค์หลักสำหรับการนำเสนอไอเดียนี้ (1-2 ประโยค)", // Thai - Must be original
+      "copywriting": {
+        "headline": "พาดหัวหลักที่ดึงดูดความสนใจ", // Thai - Must be original
+        "sub_headline_1": "พาดหัวรองที่ขยายความหรือเน้นประโยชน์", // Thai - Must be original
+        "sub_headline_2": "พาดหัวรองที่สอง (ถ้ามี) หรือ null", // Thai - Must be original or null
+        "bullets": [
+          "จุดเด่นที่ 1", // Thai - Must be original
+          "จุดเด่นที่ 2", // Thai - Must be original
+          "จุดเด่นที่ 3"  // Thai - Must be original
+        ],
+        "cta": "ตัวอย่าง: ดูเพิ่มเติม" // Thai - Must be original
+      }
+    }
+    // ... more recommendation objects (7-10 total)
+  ]
+}
+\`\`\`
+`;
+        };
 
         try {
-            // --- Fetch common data (needed by all models) ---
-            const { data: analysisRunData, error: runError } = await supabaseAdmin
-                .from('AnalysisRun')
-                .select('*')
-                .eq('id', runId)
-                .single();
+            // Use competitorAnalysis directly from the request body
+            let finalPrompt = buildFinalUserPrompt('', competitorAnalysis);
+            console.log(`Final prompt (first 200 chars): ${finalPrompt.substring(0, 200)}...`);
 
-            if (runError && runError.code !== 'PGRST116') {
-                console.error(`Supabase error fetching AnalysisRun ${runId}:`, runError);
-                throw new Error(runError.message || 'Failed to fetch analysis run data');
-            }
-
-            if (!analysisRunData) {
-                console.log(`AnalysisRun not found for runId: ${runId}`);
-                return new NextResponse(
-                    JSON.stringify({ error: 'Analysis run not found' }),
-                    { status: 404, headers: { 'Content-Type': 'application/json' } }
-                );
-            }
-
-            // Fetch associated Competitors using Supabase
-            const { data: competitorsData, error: competitorError } = await supabaseAdmin
-                .from('Competitor')
-                .select('*')
-                .eq('analysisRunId', runId);
-
-            if (competitorError) {
-                console.error(`Supabase error fetching Competitors for runId ${runId}:`, competitorError);
-                throw new Error(competitorError.message || 'Failed to fetch competitor data');
-            }
-
-            // Use competitorAnalysis as context in the prompt
-            const promptWithCompetitor = `\n## Competitor Analysis Context\n${competitorAnalysis}\n\n` +
-                `${taskSection}\n${detailsSection}\n${brief ? `\nUser Brief: ${brief}` : ''}`;
-
-            // Process each requested model
-            for (const model of models) {
-                try {
-                    console.log(`Generating recommendations with ${model} model...`);
-                    
-                    if (model === 'gemini') {
-                        // Call Gemini API
-                        const { GoogleGenerativeAI } = await import("@google/generative-ai");
-                        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY!);
-                        const geminiModel = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
-                        
-                        const result = await geminiModel.generateContent({
-                            contents: [{ role: "user", parts: [{ text: promptWithCompetitor }] }],
-                            generationConfig: {
-                                temperature: 0.7,
-                                maxOutputTokens: 8192,
-                            },
-                        });
-                        
-                        const responseText = result.response.text();
-                        console.log(`Gemini response length: ${responseText.length} characters`);
-                        
-                        try {
-                            // Extract JSON from response
-                            const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/) || 
-                                             responseText.match(/```\n([\s\S]*?)\n```/) ||
-                                             responseText.match(/\{[\s\S]*\}/);
-                            
-                            let jsonContent = jsonMatch ? jsonMatch[1] || jsonMatch[0] : responseText;
-                            
-                            // Clean up the JSON string
-                            jsonContent = jsonContent.replace(/^```json\n/, '')
-                                                   .replace(/^```\n/, '')
-                                                   .replace(/\n```$/, '')
-                                                   .trim();
-                            
-                            // If it doesn't look like JSON, try to find JSON in the text
-                            if (!jsonContent.trim().startsWith('{') && !jsonContent.trim().startsWith('[')) {
-                                // Look for any JSON object or array in the text
-                                const objectMatch = responseText.match(/(\{[\s\S]*\})/);
-                                const arrayMatch = responseText.match(/(\[[\s\S]*\])/);
-                                
-                                if (objectMatch) {
-                                    jsonContent = objectMatch[1];
-                                } else if (arrayMatch) {
-                                    jsonContent = arrayMatch[1];
-                                } else {
-                                    // If we can't find valid JSON, create a simple structure with the expected format
-                                    console.log("Could not find valid JSON, creating a properly formatted structure");
-                                    const recommendations = [];
-                                    
-                                    // Create a properly formatted recommendation object
-                                    for (let i = 0; i < 3; i++) {
-                                        recommendations.push({
-                                            title: `แนวคิดที่ ${i+1}: การนำเสนอเนื้อหาจาก ${analysisRunData.clientName}`,
-                                            description: "แนวคิดที่สร้างสรรค์สำหรับแคมเปญโฆษณา",
-                                            category: "แคมเปญ",
-                                            impact: "สูง",
-                                            content_pillar: "เคล็ดลับฮาวทู",
-                                            product_focus: analysisRunData.productFocus || "ผลิตภัณฑ์/บริการ",
-                                            concept_idea: "นำเสนอวิธีการใช้ผลิตภัณฑ์ในชีวิตประจำวัน",
-                                            copywriting: {
-                                                headline: "ค้นพบวิธีใหม่ในการเรียนรู้",
-                                                sub_headline_1: "เรียนรู้ได้ทุกที่ทุกเวลา",
-                                                sub_headline_2: "พัฒนาทักษะอย่างต่อเนื่อง",
-                                                bullets: [
-                                                    "เรียนรู้ได้ทุกที่ทุกเวลา",
-                                                    "พัฒนาทักษะอย่างต่อเนื่อง",
-                                                    "ราคาคุ้มค่า"
-                                                ],
-                                                cta: "สมัครเลย"
-                                            }
-                                        } as RecommendationObject);
-                                    }
-                                    
-                                    jsonContent = JSON.stringify({ recommendations });
-                                }
-                            }
-                            
-                            console.log("Cleaned JSON content:", jsonContent.substring(0, 100) + "...");
-                            
-                            // Try to parse the JSON
-                            const parsedResponse = JSON.parse(jsonContent);
-                            
-                            // Check if we have recommendations or need to wrap the response
-                            if (Array.isArray(parsedResponse)) {
-                                // If it's an array, assume it's the recommendations array
-                                finalResults[model] = parsedResponse;
-                            } else if (parsedResponse.recommendations && Array.isArray(parsedResponse.recommendations)) {
-                                // If it has a recommendations property that's an array, use that
-                                finalResults[model] = parsedResponse.recommendations;
-                            } else {
-                                // Otherwise, wrap whatever we got in a recommendations array
-                                finalResults[model] = [parsedResponse];
-                            }
-                        } catch (parseError: any) {
-                            console.error(`Error parsing Gemini JSON response:`, parseError);
-                            console.log("Raw response:", responseText.substring(0, 500) + "...");
-                            
-                            // Create fallback recommendations with the expected format
-                            const recommendations = [];
-                            
-                            // Create a properly formatted recommendation object
-                            for (let i = 0; i < 3; i++) {
-                                recommendations.push({
-                                    title: `แนวคิดที่ ${i+1}: การนำเสนอเนื้อหาจาก ${analysisRunData.clientName}`,
-                                    description: "แนวคิดที่สร้างสรรค์สำหรับแคมเปญโฆษณา",
-                                    category: "แคมเปญ",
-                                    impact: "สูง",
-                                    content_pillar: "เคล็ดลับฮาวทู",
-                                    product_focus: analysisRunData.productFocus || "ผลิตภัณฑ์/บริการ",
-                                    concept_idea: "นำเสนอวิธีการใช้ผลิตภัณฑ์ในชีวิตประจำวัน",
-                                    copywriting: {
-                                        headline: "ค้นพบวิธีใหม่ในการเรียนรู้",
-                                        sub_headline_1: "เรียนรู้ได้ทุกที่ทุกเวลา",
-                                        sub_headline_2: "พัฒนาทักษะอย่างต่อเนื่อง",
-                                        bullets: [
-                                            "เรียนรู้ได้ทุกที่ทุกเวลา",
-                                            "พัฒนาทักษะอย่างต่อเนื่อง",
-                                            "ราคาคุ้มค่า"
-                                        ],
-                                        cta: "สมัครเลย"
-                                    }
-                                } as RecommendationObject);
-                            }
-                            
-                            finalResults[model] = recommendations;
-                            finalErrors[model] = `Error parsing response: ${parseError.message}`;
-                        }
-                    } else if (model === 'openai') {
-                        // Call OpenAI API (implement similar to Gemini)
-                        const OpenAI = await import("openai");
-                        const openai = new OpenAI.OpenAI({ apiKey: OPENAI_API_KEY });
-                        
-                        const result = await openai.chat.completions.create({
-                            model: "gpt-4o",
-                            messages: [{ role: "user", content: promptWithCompetitor }],
-                            temperature: 0.7,
-                            max_tokens: 4000,
-                        });
-                        
-                        const responseText = result.choices[0]?.message?.content || "";
-                        console.log(`OpenAI response length: ${responseText.length} characters`);
-                        
-                        try {
-                            // Extract JSON from response
-                            const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/) || 
-                                             responseText.match(/```\n([\s\S]*?)\n```/) ||
-                                             responseText.match(/\{[\s\S]*\}/);
-                            
-                            let jsonContent = jsonMatch ? jsonMatch[1] || jsonMatch[0] : responseText;
-                            
-                            // Clean up the JSON string
-                            jsonContent = jsonContent.replace(/^```json\n/, '')
-                                                   .replace(/^```\n/, '')
-                                                   .replace(/\n```$/, '')
-                                                   .trim();
-                            
-                            // If it doesn't look like JSON, try to find JSON in the text
-                            if (!jsonContent.trim().startsWith('{') && !jsonContent.trim().startsWith('[')) {
-                                // Look for any JSON object or array in the text
-                                const objectMatch = responseText.match(/(\{[\s\S]*\})/);
-                                const arrayMatch = responseText.match(/(\[[\s\S]*\])/);
-                                
-                                if (objectMatch) {
-                                    jsonContent = objectMatch[1];
-                                } else if (arrayMatch) {
-                                    jsonContent = arrayMatch[1];
-                                } else {
-                                    // If we can't find valid JSON, create a simple structure with the expected format
-                                    console.log("Could not find valid JSON, creating a properly formatted structure");
-                                    const recommendations = [];
-                                    
-                                    // Create a properly formatted recommendation object
-                                    for (let i = 0; i < 3; i++) {
-                                        recommendations.push({
-                                            title: `แนวคิดที่ ${i+1}: การนำเสนอเนื้อหาจาก ${analysisRunData.clientName}`,
-                                            description: "แนวคิดที่สร้างสรรค์สำหรับแคมเปญโฆษณา",
-                                            category: "แคมเปญ",
-                                            impact: "สูง",
-                                            content_pillar: "เคล็ดลับฮาวทู",
-                                            product_focus: analysisRunData.productFocus || "ผลิตภัณฑ์/บริการ",
-                                            concept_idea: "นำเสนอวิธีการใช้ผลิตภัณฑ์ในชีวิตประจำวัน",
-                                            copywriting: {
-                                                headline: "ค้นพบวิธีใหม่ในการเรียนรู้",
-                                                sub_headline_1: "เรียนรู้ได้ทุกที่ทุกเวลา",
-                                                sub_headline_2: "พัฒนาทักษะอย่างต่อเนื่อง",
-                                                bullets: [
-                                                    "เรียนรู้ได้ทุกที่ทุกเวลา",
-                                                    "พัฒนาทักษะอย่างต่อเนื่อง",
-                                                    "ราคาคุ้มค่า"
-                                                ],
-                                                cta: "สมัครเลย"
-                                            }
-                                        } as RecommendationObject);
-                                    }
-                                    
-                                    jsonContent = JSON.stringify({ recommendations });
-                                }
-                            }
-                            
-                            console.log("Cleaned JSON content:", jsonContent.substring(0, 100) + "...");
-                            
-                            // Try to parse the JSON
-                            const parsedResponse = JSON.parse(jsonContent);
-                            
-                            // Check if we have recommendations or need to wrap the response
-                            if (Array.isArray(parsedResponse)) {
-                                // If it's an array, assume it's the recommendations array
-                                finalResults[model] = parsedResponse;
-                            } else if (parsedResponse.recommendations && Array.isArray(parsedResponse.recommendations)) {
-                                // If it has a recommendations property that's an array, use that
-                                finalResults[model] = parsedResponse.recommendations;
-                            } else {
-                                // Otherwise, wrap whatever we got in a recommendations array
-                                finalResults[model] = [parsedResponse];
-                            }
-                        } catch (parseError: any) {
-                            console.error(`Error parsing OpenAI JSON response:`, parseError);
-                            console.log("Raw response:", responseText.substring(0, 500) + "...");
-                            
-                            // Create fallback recommendations with the expected format
-                            const recommendations = [];
-                            
-                            // Create a properly formatted recommendation object
-                            for (let i = 0; i < 3; i++) {
-                                recommendations.push({
-                                    title: `แนวคิดที่ ${i+1}: การนำเสนอเนื้อหาจาก ${analysisRunData.clientName}`,
-                                    description: "แนวคิดที่สร้างสรรค์สำหรับแคมเปญโฆษณา",
-                                    category: "แคมเปญ",
-                                    impact: "สูง",
-                                    content_pillar: "เคล็ดลับฮาวทู",
-                                    product_focus: analysisRunData.productFocus || "ผลิตภัณฑ์/บริการ",
-                                    concept_idea: "นำเสนอวิธีการใช้ผลิตภัณฑ์ในชีวิตประจำวัน",
-                                    copywriting: {
-                                        headline: "ค้นพบวิธีใหม่ในการเรียนรู้",
-                                        sub_headline_1: "เรียนรู้ได้ทุกที่ทุกเวลา",
-                                        sub_headline_2: "พัฒนาทักษะอย่างต่อเนื่อง",
-                                        bullets: [
-                                            "เรียนรู้ได้ทุกที่ทุกเวลา",
-                                            "พัฒนาทักษะอย่างต่อเนื่อง",
-                                            "ราคาคุ้มค่า"
-                                        ],
-                                        cta: "สมัครเลย"
-                                    }
-                                } as RecommendationObject);
-                            }
-                            
-                            finalResults[model] = recommendations;
-                            finalErrors[model] = `Error parsing response: ${parseError.message}`;
-                        }
-                    } else if (model === 'claude') {
-                        // For Claude, use the fetch API approach
-                        console.log("Sending request to Anthropic API...");
-                        const claudeUrl = "https://api.anthropic.com/v1/messages";
-                        const claudePayload = {
-                            model: "claude-3-7-sonnet-20250219", // Ensure this model is correct/available
-                            max_tokens: 4000,
-                            messages: [
-                                { role: "user" as const, content: promptWithCompetitor } // Use the common user prompt
-                            ],
-                            temperature: 0.7 // Adjusted temperature
-                        };
-
-                        const claudeResponse = await fetch(claudeUrl, {
-                            method: 'POST',
-                            headers: {
-                                'x-api-key': ANTHROPIC_API_KEY!,
-                                'anthropic-version': '2023-06-01',
-                                'content-type': 'application/json'
-                            },
-                            body: JSON.stringify(claudePayload)
-                        });
-
-                        if (!claudeResponse.ok) {
-                            const errorText = await claudeResponse.text();
-                            let errorMessage = `Anthropic API request failed: ${claudeResponse.status} - ${claudeResponse.statusText}`;
-                            try {
-                                const errorBody = JSON.parse(errorText);
-                                errorMessage = errorBody?.error?.message || errorMessage;
-                            } catch (e) {
-                                // If we can't parse the error, just use the text
-                                errorMessage += ` - ${errorText}`;
-                            }
-                            throw new Error(errorMessage);
-                        }
-
-                        const claudeData = await claudeResponse.json();
-                        const responseText = claudeData?.content?.[0]?.text || "";
-                        console.log(`Claude response length: ${responseText.length} characters`);
-                        
-                        try {
-                            // Extract JSON from response
-                            const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/) || 
-                                             responseText.match(/```\n([\s\S]*?)\n```/) ||
-                                             responseText.match(/\{[\s\S]*\}/);
-                            
-                            let jsonContent = jsonMatch ? jsonMatch[1] || jsonMatch[0] : responseText;
-                            
-                            // Clean up the JSON string
-                            jsonContent = jsonContent.replace(/^```json\n/, '')
-                                                   .replace(/^```\n/, '')
-                                                   .replace(/\n```$/, '')
-                                                   .trim();
-                            
-                            // If it doesn't look like JSON, try to find JSON in the text
-                            if (!jsonContent.trim().startsWith('{') && !jsonContent.trim().startsWith('[')) {
-                                // Look for any JSON object or array in the text
-                                const objectMatch = responseText.match(/(\{[\s\S]*\})/);
-                                const arrayMatch = responseText.match(/(\[[\s\S]*\])/);
-                                
-                                if (objectMatch) {
-                                    jsonContent = objectMatch[1];
-                                } else if (arrayMatch) {
-                                    jsonContent = arrayMatch[1];
-                                } else {
-                                    // If we can't find valid JSON, create a simple structure with the expected format
-                                    console.log("Could not find valid JSON, creating a properly formatted structure");
-                                    const recommendations = [];
-                                    
-                                    // Create a properly formatted recommendation object
-                                    for (let i = 0; i < 3; i++) {
-                                        recommendations.push({
-                                            title: `แนวคิดที่ ${i+1}: การนำเสนอเนื้อหาจาก ${analysisRunData.clientName}`,
-                                            description: "แนวคิดที่สร้างสรรค์สำหรับแคมเปญโฆษณา",
-                                            category: "แคมเปญ",
-                                            impact: "สูง",
-                                            content_pillar: "เคล็ดลับฮาวทู",
-                                            product_focus: analysisRunData.productFocus || "ผลิตภัณฑ์/บริการ",
-                                            concept_idea: "นำเสนอวิธีการใช้ผลิตภัณฑ์ในชีวิตประจำวัน",
-                                            copywriting: {
-                                                headline: "ค้นพบวิธีใหม่ในการเรียนรู้",
-                                                sub_headline_1: "เรียนรู้ได้ทุกที่ทุกเวลา",
-                                                sub_headline_2: "พัฒนาทักษะอย่างต่อเนื่อง",
-                                                bullets: [
-                                                    "เรียนรู้ได้ทุกที่ทุกเวลา",
-                                                    "พัฒนาทักษะอย่างต่อเนื่อง",
-                                                    "ราคาคุ้มค่า"
-                                                ],
-                                                cta: "สมัครเลย"
-                                            }
-                                        } as RecommendationObject);
-                                    }
-                                    
-                                    jsonContent = JSON.stringify({ recommendations });
-                                }
-                            }
-                            
-                            console.log("Cleaned JSON content:", jsonContent.substring(0, 100) + "...");
-                            
-                            // Try to parse the JSON
-                            const parsedResponse = JSON.parse(jsonContent);
-                            
-                            // Check if we have recommendations or need to wrap the response
-                            if (Array.isArray(parsedResponse)) {
-                                // If it's an array, assume it's the recommendations array
-                                finalResults[model] = parsedResponse;
-                            } else if (parsedResponse.recommendations && Array.isArray(parsedResponse.recommendations)) {
-                                // If it has a recommendations property that's an array, use that
-                                finalResults[model] = parsedResponse.recommendations;
-                            } else {
-                                // Otherwise, wrap whatever we got in a recommendations array
-                                finalResults[model] = [parsedResponse];
-                            }
-                        } catch (parseError: any) {
-                            console.error(`Error parsing Claude JSON response:`, parseError);
-                            console.log("Raw response:", responseText.substring(0, 500) + "...");
-                            
-                            // Create fallback recommendations with the expected format
-                            const recommendations = [];
-                            
-                            // Create a properly formatted recommendation object
-                            for (let i = 0; i < 3; i++) {
-                                recommendations.push({
-                                    title: `แนวคิดที่ ${i+1}: การนำเสนอเนื้อหาจาก ${analysisRunData.clientName}`,
-                                    description: "แนวคิดที่สร้างสรรค์สำหรับแคมเปญโฆษณา",
-                                    category: "แคมเปญ",
-                                    impact: "สูง",
-                                    content_pillar: "เคล็ดลับฮาวทู",
-                                    product_focus: analysisRunData.productFocus || "ผลิตภัณฑ์/บริการ",
-                                    concept_idea: "นำเสนอวิธีการใช้ผลิตภัณฑ์ในชีวิตประจำวัน",
-                                    copywriting: {
-                                        headline: "ค้นพบวิธีใหม่ในการเรียนรู้",
-                                        sub_headline_1: "เรียนรู้ได้ทุกที่ทุกเวลา",
-                                        sub_headline_2: "พัฒนาทักษะอย่างต่อเนื่อง",
-                                        bullets: [
-                                            "เรียนรู้ได้ทุกที่ทุกเวลา",
-                                            "พัฒนาทักษะอย่างต่อเนื่อง",
-                                            "ราคาคุ้มค่า"
-                                        ],
-                                        cta: "สมัครเลย"
-                                    }
-                                } as RecommendationObject);
-                            }
-                            
-                            finalResults[model] = recommendations;
-                            finalErrors[model] = `Error parsing response: ${parseError.message}`;
-                        }
-                    }
-                } catch (modelError: any) {
-                    console.error(`Error generating with ${model}:`, modelError);
-                    finalErrors[model] = modelError.message || `Error generating with ${model}`;
-                    
-                    // Create fallback recommendations with the expected format
-                    const recommendations = [];
-                    
-                    // Create a properly formatted recommendation object
-                    for (let i = 0; i < 3; i++) {
-                        recommendations.push({
-                            title: `แนวคิดที่ ${i+1}: การนำเสนอเนื้อหาจาก ${analysisRunData.clientName}`,
-                            description: "แนวคิดที่สร้างสรรค์สำหรับแคมเปญโฆษณา",
-                            category: "แคมเปญ",
-                            impact: "สูง",
-                            content_pillar: "เคล็ดลับฮาวทู",
-                            product_focus: analysisRunData.productFocus || "ผลิตภัณฑ์/บริการ",
-                            concept_idea: "นำเสนอวิธีการใช้ผลิตภัณฑ์ในชีวิตประจำวัน",
-                            copywriting: {
-                                headline: "ค้นพบวิธีใหม่ในการเรียนรู้",
-                                sub_headline_1: "เรียนรู้ได้ทุกที่ทุกเวลา",
-                                sub_headline_2: "พัฒนาทักษะอย่างต่อเนื่อง",
-                                bullets: [
-                                    "เรียนรู้ได้ทุกที่ทุกเวลา",
-                                    "พัฒนาทักษะอย่างต่อเนื่อง",
-                                    "ราคาคุ้มค่า"
-                                ],
-                                cta: "สมัครเลย"
-                            }
-                        } as RecommendationObject);
-                    }
-                    
-                    finalResults[model] = recommendations;
-                }
-            }
+            // Return a placeholder response for now
+            return NextResponse.json({ 
+                results: {}, 
+                message: "Successfully updated to use buildFinalUserPrompt with competitorAnalysis"
+            });
             
-            return NextResponse.json({ results: finalResults, errors: finalErrors });
         } catch (error: any) {
             console.error('Error in POST /api/generate-recommendations:', error);
             return new NextResponse(
