@@ -42,7 +42,8 @@ const DEFAULT_TASK_SECTION = `1. Spark and detail 7-10 fresh, distinctive, and e
 3. Informed by Context: Where available, let the \`groundedClientInfo\` and \`bookSummarySection\` inform the relevance, timeliness, or strategic angle of your ideas, but the core inspiration should stem from the client's fundamental product/service and market position. Use grounding to verify trends or competitor actions if needed.
 4. For EACH recommendation, provide the Creative Execution Details below, specifically tailored for a Facebook Ad context. Generate specific, compelling content for each field IN THAI LANGUAGE, imagining how the core idea translates into ad components (e.g., Headline, Ad Copy, Visual Description, Call-to-Action).
 5. Populate the corresponding fields in the final JSON object. Ensure all text output is original for this request.
-6. Ideas to include but not limited to: why the solutions from \`ClientName\` are different than what is being offered in the market currently. Talk about the differentiation of the product if and when it makes the client's product or service more appealing. `;
+6. Ideas to include but not limited to: why the solutions from \`ClientName\` are different than what is being offered in the market currently. Talk about the differentiation of the product if and when it makes the client's product or service more appealing. 
+7. Competitor Analysis is important please use it to make a strategic idea.`;
 
 const DEFAULT_DETAILS_SECTION = `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** (เช่น "เคล็ดลับฮาวทู", "เบื้องหลังการทำงาน", "เรื่องราวความสำเร็จลูกค้า", "การหักล้างความเชื่อผิดๆ", "ไลฟ์สไตล์และการใช้งาน", "ปัญหาและการแก้ไข").
                                 b.  **\`product_focus\`:** ระบุ {productFocus} หรือฟีเจอร์เฉพาะที่ต้องการเน้น **(ภาษาไทย)**.
@@ -2139,7 +2140,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                                 src={generatedImageUrl} // Expecting data URI
                                                 alt="Generated image"
                                                 className="w-full object-contain mx-auto"
-                                                style={{ maxHeight: '600px' }}
+                                                style={{ maxHeight: '1024px' }}
                                             />
                                         </div>
                                     </div>
