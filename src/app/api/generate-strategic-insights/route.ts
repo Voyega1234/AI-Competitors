@@ -181,7 +181,7 @@ export async function POST(request: Request) {
     // --- Analysis Step (Using SDK) ---
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
     const analysisModel = genAI.getGenerativeModel({
-      model: "gemini-1.5-pro", // Use a more capable model for complex analysis
+      model: "gemini-2.0-flash", // Use a more capable model for complex analysis
       generationConfig: { responseMimeType: "application/json", temperature: 0.7 }, // Allow more creativity
       safetySettings: [ 
          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },

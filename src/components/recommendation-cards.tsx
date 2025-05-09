@@ -37,13 +37,14 @@ interface GenerateImageResponse {
 }
 
 // --- Define Defaults for Editable Prompt Sections ---
-const DEFAULT_TASK_SECTION = `1. Spark and detail 7-10 fresh, distinctive, and engaging creative ideas for\`ClientName\` specifically focusing on concepts highly suitable for Facebook Ad campaigns. Focus on concepts that can present the client's specific productFocus from new perspectives that spark curiosity, drive engagement, or create a memorable impression within the market on social media. Ideas should build upon the client's strengths and available insights.
-2. Focus on Actionable Creativity for Facebook: Ensure each recommendation translates into tangible marketing ideas easily adaptable into compelling Facebook Ad formats (e.g., single image/video, carousel, stories, reels). Include potential ad angles, visual directions, and calls-to-action. Prioritize ideas that are visually arresting, memorable, shareable, emotionally resonant, and push creative boundaries for this specific client on Facebook.
-3. Informed by Context: Where available, let the \`groundedClientInfo\` and \`bookSummarySection\` inform the relevance, timeliness, or strategic angle of your ideas, but the core inspiration should stem from the client's fundamental product/service and market position. Use grounding to verify trends or competitor actions if needed.
-4. For EACH recommendation, provide the Creative Execution Details below, specifically tailored for a Facebook Ad context. Generate specific, compelling content for each field IN THAI LANGUAGE, imagining how the core idea translates into ad components (e.g., Headline, Ad Copy, Visual Description, Call-to-Action).
-5. Populate the corresponding fields in the final JSON object. Ensure all text output is original for this request.
-6. Ideas to include but not limited to: why the solutions from \`ClientName\` are different than what is being offered in the market currently. Talk about the differentiation of the product if and when it makes the client's product or service more appealing. 
-7. Competitor Analysis is important please use it to make a strategic idea.`;
+const DEFAULT_TASK_SECTION = `1. Analyze the client's situation and the provided competitor analysis to develop 5-7 actionable marketing strategies for {clientName}.
+2. Focus on how {clientName} can effectively differentiate itself from the listed competitors, especially considering it may be a late entrant to the market with a similar {productFocus}.
+3. For each strategy, explain the rationale and provide concrete examples of how it could be implemented.
+4. Consider a mix of online and offline tactics, if appropriate for the {market}.
+5. Strategies should aim to build brand awareness, attract new customers, and foster loyalty.
+6. Ensure recommendations are strategic, creative, and practical for a business in the {clientName}'s position.
+7. Please leverage the competitor analysis to identify specific opportunities or threats that these strategies should address.
+8. Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting (like \`\`\`json\`\`\`).`;
 
 const DEFAULT_DETAILS_SECTION = `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** (เช่น "เคล็ดลับฮาวทู", "เบื้องหลังการทำงาน", "เรื่องราวความสำเร็จลูกค้า", "การหักล้างความเชื่อผิดๆ", "ไลฟ์สไตล์และการใช้งาน", "ปัญหาและการแก้ไข").
                                 b.  **\`product_focus\`:** ระบุ {productFocus} หรือฟีเจอร์เฉพาะที่ต้องการเน้น **(ภาษาไทย)**.
@@ -430,7 +431,6 @@ export function RecommendationCards() {
         setCreativeConcepts(null); // Clear concepts
         setIsGeneratingConcepts(false);
         setConceptsError(null);
-        // Clear competitor analysis data
 
         setCompetitorAnalysis(null);
         setCompetitorAnalysisError(null);
@@ -1105,7 +1105,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                     </div>
 
                     {/* Editable Task Section */}
-                    <div className="grid gap-1.5 w-full">
+                    {/* <div className="grid gap-1.5 w-full">
                         <Label htmlFor="editable-task-section" className="text-sm font-medium">Editable Prompt: Task Section</Label>
                         <Textarea
                             id="editable-task-section"
@@ -1115,10 +1115,10 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                             className="min-h-[150px] bg-background font-mono text-xs"
                             disabled={isAnyModelLoading || isMetaLoading}
                         />
-                    </div>
+                    </div> */}
 
                     {/* Editable Details Section */}
-                    <div className="grid gap-1.5 w-full">
+                    {/* <div className="grid gap-1.5 w-full">
                         <Label htmlFor="editable-details-section" className="text-sm font-medium">Editable Prompt: Creative Execution Details Section</Label>
                         <Textarea
                             id="editable-details-section"
@@ -1128,7 +1128,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                             className="min-h-[150px] bg-background font-mono text-xs"
                             disabled={isAnyModelLoading || isMetaLoading}
                         />
-                    </div>
+                    </div> */}
                                        {(competitorAnalysis || isCompetitorAnalysisLoading) && (
                         <div className="grid gap-1.5 w-full mb-6 border-2 border-primary/20 rounded-lg p-4 bg-primary/5 shadow-sm">
                             <div className="flex items-center justify-between">

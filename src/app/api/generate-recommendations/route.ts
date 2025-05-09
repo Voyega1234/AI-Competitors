@@ -368,7 +368,8 @@ ${competitorSection}
 *(Analyze the competitor summary, recent client info, and optional book context...)*
 
 **Task:**
-${taskSectionParam ? taskSectionParam.replace(/\{clientName\}/g, analysisRunData.clientName).replace(/\{market\}/g, analysisRunData.market).replace(/\{productFocus\}/g, analysisRunData.productFocus || 'products/services') : `1. Spark and detail 7-10 fresh, distinctive, and engaging creative ideas for ${analysisRunData.clientName}, specifically focusing on concepts highly suitable for Facebook Ad campaigns. Focus on concepts that can present the client's specific ${analysisRunData.productFocus} from new perspectives that spark curiosity, drive engagement, or create a memorable impression within the ${analysisRunData.market} on social media. Ideas should build upon the client's strengths and available insights.
+${taskSectionParam ? taskSectionParam.replace(/\{clientName\}/g, analysisRunData.clientName).replace(/\{market\}/g, analysisRunData.market).replace(/\{productFocus\}/g, analysisRunData.productFocus || 'products/services') :
+ `1. Spark and detail 7-10 fresh, distinctive, and engaging creative ideas for ${analysisRunData.clientName}, specifically focusing on concepts highly suitable for Facebook Ad campaigns. Focus on concepts that can present the client's specific ${analysisRunData.productFocus} from new perspectives that spark curiosity, drive engagement, or create a memorable impression within the ${analysisRunData.market} on social media. Ideas should build upon the client's strengths and available insights.
   2. Focus on Actionable Creativity for Facebook: Ensure each recommendation translates into tangible marketing ideas easily adaptable into compelling Facebook Ad formats (e.g., single image/video, carousel, stories, reels). Include potential ad angles, visual directions, and calls-to-action. Prioritize ideas that are visually arresting, memorable, shareable, emotionally resonant, and push creative boundaries for this specific client on Facebook.
   3. Informed by Context: Where available, let the \`groundedClientInfo\` and \`bookSummarySection\` inform the relevance, timeliness, or strategic angle of your ideas, but the core inspiration should stem from the client's fundamental product/service and market position. Use grounding to verify trends or competitor actions if needed.
   4. For EACH recommendation, provide the Creative Execution Details below, specifically tailored for a Facebook Ad context. Generate specific, compelling content for each field IN THAI LANGUAGE, imagining how the core idea translates into ad components (e.g., Headline, Ad Copy, Visual Description, Call-to-Action).
@@ -450,7 +451,7 @@ ${detailsSectionParam ? detailsSectionParam.replace(/\{productFocus\}/g, analysi
                 // Grounding is implicitly part of the prompt text now, remove explicit tool call for main generation
                 // tools: [{ "google_search": {} }], // Removed for main generation
                 generationConfig: { 
-                    temperature: 0.0, // Adjusted temperature for creativity
+                    temperature: 1.0, // Adjusted temperature for creativity
                     response_mime_type: "application/json", // Request JSON output directly
                 } 
             };
@@ -526,7 +527,7 @@ ${detailsSectionParam ? detailsSectionParam.replace(/\{productFocus\}/g, analysi
                     { role: "user", content: finalOpenAIPrompt }
                 ],
                 response_format: { type: "json_object" }, // Request JSON output
-                temperature: 0.0 // Adjust temperature if needed
+                temperature: 1.0 // Adjust temperature if needed
             };
 
             const openaiResponse = await fetch(openaiUrl, {
@@ -603,7 +604,7 @@ ${detailsSectionParam ? detailsSectionParam.replace(/\{productFocus\}/g, analysi
                 messages: [
                     { role: "user" as const, content: finalClaudePrompt } // Use the common user prompt
                 ],
-                temperature: 0.0 // Adjusted temperature
+                temperature: 1.0 // Adjusted temperature
             };
 
             const claudeResponse = await fetch(claudeUrl, {
@@ -770,11 +771,12 @@ ${brief}
 
             // Define default prompt sections
             const defaultTaskText = `1. Spark and detail 7-10 fresh, distinctive, and engaging creative ideas for ${clientInfo.clientName}, specifically focusing on concepts highly suitable for Facebook Ad campaigns. Focus on concepts that can present the client's specific ${clientInfo.productFocus} from new perspectives that spark curiosity, drive engagement, or create a memorable impression within the ${clientInfo.market} on social media. Ideas should build upon the client's strengths and available insights.
-  2. Focus on Actionable Creativity for Facebook: Ensure each recommendation translates into tangible marketing ideas easily adaptable into compelling Facebook Ad formats (e.g., single image/video, carousel, stories, reels). Include potential ad angles, visual directions, and calls-to-action. Prioritize ideas that are visually arresting, memorable, shareable, emotionally resonant, and push creative boundaries for this specific client on Facebook.
-  3. Informed by Context: Where available, let the \`groundedClientInfo\` and \`bookSummarySection\` inform the relevance, timeliness, or strategic angle of your ideas, but the core inspiration should stem from the client's fundamental product/service and market position. Use grounding to verify trends or competitor actions if needed.
-  4. For EACH recommendation, provide the Creative Execution Details below, specifically tailored for a Facebook Ad context. Generate specific, compelling content for each field IN THAI LANGUAGE, imagining how the core idea translates into ad components (e.g., Headline, Ad Copy, Visual Description, Call-to-Action).
-  5. Populate the corresponding fields in the final JSON object. Ensure all text output is original for this request
-  6. Ideas to include but not limited to: why the solutions from ${clientInfo.clientName} are different than what is being offered in the market currently. Talk about the differentiation of the product if and when it makes the client's product or service more appealing. `;
+            2. Focus on Actionable Creativity for Facebook: Ensure each recommendation translates into tangible marketing ideas easily adaptable into compelling Facebook Ad formats (e.g., single image/video, carousel, stories, reels). Include potential ad angles, visual directions, and calls-to-action. Prioritize ideas that are visually arresting, memorable, shareable, emotionally resonant, and push creative boundaries for this specific client on Facebook.
+            3. Informed by Context: Where available, let the \`groundedClientInfo\` and \`bookSummarySection\` inform the relevance, timeliness, or strategic angle of your ideas, but the core inspiration should stem from the client's fundamental product/service and market position. Use grounding to verify trends or competitor actions if needed.
+            4. For EACH recommendation, provide the Creative Execution Details below, specifically tailored for a Facebook Ad context. Generate specific, compelling content for each field IN THAI LANGUAGE, imagining how the core idea translates into ad components (e.g., Headline, Ad Copy, Visual Description, Call-to-Action).
+            5. Populate the corresponding fields in the final JSON object. Ensure all text output is original for this request
+            6. Ideas to include but not limited to: why the solutions from ${clientInfo.clientName} are different than what is being offered in the market currently. Talk about the differentiation of the product if and when it makes the client's product or service more appealing. 
+            7. Competitor Analysis is important please use it to make a strategic idea.`;
             
             const defaultDetailsText = `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** (เช่น "เคล็ดลับฮาวทู", "เบื้องหลังการทำงาน", "เรื่องราวความสำเร็จลูกค้า", "การหักล้างความเชื่อผิดๆ", "ไลฟ์สไตล์และการใช้งาน", "ปัญหาและการแก้ไข").
                                 b.  **\`product_focus\`:** ระบุ ${clientInfo.productFocus || 'ผลิตภัณฑ์/บริการ'} ที่ต้องการเน้น **(ภาษาไทย)**.
