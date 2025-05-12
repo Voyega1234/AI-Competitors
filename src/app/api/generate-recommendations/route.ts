@@ -279,6 +279,9 @@ ${competitorAnalysisResult.market_gaps?.map((g: string) => `- ${g}`).join('\n') 
 ## Differentiation Strategies
 ${competitorAnalysisResult.differentiation_strategies?.map((d: string) => `- ${d}`).join('\n') || 'No data available.'}
 
+## Market Research & Insights (Google Search)
+${competitorAnalysisResult.research?.map((r: string) => `- ${r}`).join('\n') || 'No research data available.'}
+
 ## Summary
 ${competitorAnalysisResult.summary || 'No summary available.'}
 `;
