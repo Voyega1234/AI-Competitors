@@ -1254,6 +1254,25 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                             </ul>
                                         </div>
                                         
+                                        {/* Research Section (Google Grounding Search) */}
+                                        <div className="p-4 border rounded-lg bg-indigo-50 shadow-sm col-span-2">
+                                            <h3 className="text-lg font-semibold text-indigo-700 mb-3 flex items-center">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4m9 0h-4m4 0a2 2 0 012 2v14a2 2 0 01-2 2h-4m0-18v18m0 0H9" />
+                                                </svg>
+                                                Research & Market Insights
+                                                <span className="ml-2 text-xs bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded-full">Google Search</span>
+                                            </h3>
+                                            <ul className="list-disc pl-5 space-y-2 text-sm">
+                                                {competitorAnalysis && competitorAnalysis.analysis && Array.isArray(competitorAnalysis.analysis.research) && competitorAnalysis.analysis.research.length > 0 ? 
+                                                    competitorAnalysis.analysis.research.map((item: string, i: number) => (
+                                                        <li key={i} className="text-gray-700">{item}</li>
+                                                    )) : 
+                                                    <li className="text-gray-500">No research data available</li>
+                                                }
+                                            </ul>
+                                        </div>
+                                        
                                         {/* Summary Section - Full Width */}
                                         {competitorAnalysis && competitorAnalysis.analysis && competitorAnalysis.analysis.summary && (
                                             <div className="p-4 border rounded-lg bg-gray-50 shadow-sm col-span-2">

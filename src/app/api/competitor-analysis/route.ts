@@ -22,9 +22,10 @@ interface Competitor {
 }
 
 // Helper function to call Gemini API via HTTP POST
-async function callGeminiAPI(prompt: string, apiKey: string, model: string = "gemini-2.0-flash") {
+async function callGeminiAPI(prompt: string, apiKey: string, model: string = "gemini-2.0-flash", useGrounding: boolean = false) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-    const body = {
+    
+    let body: any = {
         contents: [
             {
                 parts: [
@@ -33,15 +34,28 @@ async function callGeminiAPI(prompt: string, apiKey: string, model: string = "ge
             }
         ]
     };
+    
+    // Add Google Search grounding if requested
+    if (useGrounding) {
+        body.tools = [
+            {
+                google_search: {}
+            }
+        ];
+        console.log("Using Google grounding search for Gemini API call");
+    }
+    
     const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
     });
+    
     if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Gemini API error: ${response.status} ${errorText}`);
     }
+    
     const result = await response.json();
     // Extract the model's response text
     return result.candidates?.[0]?.content?.parts?.[0]?.text || '';
@@ -57,11 +71,120 @@ function cleanGeminiResponse(text: string): string {
             .replace(/\n```$/, '')
             .trim();
     }
+    
+    // Try to extract JSON if there's text before the JSON object
+    const jsonMatch = text.match(/\{[\s\S]*\}/); 
+    if (jsonMatch) {
+        return jsonMatch[0].trim();
+    }
+    
     return text.trim();
 }
 
+// Function to fetch market trends and news using Google Grounding Search
+async function fetchMarketTrendsWithGrounding(clientName: string, competitors: Competitor[] = []): Promise<any> {
+    if (!GEMINI_API_KEY) {
+        throw new Error("Missing GEMINI_API_KEY environment variable");
+    }
+    
+    // If no competitors provided, query the database directly for any competitors related to this client
+    let competitorInfo = 'ไม่มีข้อมูลคู่แข่งที่ชัดเจน';
+    
+    if (!competitors || competitors.length === 0) {
+        try {
+            console.log(`No competitors provided to fetchMarketTrendsWithGrounding, querying database for ${clientName}`);
+            
+            // Find all analysis runs for this client
+            const { data: analysisRuns } = await supabaseAdmin
+                .from('AnalysisRun')
+                .select('id')
+                .eq('clientName', clientName);
+                
+            if (analysisRuns && analysisRuns.length > 0) {
+                const runIds = analysisRuns.map(run => run.id);
+                
+                // Find all competitors across these runs
+                const { data: dbCompetitors } = await supabaseAdmin
+                    .from('Competitor')
+                    .select('*')
+                    .in('analysisRunId', runIds);
+                    
+                if (dbCompetitors && dbCompetitors.length > 0) {
+                    competitors = dbCompetitors;
+                    console.log(`Found ${dbCompetitors.length} competitors in database for ${clientName}`);
+                }
+            }
+        } catch (error) {
+            console.error("Error fetching competitors from database:", error);
+            // Continue with empty competitors list
+        }
+    }
+    
+    // Extract competitor names for the prompt
+    const competitorNames = competitors
+        .filter(comp => comp.name) // Filter out null or undefined names
+        .map(comp => comp.name)
+        .join(', ');
+    
+    if (competitorNames) {
+        competitorInfo = `คู่แข่งที่สำคัญได้แก่: ${competitorNames}`;
+    }
+
+    // Thai prompt for market trends and news search with competitor information
+    const prompt = `ช่วยหาข้อมูล, ข่าว หรือเทรนกระแสที่เกี่ยวข้องกับประเภทของธุรกิจ ${clientName} ในไทย
+โดยมุ่งเน้นแค่ความเป็นเฉพาะแค่ ${clientName} เท่านั้นที่สามารถทำได้ หรือ ทำไมต้อง ${clientName} ?, วิเคราะห์ ${clientName} และจุดแข็งที่แตกต่างจากคู่แข่งโดยเน้นไปที่ ฟีเจอร์ของสินค้าหรือบริการที่แตกต่าง โปรโมชั่นหรือแคมเปญ หรือ ถ้ามีตัวเลขหรือสถิติจะดีมากๆ หรือการนำเสนอราคาหรือค่าทำเนียมที่ถูกกว่าที่เป็นตัวเลขเมื่อเทียบกับคู่แข่ง และทำการ Research เกี่ยวกับคู่แข่ง และ หาข่าวหรือกระแสเทรนข่าวในช่วง ${Date.now()}ที่เกี่ยวข้องกับประเภทธุรกิจนี้ อาจจะเป็นข่าวในโซเชียลมีเดียในไทยหรือทั่วโลก
+
+${competitorInfo}
+
+สำคัญมาก: กรุณาตอบกลับเป็น JSON เท่านั้น ไม่ต้องมีข้อความแนะนำหรือคำอธิบายใดๆ ไม่ต้องมีหัวข้อหรือ Bold text ที่ไม่ใช่ JSON
+ไม่ต้องเริ่มต้นด้วยคำว่า "แน่นอนครับ" หรือข้อความอื่นๆ ให้ส่งเฉพาะโครงสร้าง JSON นี้เท่านั้น ตอบเป็นภาษาไทย:
+
+{
+  "research": ["ข้อมูลงานวิจัย 1", "ข้อมูลงานวิจัย 2", "ข้อมูลงานวิจัย 3", ...] // ทำไมต้อง ${clientName} ?, วิเคราะห์ ${clientName} และจุดแข็งที่แตกต่างจากคู่แข่ง ผลการค้นหาที่เกี่ยวข้องกับธุรกิจและคู่แข่ง รวมทั้งข่าวล่าสุด, เทรนด์ตลาด, และโอกาสทางธุรกิจ
+}`;
+
+    try {
+        console.log(`[API /competitor-analysis] Calling Gemini with Google Grounding Search for ${clientName} market trends...`);
+        const trendsText = await callGeminiAPI(prompt, GEMINI_API_KEY, "gemini-2.0-flash", true);
+        console.log("[API /competitor-analysis] Grounding Search response received.");
+        
+        // Clean the response before parsing
+        const cleanedText = cleanGeminiResponse(trendsText);
+        
+        // Log the cleaned text for debugging
+        console.log("[API /competitor-analysis] Cleaned Grounding Search response:", cleanedText.substring(0, 100) + '...');
+        
+        // Try to parse JSON
+        try {
+            return JSON.parse(cleanedText);
+        } catch (e) {
+            console.error("[API /competitor-analysis] Failed to parse Grounding Search response as JSON:", e);
+            
+            // Fallback: Try to extract useful information even if not valid JSON
+            // Look for patterns that might contain research points in Thai text
+            const lines = trendsText.split('\n').filter((line: string) => 
+                line.trim().length > 20 && // Only substantial lines
+                !line.includes('```') && // Not markdown formatting
+                !line.startsWith('แน่นอนครับ') // Not starting with "Certainly"
+            );
+            
+            const extractedResearch = lines.length > 0 
+                ? lines.map((line: string) => line.trim()) 
+                : ["ข้อมูลไม่พร้อมใช้งาน (ปัญหาการแปลง JSON)"];
+            
+            return { 
+                error: "Grounding Search response was not valid JSON", 
+                research: extractedResearch.slice(0, 5) // Limit to 5 items maximum
+            };
+        }
+    } catch (error) {
+        console.error("[API /competitor-analysis] Error calling Gemini with Grounding Search:", error);
+        throw new Error("Failed to fetch market trends via Google Grounding Search.");
+    }
+}
+
 // Function to generate detailed analysis of competitors and their marketing strategies
-async function analyzeCompetitorsWithGemini(competitors: Competitor[]): Promise<any> {
+async function analyzeCompetitorsWithGemini(competitors: Competitor[], clientName: string): Promise<any> {
     if (!competitors || competitors.length === 0) {
         return { error: "No competitor data available." };
     }
@@ -87,25 +210,27 @@ async function analyzeCompetitorsWithGemini(competitors: Competitor[]): Promise<
         };
     });
 
-    // Ask Gemini for JSON output with clear structure for UI rendering
+    // Ask Gemini for JSON output with clear structure for UI rendering (in Thai)
     const prompt = `
-As an expert marketing strategist, analyze the following competitor data:
+คุณเป็นผู้เชี่ยวชาญด้านกลยุทธ์การตลาด โปรดวิเคราะห์ข้อมูลคู่แข่งต่อไปนี้:
 
 ${JSON.stringify(competitorData, null, 2)}
 
-I need your analysis in JSON format for direct parsing by my application.
-Return ONLY the following JSON structure with no markdown formatting, no code blocks, no backticks, and no explanatory text:
+ฉันต้องการการวิเคราะห์ของคุณในรูปแบบ JSON เพื่อการประมวลผลโดยแอปพลิเคชันของฉัน
+ส่งคืนโครงสร้าง JSON ต่อไปนี้เท่านั้น โดยไม่มีการจัดรูปแบบมาร์กดาวน์ ไม่มีบล็อกโค้ด ไม่มีเครื่องหมาย backtick และไม่มีข้อความอธิบาย:
 
 {
-  "strengths": ["..."], // Key strengths and positioning of each competitor
-  "weaknesses": ["..."], // Key weaknesses of each competitor
-  "shared_patterns": ["..."], // Shared marketing patterns or themes
-  "market_gaps": ["..."], // Market gaps or unmet needs
-  "differentiation_strategies": ["..."], // Actionable differentiation strategies for content and brand positioning
-  "summary": "..." // One-paragraph summary
+  "strengths": [...], // จุดแข็งและตำแหน่งที่โดดเด่นของคู่แข่งแต่ละราย (เป็นภาษาไทย)
+  "weaknesses": [...], // จุดอ่อนของคู่แข่งแต่ละราย (เป็นภาษาไทย)
+  "shared_patterns": [...], // รูปแบบหรือธีมทางการตลาดที่มีร่วมกัน (เป็นภาษาไทย)
+  "market_gaps": [...], // ช่องว่างในตลาดหรือความต้องการที่ยังไม่ได้รับการตอบสนอง (เป็นภาษาไทย)
+  "differentiation_strategies": [...], // กลยุทธ์การสร้างความแตกต่างที่นำไปปฏิบัติได้สำหรับเนื้อหาและการวางตำแหน่งแบรนด์ (เป็นภาษาไทย)
+  "summary": "..." // บทสรุปหนึ่งย่อหน้า (เป็นภาษาไทย)
 }
 
-IMPORTANT: Your response must be valid, parseable JSON. Do not include any text outside the JSON object. Do not wrap the JSON in code blocks or backticks.`;
+สำคัญ: คำตอบของคุณต้องเป็น JSON ที่ถูกต้องและสามารถแยกวิเคราะห์ได้ ห้ามรวมข้อความใดๆ นอกเหนือจากวัตถุ JSON อย่าห่อ JSON ในบล็อกโค้ดหรือเครื่องหมาย backtick
+
+โปรดตอบเป็นภาษาไทยทั้งหมดในทุกส่วนของการวิเคราะห์`;
 
     try {
         console.log("[API /competitor-analysis] Calling Gemini for competitor analysis via HTTP API...");
@@ -117,7 +242,16 @@ IMPORTANT: Your response must be valid, parseable JSON. Do not include any text 
         
         // Try to parse JSON
         try {
-            return JSON.parse(cleanedText);
+            // Get market trends with grounding search in parallel
+            const marketTrends = await fetchMarketTrendsWithGrounding(clientName, competitors);
+            
+            // Combine the results
+            const combinedResults = {
+                ...JSON.parse(cleanedText),
+                research: marketTrends.research || []
+            };
+            
+            return combinedResults;
         } catch (e) {
             // fallback: return as string if not valid JSON
             return { error: "Gemini response was not valid JSON", raw: analysisText };
@@ -144,13 +278,25 @@ export async function GET(request: NextRequest) {
 
         console.log(`Handling GET /api/competitor-analysis for clientName: ${clientName}, productFocus: ${productFocus}`);
 
-        // 1. Lookup AnalysisRun by clientName and productFocus
-        const { data: analysisRunRows, error: analysisRunError } = await supabaseAdmin
+        // 1. Lookup AnalysisRun by clientName and productFocus (handle trailing comma case)
+        // First try exact match
+        let { data: analysisRunRows, error: analysisRunError } = await supabaseAdmin
             .from('AnalysisRun')
             .select('id')
             .eq('clientName', clientName)
             .eq('productFocus', productFocus)
             .limit(1);
+            
+        // If no results, try with added trailing comma
+        if (!analysisRunRows || analysisRunRows.length === 0) {
+            console.log(`No results found for exact match, trying with trailing comma for: ${productFocus}`);
+            ({ data: analysisRunRows, error: analysisRunError } = await supabaseAdmin
+                .from('AnalysisRun')
+                .select('id')
+                .eq('clientName', clientName)
+                .eq('productFocus', `${productFocus},`)
+                .limit(1));
+        }
 
         if (analysisRunError) {
             console.error(`Supabase error fetching AnalysisRun for clientName ${clientName}, productFocus ${productFocus}:`, analysisRunError);
@@ -186,22 +332,33 @@ IMPORTANT: Your response must be valid, parseable JSON. Do not include any text 
                 // Clean the response before parsing
                 const cleanedText = cleanGeminiResponse(analysisText);
                 
-                let analysis;
-                let isJson = false;
                 try {
-                    analysis = JSON.parse(cleanedText);
-                    isJson = true;
-                    console.log("[API /competitor-analysis] Successfully parsed Gemini response as JSON:", JSON.stringify(analysis, null, 2));
+                    const analysis = JSON.parse(cleanedText);
+                    console.log("[API /competitor-analysis] Successfully parsed Gemini response as JSON");
+                    
+                    // Get market trends with grounding search
+                    const marketTrends = await fetchMarketTrendsWithGrounding(clientName);
+                    
+                    // Combine the results
+                    const combinedResults = {
+                        ...analysis,
+                        research: marketTrends.research || []
+                    };
+                    
+                    return NextResponse.json(combinedResults);
                 } catch (e) {
                     console.error("[API /competitor-analysis] Failed to parse Gemini response as JSON:", e);
-                    analysis = { error: "Gemini response was not valid JSON", raw: analysisText };
+                    return NextResponse.json({ 
+                        error: "Gemini response was not valid JSON", 
+                        strengths: ["No data available"],
+                        weaknesses: ["No data available"],
+                        shared_patterns: ["No data available"],
+                        market_gaps: ["No data available"],
+                        differentiation_strategies: ["No data available"],
+                        summary: "No data available",
+                        research: ["No data available"]
+                    });
                 }
-                console.log("API competitor-analysis response:", { analysis, competitors: [] });
-                return NextResponse.json({ 
-                    analysis,
-                    competitors: [],
-                    isJson
-                });
             } catch (geminiError) {
                 console.error("[API /competitor-analysis] Error calling Gemini for direct analysis:", geminiError);
                 throw new Error("Failed to generate direct competitor analysis via Gemini.");
@@ -212,7 +369,7 @@ IMPORTANT: Your response must be valid, parseable JSON. Do not include any text 
 
         // 2. Query Competitor table by analysisRunId
         console.log(`Fetching competitors from database for analysisRunId: ${analysisRunId}`);
-        const { data: competitorsData, error: competitorError } = await supabaseAdmin
+        let { data: competitorsData, error: competitorError } = await supabaseAdmin
             .from('Competitor')
             .select('*')
             .eq('analysisRunId', analysisRunId);
@@ -221,13 +378,40 @@ IMPORTANT: Your response must be valid, parseable JSON. Do not include any text 
             console.error(`Supabase error fetching Competitors for analysisRunId ${analysisRunId}:`, competitorError);
             throw new Error(competitorError.message || 'Failed to fetch competitor data');
         }
+        
+        // If no competitors found for this specific analysisRunId, try to find competitors for the same client across all runs
+        if (!competitorsData || competitorsData.length === 0) {
+            console.log(`No competitors found for analysisRunId ${analysisRunId}, looking for competitors across all runs for ${clientName}`);
+            
+            // Get all analysis runs for this client
+            const { data: allClientRuns, error: clientRunsError } = await supabaseAdmin
+                .from('AnalysisRun')
+                .select('id')
+                .eq('clientName', clientName);
+                
+            if (!clientRunsError && allClientRuns && allClientRuns.length > 0) {
+                const allRunIds = allClientRuns.map(run => run.id);
+                console.log(`Found ${allRunIds.length} analysis runs for ${clientName}, checking for competitors`);
+                
+                // Try to find competitors across all runs for this client
+                ({ data: competitorsData, error: competitorError } = await supabaseAdmin
+                    .from('Competitor')
+                    .select('*')
+                    .in('analysisRunId', allRunIds));
+                    
+                if (competitorError) {
+                    console.error(`Supabase error fetching Competitors across all runs for ${clientName}:`, competitorError);
+                    // Continue with empty competitors - will fallback to direct analysis
+                }
+            }
+        }
 
-        console.log(`Retrieved ${competitorsData?.length || 0} competitors from database for analysisRunId: ${analysisRunId}`);
+        console.log(`Retrieved ${competitorsData?.length || 0} competitors from database for ${clientName}`);
 
         // If competitors found, analyze them
         if (competitorsData && competitorsData.length > 0) {
             console.log("Competitors found in database, generating analysis");
-            const analysis = await analyzeCompetitorsWithGemini(competitorsData);
+            const analysis = await analyzeCompetitorsWithGemini(competitorsData, clientName);
             console.log("API competitor-analysis response:", { analysis, competitors: competitorsData });
             return NextResponse.json({ 
                 analysis,
@@ -263,22 +447,33 @@ IMPORTANT: Your response must be valid, parseable JSON. Do not include any text 
                 // Clean the response before parsing
                 const cleanedText = cleanGeminiResponse(analysisText);
                 
-                let analysis;
-                let isJson = false;
                 try {
-                    analysis = JSON.parse(cleanedText);
-                    isJson = true;
-                    console.log("[API /competitor-analysis] Successfully parsed Gemini response as JSON:", JSON.stringify(analysis, null, 2));
+                    const analysis = JSON.parse(cleanedText);
+                    console.log("[API /competitor-analysis] Successfully parsed Gemini response as JSON");
+                    
+                    // Get market trends with grounding search
+                    const marketTrends = await fetchMarketTrendsWithGrounding(clientName);
+                    
+                    // Combine the results
+                    const combinedResults = {
+                        ...analysis,
+                        research: marketTrends.research || []
+                    };
+                    
+                    return NextResponse.json(combinedResults);
                 } catch (e) {
                     console.error("[API /competitor-analysis] Failed to parse Gemini response as JSON:", e);
-                    analysis = { error: "Gemini response was not valid JSON", raw: analysisText };
+                    return NextResponse.json({ 
+                        error: "Gemini response was not valid JSON", 
+                        strengths: ["No data available"],
+                        weaknesses: ["No data available"],
+                        shared_patterns: ["No data available"],
+                        market_gaps: ["No data available"],
+                        differentiation_strategies: ["No data available"],
+                        summary: "No data available",
+                        research: ["No data available"]
+                    });
                 }
-                console.log("API competitor-analysis response:", { analysis, competitors: [] });
-                return NextResponse.json({ 
-                    analysis,
-                    competitors: [],
-                    isJson
-                });
             } catch (geminiError) {
                 console.error("[API /competitor-analysis] Error calling Gemini for direct analysis:", geminiError);
                 throw new Error("Failed to generate direct competitor analysis via Gemini.");
@@ -336,7 +531,7 @@ export async function POST(request: NextRequest) {
             // If competitors found, analyze them
             if (competitorsData && competitorsData.length > 0) {
                 console.log("Competitors found in database, generating analysis");
-                const analysis = await analyzeCompetitorsWithGemini(competitorsData);
+                const analysis = await analyzeCompetitorsWithGemini(competitorsData, clientName);
                 return NextResponse.json({ 
                     ...analysis,
                     isJson: !analysis.error // If no error, analysis is JSON
@@ -345,12 +540,24 @@ export async function POST(request: NextRequest) {
         }
         
         // If no runId provided or no competitors found with the runId, look up by clientName and productFocus
-        const { data: analysisRunRows, error: analysisRunError } = await supabaseAdmin
+        // First try exact match
+        let { data: analysisRunRows, error: analysisRunError } = await supabaseAdmin
             .from('AnalysisRun')
             .select('id')
             .eq('clientName', clientName)
             .eq('productFocus', productFocus)
             .limit(1);
+            
+        // If no results, try with added trailing comma
+        if (!analysisRunRows || analysisRunRows.length === 0) {
+            console.log(`No results found for exact match, trying with trailing comma for: ${productFocus}`);
+            ({ data: analysisRunRows, error: analysisRunError } = await supabaseAdmin
+                .from('AnalysisRun')
+                .select('id')
+                .eq('clientName', clientName)
+                .eq('productFocus', `${productFocus},`)
+                .limit(1));
+        }
 
         if (analysisRunError) {
             console.error(`Supabase error fetching AnalysisRun for clientName ${clientName}, productFocus ${productFocus}:`, analysisRunError);
@@ -389,7 +596,17 @@ IMPORTANT: Your response must be valid, parseable JSON. Do not include any text 
                 try {
                     const analysis = JSON.parse(cleanedText);
                     console.log("[API /competitor-analysis] Successfully parsed Gemini response as JSON");
-                    return NextResponse.json(analysis);
+                    
+                    // Get market trends with grounding search
+                    const marketTrends = await fetchMarketTrendsWithGrounding(clientName);
+                    
+                    // Combine the results
+                    const combinedResults = {
+                        ...analysis,
+                        research: marketTrends.research || []
+                    };
+                    
+                    return NextResponse.json(combinedResults);
                 } catch (e) {
                     console.error("[API /competitor-analysis] Failed to parse Gemini response as JSON:", e);
                     return NextResponse.json({ 
@@ -399,7 +616,8 @@ IMPORTANT: Your response must be valid, parseable JSON. Do not include any text 
                         shared_patterns: ["No data available"],
                         market_gaps: ["No data available"],
                         differentiation_strategies: ["No data available"],
-                        summary: "No data available"
+                        summary: "No data available",
+                        research: ["No data available"]
                     });
                 }
             } catch (geminiError) {
@@ -412,7 +630,7 @@ IMPORTANT: Your response must be valid, parseable JSON. Do not include any text 
 
         // Query Competitor table by analysisRunId
         console.log(`Fetching competitors from database for analysisRunId: ${analysisRunId}`);
-        const { data: competitorsData, error: competitorError } = await supabaseAdmin
+        let { data: competitorsData, error: competitorError } = await supabaseAdmin
             .from('Competitor')
             .select('*')
             .eq('analysisRunId', analysisRunId);
@@ -421,13 +639,40 @@ IMPORTANT: Your response must be valid, parseable JSON. Do not include any text 
             console.error(`Supabase error fetching Competitors for analysisRunId ${analysisRunId}:`, competitorError);
             throw new Error(competitorError.message || 'Failed to fetch competitor data');
         }
+        
+        // If no competitors found for this specific analysisRunId, try to find competitors for the same client across all runs
+        if (!competitorsData || competitorsData.length === 0) {
+            console.log(`No competitors found for analysisRunId ${analysisRunId}, looking for competitors across all runs for ${clientName}`);
+            
+            // Get all analysis runs for this client
+            const { data: allClientRuns, error: clientRunsError } = await supabaseAdmin
+                .from('AnalysisRun')
+                .select('id')
+                .eq('clientName', clientName);
+                
+            if (!clientRunsError && allClientRuns && allClientRuns.length > 0) {
+                const allRunIds = allClientRuns.map(run => run.id);
+                console.log(`Found ${allRunIds.length} analysis runs for ${clientName}, checking for competitors`);
+                
+                // Try to find competitors across all runs for this client
+                ({ data: competitorsData, error: competitorError } = await supabaseAdmin
+                    .from('Competitor')
+                    .select('*')
+                    .in('analysisRunId', allRunIds));
+                    
+                if (competitorError) {
+                    console.error(`Supabase error fetching Competitors across all runs for ${clientName}:`, competitorError);
+                    // Continue with empty competitors - will fallback to direct analysis
+                }
+            }
+        }
 
-        console.log(`Retrieved ${competitorsData?.length || 0} competitors from database for analysisRunId: ${analysisRunId}`);
+        console.log(`Retrieved ${competitorsData?.length || 0} competitors from database for ${clientName}`);
 
         // If competitors found, analyze them
         if (competitorsData && competitorsData.length > 0) {
             console.log("Competitors found in database, generating analysis");
-            const analysis = await analyzeCompetitorsWithGemini(competitorsData);
+            const analysis = await analyzeCompetitorsWithGemini(competitorsData, clientName);
             return NextResponse.json(analysis);
         } else {
             // If no competitors found, do direct Gemini analysis
@@ -450,7 +695,7 @@ Return ONLY the following JSON structure with no markdown formatting, no code bl
   "summary": "..." // One-paragraph summary of the competitive landscape
 }
 
-IMPORTANT: Your response must be valid, parseable JSON. Do not include any text outside the JSON object. Do not wrap the JSON in code blocks or backticks.`;
+IMPORTANT: Your response must be valid, parseable JSON. Do not include any text outside the JSON object. Do not wrap the JSON in code blocks or backticks. and Thai language.`;
             try {
                 console.log("[API /competitor-analysis] Calling Gemini for direct competitor analysis via HTTP API...");
                 const analysisText = await callGeminiAPI(directAnalysisPrompt, GEMINI_API_KEY, "gemini-2.0-flash");
@@ -461,7 +706,17 @@ IMPORTANT: Your response must be valid, parseable JSON. Do not include any text 
                 try {
                     const analysis = JSON.parse(cleanedText);
                     console.log("[API /competitor-analysis] Successfully parsed Gemini response as JSON");
-                    return NextResponse.json(analysis);
+                    
+                    // Get market trends with grounding search
+                    const marketTrends = await fetchMarketTrendsWithGrounding(clientName);
+                    
+                    // Combine the results
+                    const combinedResults = {
+                        ...analysis,
+                        research: marketTrends.research || []
+                    };
+                    
+                    return NextResponse.json(combinedResults);
                 } catch (e) {
                     console.error("[API /competitor-analysis] Failed to parse Gemini response as JSON:", e);
                     return NextResponse.json({ 
@@ -471,7 +726,8 @@ IMPORTANT: Your response must be valid, parseable JSON. Do not include any text 
                         shared_patterns: ["No data available"],
                         market_gaps: ["No data available"],
                         differentiation_strategies: ["No data available"],
-                        summary: "No data available"
+                        summary: "No data available",
+                        research: ["No data available"]
                     });
                 }
             } catch (geminiError) {
@@ -493,7 +749,8 @@ IMPORTANT: Your response must be valid, parseable JSON. Do not include any text 
                 shared_patterns: ["No data available due to server error"],
                 market_gaps: ["No data available due to server error"],
                 differentiation_strategies: ["No data available due to server error"],
-                summary: "No competitor data available due to server error."
+                summary: "No competitor data available due to server error.",
+                research: ["No data available due to server error"]
             }),
             { status: 500, headers: { 'Content-Type': 'application/json' } }
         );
