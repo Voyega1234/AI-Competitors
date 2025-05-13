@@ -37,24 +37,24 @@ interface GenerateImageResponse {
 }
 
 // --- Define Defaults for Editable Prompt Sections ---
-const DEFAULT_TASK_SECTION = `1. Analyze the client's situation and the provided competitor analysis to develop 5-7 actionable marketing strategies for {clientName}.
-2. Focus on how {clientName} can effectively differentiate itself from the listed competitors, especially considering it may be a late entrant to the market with a similar {productFocus}.
-3. For each strategy, explain the rationale and provide concrete examples of how it could be implemented.
-4. Consider a mix of online and offline tactics, if appropriate for the {market}.
-5. Strategies should aim to build brand awareness, attract new customers, and foster loyalty.
-6. Ensure recommendations are strategic, creative, and practical for a business in the {clientName}'s position.
-7. Please leverage the competitor analysis to identify specific opportunities or threats that these strategies should address.
-8. Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting (like \`\`\`json\`\`\`).`;
+const DEFAULT_TASK_SECTION = `"1. Analyze the client's situation and the provided competitor analysis to develop 7-10 actionable marketing content strategies that highlight {clientName}'s exclusive features, statistics, or performance metrics—elements that only {clientName} can claim and no competitors can match.  
+2. Focus on quantifiable proof points, proprietary data, or one-of-a-kind capabilities of {clientName} that directly address customer needs in ways competitors cannot.  
+3. Each strategy must creatively integrate current trends, cultural events, or relevant news stories to make the message timely and resonant.  
+4. For each strategy, explain the rationale and suggest specific content angles (e.g., social posts, videos, landing pages) that emphasize these unmatched figures or features.  
+5. Strategies should help {clientName} build strong brand authority, attract new customers, and establish trust by showing irrefutable advantages.  
+6. Include both online and offline content tactics suited to the {market}, with clear emphasis on measurable and exclusive value propositions.  
+7. Leverage any competitor blind spots or lack of data-backed communication to position {clientName} as the transparent, evidence-driven market leader.  
+8. Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting (like \`\`\json\`\`\`).`;
 
-const DEFAULT_DETAILS_SECTION = `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** (เช่น "เคล็ดลับฮาวทู", "เบื้องหลังการทำงาน", "เรื่องราวความสำเร็จลูกค้า", "การหักล้างความเชื่อผิดๆ", "ไลฟ์สไตล์และการใช้งาน", "ปัญหาและการแก้ไข").
-                                b.  **\`product_focus\`:** ระบุ {productFocus} หรือฟีเจอร์เฉพาะที่ต้องการเน้น **(ภาษาไทย)**.
-                                c.  **\`concept_idea\`:** สรุปแนวคิดสร้างสรรค์หลัก (1-2 ประโยค) สำหรับการนำเสนอไอเดียนี้ **(ภาษาไทย)**.
-                                d.  **\`copywriting\`:** สร้างสรรค์องค์ประกอบข้อความโฆษณาเบื้องต้น **(ภาษาไทย)**:
-                                    *   **\`headline\`:** พาดหัวที่ดึงดูดความสนใจ **(ภาษาไทย)**.
-                                    *   **\`sub_headline_1\`:** พาดหัวรองที่ขยายความหรือเน้นประโยชน์ **(ภาษาไทย)**.
-                                    *   **\`sub_headline_2\`:** พาดหัวรองที่สอง (ถ้ามี) เพื่อเพิ่มบริบทหรือความเร่งด่วน **(ภาษาไทย)** (ใช้ \`null\` หากไม่ต้องการ).
-                                    *   **\`bullets\`:** รายการจุดเด่น 2-4 ข้อที่เน้นประโยชน์หลัก, ฟีเจอร์ หรือเหตุผลที่น่าเชื่อถือ **(ภาษาไทย)**.
-                                    *   **\`cta\`:** ข้อความเรียกร้องให้ดำเนินการ (Call To Action) ที่ชัดเจน **(ภาษาไทย)** (เช่น "เรียนรู้เพิ่มเติม", "ซื้อเลย", "ดูเดโม", "เข้าร่วม Waiting List", "ดาวน์โหลดคู่มือ").`;
+const DEFAULT_DETAILS_SECTION = `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** ที่เน้นการนำเสนอจุดแข็งที่คู่แข่งไม่มี เช่น "สถิติที่เราคนเดียวมี", "เบื้องหลังเทคโนโลยีเฉพาะ", "ความสำเร็จที่พิสูจน์ได้", "มาตรฐานเฉพาะของเรา", "ค่าธรรมเนียมเพียง 0.2%", "ค่าบริการเพียง 100 บาท".
+b.  **\`product_focus\`:** ระบุ {productFocus} หรือฟีเจอร์/ตัวเลข/มาตรฐานที่มีเพียงแบรนด์เราที่นำเสนอได้ **(ภาษาไทย)**.
+c.  **\`concept_idea\`:** สรุปแนวคิดสร้างสรรค์หลัก (1-2 ประโยค) ที่นำเสนอความเหนือกว่าด้วยหลักฐานชัดเจน เช่น ตัวเลขเปรียบเทียบ, ประสิทธิภาพ, หรือสิทธิบัตรเฉพาะ **(ภาษาไทย)**.
+d.  **\`copywriting\`:** สร้างสรรค์องค์ประกอบข้อความโฆษณา **(ภาษาไทย)** ที่ชูจุดแข็งเฉพาะของแบรนด์:
+    *   **\`headline\`:** พาดหัวที่เน้นจุดเด่นที่มีแค่เรา พร้อมตัวเลขหรือข้อเท็จจริง.
+    *   **\`sub_headline_1\`:** พาดหัวรองที่เสริมข้อมูลหรือสถิติที่น่าเชื่อถือ.
+    *   **\`sub_headline_2\`:** พาดหัวรองเสริม (ถ้ามี) ที่อ้างอิงกระแสหรือเทรนด์ปัจจุบันเพื่อเพิ่มความทันสมัย (ใช้ \`null\` หากไม่ต้องการ).
+    *   **\`bullets\`:** รายการจุดเด่น 2-4 ข้อที่เน้นฟีเจอร์, ประสิทธิภาพ หรือผลลัพธ์ที่วัดได้จริง — สิ่งที่ไม่มีใครทำได้เหมือนเรา.
+    *   **\`cta\`:** ข้อความ Call To Action ที่ชัดเจน กระตุ้นให้ผู้ชมสัมผัส “ความต่าง” ของแบรนด์ เช่น "ดูผลลัพธ์จริง", "ท้าพิสูจน์ฟีเจอร์นี้", "เปรียบเทียบกับคู่แข่ง", "ทดลองใช้งานฟรี".`;
 
 // --- Define available models ---
 const AVAILABLE_MODELS = ['gemini', 'openai', 'claude']; // Define model names
@@ -1105,7 +1105,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                     </div>
 
                     {/* Editable Task Section */}
-                    {/* <div className="grid gap-1.5 w-full">
+                    <div className="grid gap-1.5 w-full">
                         <Label htmlFor="editable-task-section" className="text-sm font-medium">Editable Prompt: Task Section</Label>
                         <Textarea
                             id="editable-task-section"
@@ -1115,7 +1115,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                             className="min-h-[150px] bg-background font-mono text-xs"
                             disabled={isAnyModelLoading || isMetaLoading}
                         />
-                    </div> */}
+                    </div>
 
                     {/* Editable Details Section */}
                     {/* <div className="grid gap-1.5 w-full">
