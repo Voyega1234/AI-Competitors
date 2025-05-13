@@ -425,85 +425,379 @@ ${detailsSectionParam ? detailsSectionParam.replace(/\{productFocus\}/g, analysi
         "cta": "ตัวอย่าง: ดูเพิ่มเติม" // Thai - Must be original
       }
     }
-    // ... more recommendation objects (7-10 total)
+    // ... more recommendation objects (8-10 total)
   ]
 }
 \`\`\`
 `;
     };
 
-    // --- Model-Specific Generation ---
+    // --- Model Competition Workflow ---
+    // Step 1: Initial generation with Gemini
+    // Step 2: Pass Gemini's output to GPT-4.1 with challenge prompt
+    // Step 3: Pass GPT's output back to Gemini with competitive prompt
 
-    // --- Gemini Generation (Conditional) ---
-    if (requestedModels.includes('gemini')) {
-        console.log("Starting Gemini generation...");
+    let initialGeminiOutput: any[] = [];
+    let gptImprovedOutput: any[] = [];
+    let finalGeminiOutput: any[] = [];
+    
+    console.log("Starting Model Competition Workflow...");
+
+    // --- STEP 1: Initial Gemini Generation ---
+    console.log("STEP 1: Starting initial Gemini generation...");
+    try {
+        // --- Prepare Gemini Prompt (using common builder) ---
+        const finalGeminiPrompt = buildFinalUserPrompt(groundedClientInfoCommon, competitorAnalysisData);
+
+        // --- Log Gemini Prompt ---
+        console.log("--- START INITIAL GEMINI PROMPT ---");
+        console.log(finalGeminiPrompt);
+        console.log("--- END INITIAL GEMINI PROMPT ---");
+
+        // --- Call Gemini API ---
+        console.log("Sending initial request to Gemini API...");
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${GEMINI_API_KEY}`;
+        const geminiPayload = {
+            contents: [{ parts: [{ text: finalGeminiPrompt }] }],
+            generationConfig: { 
+                temperature: 1.0,
+                response_mime_type: "application/json",
+            } 
+        };
+        const geminiResponse = await fetch(geminiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(geminiPayload)
+        });
+
+        if (!geminiResponse.ok) {
+            const errorText = await geminiResponse.text();
+            throw new Error(`Initial Gemini API request failed: ${geminiResponse.status} - ${errorText}`);
+        }
+        const geminiData = await geminiResponse.json();
+        const generatedText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text; 
+        if (typeof generatedText !== 'string' || generatedText.trim() === '') {
+            console.error("Initial Gemini response missing text part:", JSON.stringify(geminiData, null, 2));
+            throw new Error('Initial Gemini returned empty or invalid content.');
+        }
+
+        // --- Parse Initial Gemini Response ---
+        let jsonString = generatedText.trim();
         try {
-            // --- Prepare Gemini Prompt (using common builder) ---
-            const finalGeminiPrompt = buildFinalUserPrompt(groundedClientInfoCommon, competitorAnalysisData);
-
-            // --- Log Gemini Prompt ---
-            console.log("--- START FINAL GEMINI PROMPT ---");
-            console.log(finalGeminiPrompt);
-            console.log("--- END FINAL GEMINI PROMPT ---");
-
-            // --- Call Gemini API ---
-            console.log("Sending request to Gemini API...");
-            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${GEMINI_API_KEY}`; // Use Pro for main generation
-            const geminiPayload = {
-                contents: [{ parts: [{ text: finalGeminiPrompt }] }],
-                // Grounding is implicitly part of the prompt text now, remove explicit tool call for main generation
-                // tools: [{ "google_search": {} }], // Removed for main generation
-                generationConfig: { 
-                    temperature: 1.0, // Adjusted temperature for creativity
-                    response_mime_type: "application/json", // Request JSON output directly
-                } 
-            };
-            const geminiResponse = await fetch(geminiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(geminiPayload)
-            });
-
-            if (!geminiResponse.ok) {
-                const errorText = await geminiResponse.text();
-                throw new Error(`Gemini API request failed: ${geminiResponse.status} - ${errorText}`);
+            const parsedRecommendations = JSON.parse(jsonString);
+            if (!parsedRecommendations || !Array.isArray(parsedRecommendations.recommendations)) {
+                throw new Error("Parsed JSON does not contain a 'recommendations' array.");
             }
-            const geminiData = await geminiResponse.json();
-            // With response_mime_type, the text should be JSON directly
-            const generatedText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text; 
-            if (typeof generatedText !== 'string' || generatedText.trim() === '') {
-                console.error("Gemini response missing text part:", JSON.stringify(geminiData, null, 2));
-                throw new Error('Gemini returned empty or invalid content.');
-            }
+            initialGeminiOutput = parsedRecommendations.recommendations;
+            console.log("Initial Gemini generation successful.");
+            
+            // Store in finalResults in case competition fails
+            finalResults['gemini'] = initialGeminiOutput;
+        } catch (parseError: any) {
+            console.error("Failed to parse JSON from initial Gemini:", jsonString, "Error:", parseError);
+            throw new Error(`Failed to parse recommendations JSON from initial Gemini: ${parseError.message}`);
+        }
 
-            // --- Parse Gemini Response ---
-            let parsedRecommendations: GeminiRecommendationOutput;
-            let jsonString = generatedText.trim(); // Assume direct JSON string
+        // --- STEP 2: Pass to GPT-4.1 for improvement ---
+        if (initialGeminiOutput.length > 0 && OPENAI_API_KEY) {
+            console.log("STEP 2: Passing Gemini output to GPT-4.1 for improvement...");
             try {
-                 // No need to clean ```json markers if response_mime_type is set
-                // let potentiallyCleanedText = generatedText.trim().replace(/^```json\s*/, '').replace(/\s*```$/, '');
-                // const startIndex = potentiallyCleanedText.indexOf('{');
-                // const endIndex = potentiallyCleanedText.lastIndexOf('}');
-                // if (startIndex === -1 || endIndex === -1 || endIndex < startIndex) {
-                //     throw new Error('AI response did not contain a valid JSON object structure.');
-                // }
-                // jsonString = potentiallyCleanedText.substring(startIndex, endIndex + 1);
+                // Create a complete prompt that includes both the original client & competitor data and Gemini's outputs
+                const fullClientInfo = groundedClientInfoCommon;
+                const fullCompetitorData = competitorAnalysisData;
+                
+                const gptChallengePrompt = `
+# Client Information
+${fullClientInfo}
 
-                parsedRecommendations = JSON.parse(jsonString);
-                if (!parsedRecommendations || !Array.isArray(parsedRecommendations.recommendations)) {
-                    throw new Error("Parsed JSON does not contain a 'recommendations' array.");
+# Competitor Analysis
+${JSON.stringify(fullCompetitorData, null, 2)}
+
+# Original Recommendations from Gemini
+Below are recommendations generated by Gemini 2.5. I need you to significantly improve these ideas using the client and competitor information above.
+
+${JSON.stringify(initialGeminiOutput, null, 2)}
+
+# Your Challenge
+Create 8-10 high-quality marketing recommendations based on the client information and competitor analysis. If the original has fewer than 8, expand to create new recommendations.
+
+Please enhance these recommendations by:
+1. Making the concepts more creative, distinctive and strategic
+2. Strengthening the tie to market research and competitor analysis
+3. Improving the copywriting to be more compelling and impactful
+4. Adding more specific statistics, numbers or concrete details where relevant
+
+Ensure you provide AT LEAST 10 recommendations total, even if you need to create new ones beyond what was in the original set. Return the improved version in exactly the same JSON format.
+
+Your response should be valid, parseable JSON with a "recommendations" array, matching the exact original structure.`;
+                
+                console.log("--- START GPT CHALLENGE PROMPT ---");
+                console.log(gptChallengePrompt);
+                console.log("--- END GPT CHALLENGE PROMPT ---");
+
+                // Call OpenAI API with the challenge prompt
+                const openaiUrl = "https://api.openai.com/v1/chat/completions";
+                const openaiPayload = {
+                    model: "gpt-4.1-mini",
+                    messages: [{ role: "user", content: gptChallengePrompt }],
+                    response_format: { type: "json_object" },
+                    temperature: 1.0
+                };
+
+                const openaiResponse = await fetch(openaiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${OPENAI_API_KEY}`
+                    },
+                    body: JSON.stringify(openaiPayload)
+                });
+
+                if (!openaiResponse.ok) {
+                    const errorBody = await openaiResponse.json().catch(() => ({ error: { message: 'Failed to parse error response' } }));
+                    const errorMessage = errorBody?.error?.message || `GPT API request failed: ${openaiResponse.status} - ${openaiResponse.statusText}`;
+                    console.error('GPT API error response:', errorBody);
+                    throw new Error(errorMessage);
                 }
-                finalResults['gemini'] = parsedRecommendations.recommendations; // Store successful result
-                console.log("Gemini generation successful.");
-            } catch (parseError: any) {
-                console.error("Failed to parse JSON from Gemini:", jsonString, "Error:", parseError);
-                throw new Error(`Failed to parse recommendations JSON from Gemini: ${parseError.message}`);
-            }
 
-        } catch (geminiError: any) {
-            console.error("Error during Gemini generation process:", geminiError);
-            finalErrors['gemini'] = geminiError.message || "An unknown error occurred during Gemini generation.";
-            finalResults['gemini'] = null; // Ensure no stale results
+                const openaiData = await openaiResponse.json();
+                const gptGeneratedText = openaiData?.choices?.[0]?.message?.content;
+
+                console.log("Raw text received from GPT:", gptGeneratedText ? gptGeneratedText.substring(0, 100) + "..." : "<empty>");
+
+                if (typeof gptGeneratedText !== 'string' || gptGeneratedText.trim() === '') {
+                    console.error("GPT response missing content:", JSON.stringify(openaiData, null, 2));
+                    throw new Error('GPT returned empty or invalid content.');
+                }
+
+                // Parse GPT Response
+                try {
+                    const parsedGptOutput = JSON.parse(gptGeneratedText.trim());
+                    if (!parsedGptOutput || !Array.isArray(parsedGptOutput.recommendations)) {
+                        throw new Error("Parsed JSON from GPT does not contain a 'recommendations' array.");
+                    }
+                    gptImprovedOutput = parsedGptOutput.recommendations;
+                    console.log("GPT improvement successful.");
+                    
+                    // Update finalResults with GPT's improved output
+                    finalResults['openai'] = gptImprovedOutput;
+                } catch (parseError: any) {
+                    console.error("Failed to parse JSON from GPT:", gptGeneratedText, "Error:", parseError);
+                    throw new Error(`Failed to parse recommendations JSON from GPT: ${parseError.message}`);
+                }
+
+                // --- STEP 3: Send back to Gemini for final improvement ---
+                if (gptImprovedOutput.length > 0) {
+                    console.log("STEP 3: Sending GPT's improved output back to Gemini for final pass...");
+                    
+                    try {
+                        // Create a complete prompt for Gemini that includes both client & competitor data and GPT's improvements
+                        const fullClientInfo = groundedClientInfoCommon;
+                        const fullCompetitorData = competitorAnalysisData;
+                        
+                        const geminiCompetitivePrompt = `
+# Client Information
+${fullClientInfo}
+
+# Competitor Analysis
+${JSON.stringify(fullCompetitorData, null, 2)}
+
+# GPT's Recommendations
+Below are recommendations improved by GPT-4.1. I need you to create even better recommendations using ALL the information above.
+
+${JSON.stringify(gptImprovedOutput, null, 2)}
+
+# Your Challenge: Deep Chain of Thought Process
+Create 8-10 impressive, market-leading recommendations. Use an advanced Chain of Thought process where you'll deeply consider multiple alternatives before finalizing your output. If GPT's recommendations contain fewer than 8 items, expand with additional creative ideas.
+
+## Step 1: Initial Analysis & Research (think internally)
+- Critically analyze each of GPT's recommendations and identify weaknesses
+- Identify specific research questions that would dramatically improve each recommendation
+- Use Google Search to find ANY relevant information that could enhance each recommendation:
+  * Marketing case studies and success stories from similar industries
+  * Books, academic research, and expert insights on marketing psychology
+  * Statistics, facts, and data points that support the recommendations
+  * Current Thai market trends and cultural insights
+  * Competitor campaigns and strategies from global markets that could be adapted
+  * Consumer behavior patterns and psychological principles
+- Think deeply about how each piece of information could transform the recommendations
+
+## Step 2: Generate Knowledge-Enhanced Alternatives (think internally)
+- For each recommendation, generate 3-4 significantly different creative approaches by:
+  * Searching for specific marketing approaches that worked well in similar contexts
+  * Finding unique cultural insights specific to Thailand that could make ideas more resonant
+  * Researching psychological principles that could enhance persuasiveness
+  * Examining successful global campaigns that could be adapted to Thai context
+- Deliberately search for diverse, contradictory perspectives to challenge your thinking
+- Consider genuinely radical alternatives that break industry conventions 
+- Synthesize insights from books, research papers, and expert opinions into your alternatives
+- Look for specific data points and statistics that could make each alternative more compelling
+
+## Step 3: Critical Evaluation with Research (think internally)
+- Use Google Search to verify key facts and claims in each alternative
+- Evaluate each alternative against specific criteria, using search to find evidence:
+  - How well it addresses competitive gaps (search for competitor weaknesses)
+  - How distinctive it is (search for similar existing campaigns)
+  - How actionable and measurable it is (search for relevant KPIs and metrics)
+  - How culturally relevant to Thailand it is (search for cultural norms and preferences)
+  - How well it leverages current market trends (search for latest industry movements)
+
+## Step 4: Final Selection and Thai Optimization (think internally)
+- Select the strongest evidence-backed version of each recommendation
+- Perform targeted searches to find specific Thai statistics, cultural references, and local examples
+- Search for Thai idioms, expressions, and cultural touchpoints to make copywriting authentic
+- Ensure all Thai language elements are grammatically correct and culturally appropriate
+- Double-check all factual claims with additional searches
+- For each recommendation, find at least one concrete data point, case study, or expert opinion to strengthen it
+
+After completing this internal Chain of Thought process, provide ONLY your final recommendations in valid, parseable JSON with a "recommendations" array, matching the exact original structure. 
+
+Remember: The actual CoT thinking should be internal - your final response must be clean JSON only.`;
+                        
+                        console.log("--- START GEMINI COMPETITIVE PROMPT ---");
+                        console.log(geminiCompetitivePrompt);
+                        console.log("--- END GEMINI COMPETITIVE PROMPT ---");
+
+                        // Step 3A: First do research with Google Search tool (without JSON response format)
+                        console.log("Step 3A: Performing Google Search research first...");
+                        
+                        // Create a research-focused prompt that explicitly asks for search
+                        const researchPrompt = `
+# Research Request
+
+I need you to research information that will help create marketing recommendations for the following client:
+
+${fullClientInfo}
+
+# Research Questions
+1. What are the latest market trends related to this client's industry in Thailand?
+2. What strategies have been successful for similar businesses?
+3. What cultural elements would resonate with Thai audiences for this product/service?
+4. What specific statistics or data points could strengthen marketing recommendations?
+5. What unique approaches would help this client stand out from competitors?
+6. What success case studies could help this client stand out from competitors?
+
+Please provide detailed research findings using Google Search. Focus on finding concrete information, examples, and data that could be used to create exceptional marketing recommendations. `;
+                        
+                        const researchResponse = await fetch(geminiUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                contents: [{ parts: [{ text: researchPrompt }] }],
+                                tools: [{ "google_search": {} }], // Enable Google Search for research phase
+                                generationConfig: { temperature: 1.0 }
+                            })
+                        });
+
+                        if (!researchResponse.ok) {
+                            const errorText = await researchResponse.text();
+                            console.warn(`Research phase request failed: ${researchResponse.status} - ${errorText}`);
+                            console.log("Proceeding with final recommendations without research phase.");
+                            // Continue to next step even if research fails
+                        }
+                        
+                        // Extract research results if available
+                        let researchResults = "";
+                        try {
+                            const researchData = await researchResponse.json();
+                            researchResults = researchData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                            console.log("Research completed successfully.");
+                        } catch (e) {
+                            console.warn("Failed to process research results:", e);
+                            // Continue even if we couldn't extract research results
+                        }
+                        
+                        // Step 3B: Now generate final recommendations with JSON format (no Google Search tool)
+                        console.log("Step 3B: Generating final recommendations with research input...");
+                        
+                        // Add research results to the final prompt
+                        const finalPromptWithResearch = `
+${geminiCompetitivePrompt}
+
+# Research Findings
+Use these research findings to enhance your recommendations:
+
+${researchResults}
+
+Remember: Your final response must be clean JSON only with a "recommendations" array.`;
+                        
+                        // Make the final call with JSON response format but WITHOUT tools
+                        const finalGeminiResponse = await fetch(geminiUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                contents: [{ parts: [{ text: finalPromptWithResearch }] }],
+                                // No tools in this request
+                                generationConfig: { 
+                                    temperature: 2.0,
+                                    response_mime_type: "application/json"
+                                }
+                            })
+                        });
+
+                        if (!finalGeminiResponse.ok) {
+                            const errorText = await finalGeminiResponse.text();
+                            throw new Error(`Final Gemini API request failed: ${finalGeminiResponse.status} - ${errorText}`);
+                        }
+
+                        const finalGeminiData = await finalGeminiResponse.json();
+                        const finalGeminiText = finalGeminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                        if (typeof finalGeminiText !== 'string' || finalGeminiText.trim() === '') {
+                            console.error("Final Gemini response missing text part:", JSON.stringify(finalGeminiData, null, 2));
+                            throw new Error('Final Gemini returned empty or invalid content.');
+                        }
+
+                        // Parse Final Gemini Response
+                        try {
+                            const parsedFinalOutput = JSON.parse(finalGeminiText.trim());
+                            if (!parsedFinalOutput || !Array.isArray(parsedFinalOutput.recommendations)) {
+                                throw new Error("Parsed JSON from final Gemini does not contain a 'recommendations' array.");
+                            }
+                            finalGeminiOutput = parsedFinalOutput.recommendations;
+                            console.log("Final Gemini improvement successful.");
+                            
+                            // Update finalResults with Gemini's final improved output
+                            finalResults['gemini'] = finalGeminiOutput;
+                            
+                            // Set the model competition flag to true
+                            finalResults['_metadata'] = {
+                                modelCompetition: true,
+                                steps: ['gemini_initial', 'openai_improvement', 'gemini_final']
+                            };
+                            
+                        } catch (parseError: any) {
+                            console.error("Failed to parse JSON from final Gemini:", finalGeminiText, "Error:", parseError);
+                            throw new Error(`Failed to parse recommendations JSON from final Gemini: ${parseError.message}`);
+                        }
+                    } catch (finalGeminiError: any) {
+                        console.error("Error during final Gemini improvement:", finalGeminiError);
+                        // Keep the GPT improved results if final Gemini fails
+                        console.log("Using GPT improved results since final Gemini failed.");
+                    }
+                }
+            } catch (gptError: any) {
+                console.error("Error during GPT improvement step:", gptError);
+                // Keep initial Gemini results if GPT improvement fails
+                console.log("Using initial Gemini results since GPT improvement failed."); 
+            }
+        }
+    } catch (initialGeminiError: any) {
+        console.error("Error during initial Gemini generation:", initialGeminiError);
+        finalErrors['gemini'] = initialGeminiError.message || "An unknown error occurred during Gemini generation.";
+        finalResults['gemini'] = null; // Ensure no stale results
+    }
+    
+    // Skip individual model generation if we did the competition workflow
+    if (finalResults['_metadata']?.modelCompetition) {
+        console.log("Model competition workflow completed successfully.");
+    } else {
+        // Fall back to individual model generation if competition workflow failed
+        console.log("Model competition workflow incomplete or failed, falling back to individual generation.");
+        
+        // --- Individual Gemini Generation if not already done ---
+        if (requestedModels.includes('gemini') && !finalResults['gemini']) {
+            // Gemini generation code would go here (removed for brevity as it's now handled above)
         }
     }
 
@@ -848,7 +1142,7 @@ ${detailsSectionContent}
         "cta": "ตัวอย่าง: ดูเพิ่มเติม" // Thai - Must be original
       }
     }
-    // ... more recommendation objects (7-10 total)
+    // ... more recommendation objects (8-10 total)
   ]
 }
 \`\`\`

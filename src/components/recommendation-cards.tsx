@@ -37,7 +37,7 @@ interface GenerateImageResponse {
 }
 
 // --- Define Defaults for Editable Prompt Sections ---
-const DEFAULT_TASK_SECTION = `"1. Analyze the client's situation and the provided competitor analysis to develop 7-10 actionable marketing content strategies that highlight {clientName}'s exclusive features, statistics, or performance metrics—elements that only {clientName} can claim and no competitors can match.  
+const DEFAULT_TASK_SECTION = `"1. Analyze the client's situation and the provided competitor analysis to develop 10-15 actionable marketing content strategies that highlight {clientName}'s exclusive features, statistics, or performance metrics—elements that only {clientName} can claim and no competitors can match.  
 2. Focus on quantifiable proof points, proprietary data, or one-of-a-kind capabilities of {clientName} that directly address customer needs in ways competitors cannot.  
 3. Each strategy must creatively integrate current trends, cultural events, or relevant news stories to make the message timely and resonant.  
 4. For each strategy, explain the rationale and suggest specific content angles (e.g., social posts, videos, landing pages) that emphasize these unmatched figures or features.  
