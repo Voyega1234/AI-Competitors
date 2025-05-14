@@ -73,7 +73,13 @@ export default function CompetitorResearchPage() {
           />
         );
       case 'recommendations':
-        return <RecommendationCards />;
+        // Ensure we're rendering a valid React component, not an object
+        try {
+          return <RecommendationCards />;
+        } catch (error) {
+          console.error('Error rendering RecommendationCards:', error);
+          return <div className="p-8 text-center">Error loading recommendations. Please try again.</div>;
+        }
       default:
         return null;
     }

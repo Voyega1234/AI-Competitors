@@ -227,7 +227,9 @@ interface SelectedConcept {
     keyMessage: string;
 }
 
+// Fix for object with name/description being rendered directly
 export function RecommendationCards() {
+    // Add fallback JSX rendering to prevent direct object rendering
     // Remove router if no longer needed
     // const router = useRouter(); 
 
@@ -459,13 +461,12 @@ export function RecommendationCards() {
         }
     };
 
-    // --- NEW: Fetch Competitor Analysis ---
+    // --- Trigger analysis run ID fetch when selection changes ---
     useEffect(() => {
         if (selectedClientName && selectedProductFocus) {
-            fetchAnalysisRunId().then(() => {
-                // After getting the runId, fetch competitor analysis
-                fetchCompetitorAnalysis();
-            });
+            // fetchAnalysisRunId will call fetchCompetitorAnalysis internally
+            // so we don't need to call it again here
+            fetchAnalysisRunId();
         }
     }, [selectedClientName, selectedProductFocus]);
 

@@ -22,17 +22,18 @@ interface Competitor {
 }
 
 // Helper function to call Gemini API via HTTP POST
-async function callGeminiAPI(prompt: string, apiKey: string, model: string = "gemini-2.0-flash", useGrounding: boolean = false) {
+async function callGeminiAPI(prompt: string, apiKey: string, model: string = "gemini-2.5-flash-preview-04-17", useGrounding: boolean = false) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
     
     let body: any = {
         contents: [
-            {
+            {   
                 parts: [
                     { text: prompt }
                 ]
             }
-        ]
+        ],
+        generationConfig: { temperature: 1.0 }
     };
     
     // Add Google Search grounding if requested
@@ -132,24 +133,22 @@ async function fetchMarketTrendsWithGrounding(clientName: string, competitors: C
 
     // Thai prompt for market trends and news search with competitor information
     const prompt = `ช่วยหาข้อมูล, ข่าว หรือเทรนกระแสที่เกี่ยวข้องกับประเภทของธุรกิจ ${clientName} ในไทย
-Search หาข้อมูลดังนี้
+    Search หาข้อมูลดังนี้
 
-* ข้อมูลฟีเจอร์หรือสินค้าทุกอย่างที่เกี่ยวข้องกับ ${clientName}
-* social proof, ทำไมต้องใช้งาน StashAway ทำไมต้องซื้อ StashAway ทำไมเพราะอะไร มีความน่าเชื่อถืออะไรรองรับ
-* IMPORTANT ค้นว่าทำไมต้อง ${clientName} ? ทำไมต้องใช้ ${clientName} ? ครบถ้วนและชัดเจน
-* ต้องการข้อมูลที่มีความเป็น Fact มีตัวเลขและสถิติรองรับทั้งหมดที่แสดงอยู่บนหน้าเว็บไซต์
-* ข้อมูลทั้งหมดเกี่ยวกับ ${clientName} ที่อยู่ในเว็บไซต์ ข้อมูลตัวเลขสถิติที่สำคัญหรือฟีเจอร์ที่สำคัญ,
-* วิเคราะห์ ${clientName} และจุดแข็งที่แตกต่างจากคู่แข่งโดยเน้นไปที่ ฟีเจอร์ของสินค้าหรือบริการที่แตกต่าง
-* โปรโมชั่นหรือแคมเปญ โดยถ้ามีตัวเลขหรือสถิติจะดีมาก หรือการนำเสนอราคาหรือค่าทำเนียมที่ถูกกว่าที่เป็นตัวเลขเมื่อเทียบกับคู่แข่ง
-อยากได้ข้อมูลในหลายแง่มุมมากที่สุด เพื่อให้สามารถผลิตข้อมูลที่มีคุณภาพและครบถ้วน
-* คู่แข่งที่สำคัญได้แก่: ${competitorNames} โดยอยากให้มีข้อมูลเกี่ยวกับคู่แข่งที่ชัดเจน คอนเทนต์หรือโปรโมชั่นล่าสุด ณ วันที่ ${Date.now()} หรือข้อมูลข่าวหรือฟีเจอร์หรือจุดแข็งหรือข้อได้เปรียบของคู่แข่งแต่ละเจ้า
-สำคัญมาก: กรุณาตอบกลับเป็น JSON เท่านั้น ไม่ต้องมีข้อความแนะนำหรือคำอธิบายใดๆ ไม่ต้องมีหัวข้อหรือ Bold text ที่ไม่ใช่ JSON
-ไม่ต้องเริ่มต้นด้วยคำว่า "แน่นอนครับ" หรือข้อความอื่นๆ ให้ส่งเฉพาะโครงสร้าง JSON นี้เท่านั้น ตอบเป็นภาษาไทย:
+    * ข้อมูลฟีเจอร์หรือสินค้าทุกอย่างที่เกี่ยวข้องกับ ${clientName}
+    * Social proof, ทำไมต้องใช้งาน StashAway ทำไมต้องซื้อ StashAway ทำไมเพราะอะไร มีความน่าเชื่อถืออะไรรองรับ
+    * IMPORTANT ค้นว่าทำไมต้อง ${clientName} ? ทำไมต้องใช้ ${clientName} ? ครบถ้วนและชัดเจน
+    * ต้องการข้อมูลที่มีความเป็น Fact มีตัวเลขและสถิติรองรับทั้งหมดที่แสดงอยู่บนหน้าเว็บไซต์
+    * ข้อมูลทั้งหมดเกี่ยวกับ ${clientName} ที่อยู่ในเว็บไซต์ ข้อมูลตัวเลขสถิติที่สำคัญหรือฟีเจอร์ที่สำคัญ,
+    * วิเคราะห์ ${clientName} และจุดแข็งที่แตกต่างจากคู่แข่งโดยเน้นไปที่ ฟีเจอร์ของสินค้าหรือบริการที่แตกต่าง
+    อยากได้ข้อมูลในหลายแง่มุมมากที่สุด เพื่อให้สามารถผลิตข้อมูลที่มีคุณภาพและครบถ้วน ทุกข้อมูลควรมีตัวเลขรองรับถ้าเป็นไปได้
+    สำคัญมาก: กรุณาตอบกลับเป็น JSON เท่านั้น ไม่ต้องมีข้อความแนะนำหรือคำอธิบายใดๆ ไม่ต้องมีหัวข้อหรือ Bold text ที่ไม่ใช่ JSON
+    ไม่ต้องเริ่มต้นด้วยคำว่า "แน่นอนครับ" หรือข้อความอื่นๆ ให้ส่งเฉพาะโครงสร้าง JSON นี้เท่านั้น ตอบเป็นภาษาไทย:
 
 {
   "research": ["ข้อมูลงานวิจัย 1", "ข้อมูลงานวิจัย 2", "ข้อมูลงานวิจัย 3", ...] // ทำไมต้อง ${clientName} ?, วิเคราะห์ ${clientName} และจุดแข็งที่แตกต่างจากคู่แข่ง ผลการค้นหาที่เกี่ยวข้องกับธุรกิจและคู่แข่ง รวมทั้งข่าวล่าสุด, เทรนด์ตลาด, และโอกาสทางธุรกิจ
 }`;
-
+// * คู่แข่งที่สำคัญได้แก่: ${competitorNames} โดยอยากให้มีข้อมูลเกี่ยวกับคู่แข่งที่ชัดเจน คอนเทนต์หรือโปรโมชั่นล่าสุด ณ วันที่ ${Date.now()} หรือข้อมูลข่าวหรือฟีเจอร์หรือจุดแข็งหรือข้อได้เปรียบของคู่แข่งแต่ละเจ้า
     try {
         console.log(`[API /competitor-analysis] Calling Gemini with Google Grounding Search for ${clientName} market trends...`);
         const trendsText = await callGeminiAPI(prompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-04-17", true);
@@ -334,7 +333,7 @@ Return ONLY the following JSON structure with no markdown formatting, no code bl
 IMPORTANT: Your response must be valid, parseable JSON. Do not include any text outside the JSON object. Do not wrap the JSON in code blocks or backticks.`;
             try {
                 console.log("[API /competitor-analysis] Calling Gemini for direct competitor analysis via HTTP API...");
-                const analysisText = await callGeminiAPI(directAnalysisPrompt, GEMINI_API_KEY, "gemini-2.0-flash");
+                const analysisText = await callGeminiAPI(directAnalysisPrompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-04-17");
                 
                 // Clean the response before parsing
                 const cleanedText = cleanGeminiResponse(analysisText);
@@ -705,7 +704,7 @@ Return ONLY the following JSON structure with no markdown formatting, no code bl
 IMPORTANT: Your response must be valid, parseable JSON. Do not include any text outside the JSON object. Do not wrap the JSON in code blocks or backticks. and Thai language.`;
             try {
                 console.log("[API /competitor-analysis] Calling Gemini for direct competitor analysis via HTTP API...");
-                const analysisText = await callGeminiAPI(directAnalysisPrompt, GEMINI_API_KEY, "gemini-2.0-flash");
+                const analysisText = await callGeminiAPI(directAnalysisPrompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-04-17");
                 
                 // Clean the response before parsing
                 const cleanedText = cleanGeminiResponse(analysisText);

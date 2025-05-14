@@ -685,7 +685,7 @@ Please provide detailed research findings using Google Search. Focus on finding 
                             body: JSON.stringify({
                                 contents: [{ parts: [{ text: researchPrompt }] }],
                                 tools: [{ "google_search": {} }], // Enable Google Search for research phase
-                                generationConfig: { temperature: 1.0 }
+                                generationConfig: { temperature: 2.0 }
                             })
                         });
 
@@ -716,10 +716,25 @@ ${geminiCompetitivePrompt}
 
 # Research Findings
 Use these research findings to enhance your recommendations:
-
+And Ideas Should Respresent our Client and Key Strength, Social Proof Base on Fact and Statistic
 ${researchResults}
 
-Remember: Your final response must be clean JSON only with a "recommendations" array.`;
+# Response Format Requirements
+You MUST return ONLY a valid JSON object with this exact structure:
+{
+  "recommendations": [
+    {
+      "title": "First Recommendation Title",
+      "description": "Detailed description...",
+      "impact": "High",
+      "category": "Category name",
+      "copywriting": { "headline": "...", "body": "...", "cta": "..." }
+    },
+    // 8 more recommendations for a total of 9
+  ]
+}
+
+Do NOT include any text outside the JSON. No markdown formatting, no explanations, just the JSON object.`;
                         
                         // Make the final call with JSON response format but WITHOUT tools
                         const finalGeminiResponse = await fetch(geminiUrl, {
@@ -750,11 +765,70 @@ Remember: Your final response must be clean JSON only with a "recommendations" a
 
                         // Parse Final Gemini Response
                         try {
-                            const parsedFinalOutput = JSON.parse(finalGeminiText.trim());
-                            if (!parsedFinalOutput || !Array.isArray(parsedFinalOutput.recommendations)) {
-                                throw new Error("Parsed JSON from final Gemini does not contain a 'recommendations' array.");
+                            // Clean up the response text - attempt to extract JSON if it's wrapped in other text
+                            let cleanedText = finalGeminiText.trim();
+                            
+                            // Try to find JSON content if wrapped in other text
+                            const jsonStartMatch = cleanedText.match(/\{\s*["']recommendations["']\s*:/i);
+                            const jsonStart = jsonStartMatch ? jsonStartMatch.index || 0 : -1;
+                            if (jsonStart >= 0) {
+                                // Extract what looks like the JSON portion
+                                let openBraces = 0;
+                                let endIndex = jsonStart;
+                                let foundClosingBrace = false;
+                                
+                                for (let i = jsonStart; i < cleanedText.length; i++) {
+                                    const char = cleanedText[i];
+                                    if (char === '{') openBraces++;
+                                    if (char === '}') openBraces--;
+                                    if (openBraces === 0) {
+                                        endIndex = i + 1;
+                                        foundClosingBrace = true;
+                                        break;
+                                    }
+                                }
+                                
+                                if (foundClosingBrace) {
+                                    cleanedText = cleanedText.substring(jsonStart, endIndex);
+                                    console.log("Extracted JSON content from response:", cleanedText);
+                                }
                             }
-                            finalGeminiOutput = parsedFinalOutput.recommendations;
+                            
+                            // Try parsing the JSON
+                            const parsedFinalOutput = JSON.parse(cleanedText);
+                            
+                            // Check for recommendations array
+                            if (!parsedFinalOutput) {
+                                throw new Error("Parsed JSON from final Gemini is empty or null");
+                            }
+                            
+                            // If we have directly an array, assume it's the recommendations
+                            if (Array.isArray(parsedFinalOutput)) {
+                                console.log("Gemini returned direct array, using as recommendations");
+                                finalGeminiOutput = parsedFinalOutput;
+                            } 
+                            // If we have a recommendations array property
+                            else if (Array.isArray(parsedFinalOutput.recommendations)) {
+                                finalGeminiOutput = parsedFinalOutput.recommendations;
+                            } 
+                            // If we have something else that contains objects, try to use that
+                            else {
+                                // Look for any property that is an array of objects
+                                const arrayProps = Object.keys(parsedFinalOutput)
+                                    .filter(key => Array.isArray(parsedFinalOutput[key]) && 
+                                            parsedFinalOutput[key].length > 0 && 
+                                            typeof parsedFinalOutput[key][0] === 'object');
+                                
+                                if (arrayProps.length > 0) {
+                                    // Use the first array property found
+                                    const arrayProp = arrayProps[0];
+                                    console.log(`Using '${arrayProp}' array property as fallback for recommendations`);
+                                    finalGeminiOutput = parsedFinalOutput[arrayProp];
+                                } else {
+                                    throw new Error("Could not find any array property that could contain recommendations");
+                                }
+                            }
+                            
                             console.log("Final Gemini improvement successful.");
                             
                             // Update finalResults with Gemini's final improved output
@@ -768,7 +842,13 @@ Remember: Your final response must be clean JSON only with a "recommendations" a
                             
                         } catch (parseError: any) {
                             console.error("Failed to parse JSON from final Gemini:", finalGeminiText, "Error:", parseError);
-                            throw new Error(`Failed to parse recommendations JSON from final Gemini: ${parseError.message}`);
+                            // Use the GPT results as fallback instead of throwing
+                            console.log("Using GPT improved results as fallback due to Gemini JSON parsing error.");
+                            finalResults['gemini'] = gptImprovedOutput;
+                            finalResults['_metadata'] = {
+                                modelCompetition: true, 
+                                steps: ['gemini_initial', 'openai_improvement']
+                            };
                         }
                     } catch (finalGeminiError: any) {
                         console.error("Error during final Gemini improvement:", finalGeminiError);
