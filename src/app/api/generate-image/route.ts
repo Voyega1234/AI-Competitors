@@ -61,7 +61,7 @@ Generated Image Prompt:
         const geminiPayload = {
             contents: [{ parts: [{ text: geminiPromptForPromptGeneration }] }],
             generationConfig: {
-              temperature: 0.4, // Adjust for creativity vs. directness
+              temperature: 1, // Adjust for creativity vs. directness
               // maxOutputTokens: 150, // Optional: Limit prompt length
             }
         };

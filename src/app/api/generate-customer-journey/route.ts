@@ -90,7 +90,7 @@ Ensure the output is ONLY the valid JSON object, with no surrounding text or mar
                 { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
             ],
             generationConfig: { 
-                temperature: 0.5, // Slightly lower temp for more structured output
+                temperature: 2, // Slightly lower temp for more structured output
                 responseMimeType: "application/json", // Request JSON directly
              }
         });

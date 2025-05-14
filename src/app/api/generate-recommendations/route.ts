@@ -460,7 +460,7 @@ ${detailsSectionParam ? detailsSectionParam.replace(/\{productFocus\}/g, analysi
         const geminiPayload = {
             contents: [{ parts: [{ text: finalGeminiPrompt }] }],
             generationConfig: { 
-                temperature: 1.0,
+                temperature: 2.0,
                 response_mime_type: "application/json",
             } 
         };
@@ -603,7 +603,7 @@ ${fullClientInfo}
 ${JSON.stringify(fullCompetitorData, null, 2)}
 
 # GPT's Recommendations
-Below are recommendations improved by GPT-4.1. I need you to create even better recommendations using ALL the information above.
+Below are recommendations improved by GPT-4.1. I need you to create even better recommendations using ALL the information above do you let the GPT win this ??.
 
 ${JSON.stringify(gptImprovedOutput, null, 2)}
 
@@ -1089,7 +1089,11 @@ ${brief}
             const detailsSectionContent = detailsSection || defaultDetailsText;
 
             return `
-Analyze the following client information, recent grounded search results (if available), competitor summary, and optional book context to conceptualize groundbreaking creative recommendations and their initial execution details **IN THAI**. **ALL TEXTUAL OUTPUT IN THE FINAL JSON RESPONSE MUST BE IN THAI.** **Crucially, leverage your access to real-time information via search grounding (if applicable to the model/call) to ensure ideas are timely, relevant, and informed by the latest digital landscape.**
+
+You are an expert marketing strategist and copywriter, highly skilled in psychological persuasion and proven advertising methods. Your task is to create compelling, highly persuasive advertising copy designed to maximize customer attraction, engagement, and conversions.
+When creating the copy, use relevant psychological principles of persuasion and advertising techniques, particularly those outlined in Drew Eric Whitman’s book “Cashvertising”— including but not limited to the Life-Force 8 (LF8), the Nine Learned (Secondary) Wants, Ego Morphing, Transfer of Credibility, Bandwagon Effect, Fear Factor, Means-End Chain, and Robert Cialdini’s Six Weapons of Influence (Comparison, Liking, Authority, Reciprocation, Commitment/Consistency, Scarcity)—but only where these principles naturally apply and genuinely enhance effectiveness.
+Critically, do not limit yourself exclusively to the techniques mentioned; incorporate any additional creative strategies, psychological insights, and proven persuasion techniques that you consider effective or innovative, based on your broad expertise.
+
 
 **Client Information:**
 *   Name: ${clientInfo.clientName}
@@ -1106,6 +1110,8 @@ ${competitorAnalysisText}
 ${taskSectionContent} use ${groundedInfo} to generate recommendations ideas that respresent จุดเด่น, ผลิตภัณฑ์เด่น, โปรโมชั่น แคมเปญล่าสุด หรือ กิจกรรมล่าสุด หรือ ข้อมูลสำคัญต่างๆ 
 **Creative Execution Details (Per Recommendation - Populate these fields IN THAI for the JSON):**
 ${detailsSectionContent}
+
+Ensure your copy aligns with modern, high-quality advertising standards and is tailored to effectively resonate with the specific target audience provided.
 
 **Output Format Requirements:**
 *   Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting (like \`\`\`json\`\`).
