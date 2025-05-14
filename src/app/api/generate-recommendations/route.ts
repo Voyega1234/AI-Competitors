@@ -351,7 +351,11 @@ ${competitorAnalysisResult.summary || 'No summary available.'}
         const competitorSection = competitorAnalysisText || summarizeCompetitors(competitorsData || []);
 
         return `
-Analyze the following client information, recent grounded search results (if available), competitor summary, and optional book context to conceptualize groundbreaking creative recommendations and their initial execution details **IN THAI**. **ALL TEXTUAL OUTPUT IN THE FINAL JSON RESPONSE MUST BE IN THAI.** **Crucially, leverage your access to real-time information via search grounding (if applicable to the model/call) to ensure ideas are timely, relevant, and informed by the latest digital landscape.**
+You are an expert marketing strategist and copywriter, highly skilled in psychological persuasion and proven advertising methods. Your task is to create compelling, highly persuasive advertising copy designed to maximize customer attraction, engagement, and conversions.
+When creating the copy, use relevant psychological principles of persuasion and advertising techniques, particularly those outlined in Drew Eric Whitman’s book “Cashvertising”— including but not limited to the Life-Force 8 (LF8), the Nine Learned (Secondary) Wants, Ego Morphing, Transfer of Credibility, Bandwagon Effect, Fear Factor, Means-End Chain, and Robert Cialdini’s Six Weapons of Influence (Comparison, Liking, Authority, Reciprocation, Commitment/Consistency, Scarcity)—but only where these principles naturally apply and genuinely enhance effectiveness.
+Critically, do not limit yourself exclusively to the techniques mentioned; incorporate any additional creative strategies, psychological insights, and proven persuasion techniques that you consider effective or innovative, based on your broad expertise.
+
+Ensure your copy aligns with modern, high-quality advertising standards and is tailored to effectively resonate with the specific target audience provided
 
 **Client Information:**
 *   Name: ${analysisRunData.clientName}
@@ -404,7 +408,7 @@ ${detailsSectionParam ? detailsSectionParam.replace(/\{productFocus\}/g, analysi
 {
   "recommendations": [
     {
-      "title": "หัวข้อแนะนำ (ภาษาไทย)", // Thai - Must be original
+      "title": "หัวข้อแนะนำ (ภาษาไทย) โดยอาจจะมีตัวเลขหรือสถิติหรือชื่อสินค้าที่ต้องการนำเสนอ", // Thai - Must be original
       "description": "รายละเอียดแนวคิดสร้างสรรค์ ที่ไม่ซ้ำใคร และมีประสิทธิภาพ (ภาษาไทย)", // Thai - Must be original
       "category": "Campaign", // Keep category identifier standard
       "impact": "High",
@@ -432,7 +436,11 @@ ${detailsSectionParam ? detailsSectionParam.replace(/\{productFocus\}/g, analysi
 `;
     };
 
-    // --- Model Competition Workflow ---
+    // --- Model Competition Workflow Toggle ---
+    // Set this flag to true to enable the full Model Competition workflow (Gemini → GPT → Gemini)
+    // Set to false to disable, using only initial Gemini results
+    const useModelCompetition = false;
+
     // Step 1: Initial generation with Gemini
     // Step 2: Pass Gemini's output to GPT-4.1 with challenge prompt
     // Step 3: Pass GPT's output back to Gemini with competitive prompt
@@ -498,6 +506,16 @@ ${detailsSectionParam ? detailsSectionParam.replace(/\{productFocus\}/g, analysi
             throw new Error(`Failed to parse recommendations JSON from initial Gemini: ${parseError.message}`);
         }
 
+        // --- Model Competition Toggle Logic ---
+        if (!useModelCompetition) {
+            // Model Competition is DISABLED: Use only initial Gemini results
+            console.log("Model Competition workflow is DISABLED. Skipping GPT and final Gemini steps.");
+            finalResults['gemini'] = initialGeminiOutput;
+            return new NextResponse(
+                JSON.stringify({ results: finalResults, errors: finalErrors }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } }
+            );
+        }
         // --- STEP 2: Pass to GPT-4.1 for improvement ---
         if (initialGeminiOutput.length > 0 && OPENAI_API_KEY) {
             console.log("STEP 2: Passing Gemini output to GPT-4.1 for improvement...");
