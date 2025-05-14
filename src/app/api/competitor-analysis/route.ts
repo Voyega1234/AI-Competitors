@@ -131,11 +131,17 @@ async function fetchMarketTrendsWithGrounding(clientName: string, competitors: C
     }
 
     // Thai prompt for market trends and news search with competitor information
-    const prompt = `คุณคือ Researcher ที่มีประสบการณ์มากกว่า 10 ปี หน้าที่คุณคือช่วยหาข้อมูล, ข่าว หรือเทรนกระแสที่เกี่ยวข้องกับประเภทของธุรกิจ ${clientName} ในไทย
-โดยมุ่งเน้นแค่ความเป็นเฉพาะแค่ ${clientName} เท่านั้นที่สามารถทำได้ หรือ ทำไมต้อง ${clientName} ?, ข้อมูลทั้งหมดเกี่ยวกับ ${clientName} ที่อยู่ในเว็บไซต์เน้นข้อมูลตัวเลขสถิติที่สำคัญหรือฟีเจอร์ที่สำคัญ, วิเคราะห์ ${clientName} และจุดแข็งที่แตกต่างจากคู่แข่งโดยเน้นไปที่ ฟีเจอร์ของสินค้าหรือบริการที่แตกต่าง โปรโมชั่นหรือแคมเปญ โดยถ้ามีตัวเลขหรือสถิติจะดีมาก หรือการนำเสนอราคาหรือค่าทำเนียมที่ถูกกว่าที่เป็นตัวเลขเมื่อเทียบกับคู่แข่ง และทำการ Research เกี่ยวกับคู่แข่ง และ หาข่าวหรือกระแสเทรนข่าวในช่วง ${Date.now()}ที่เกี่ยวข้องกับประเภทธุรกิจนี้ อาจจะเป็นข่าวในโซเชียลมีเดียในไทยหรือทั่วโลก
-อยากได้ข้อมูลในหลายแง่มุมมากที่สุด เพื่อให้สามารถผลิตข้อมูลที่มีคุณภาพและครบถ้วน  
-
-คู่แข่งที่สำคัญได้แก่: ${competitorNames} โดยอยากให้มีข้อมูลเกี่ยวกับคู่แข่งที่ชัดเจน คอนเทนต์หรือโปรโมชั่นล่าสุด ณ วันที่ ${Date.now()} หรือข้อมูลข่าวหรือฟีเจอร์หรือจุดแข็งหรือข้อได้เปรียบของคู่แข่งแต่ละเจ้า
+    const prompt = `ช่วยหาข้อมูล, ข่าว หรือเทรนกระแสที่เกี่ยวข้องกับประเภทของธุรกิจ ${clientName} ในไทย
+Search หาข้อมูลดังนี้
+* ข้อมูลฟีเจอร์หรือสินค้าทุกอย่างที่เกี่ยวข้องกับ ${clientName}
+* IMPORTANT ค้นว่าทำไมต้อง ${clientName} ? ทำไมต้องใช้ ${clientName} ? ครบถ้วนและชัดเจน
+* ต้องการข้อมูลที่มีความเป็น Fact มีตัวเลขและสถิติรองรับทั้งหมดที่แสดงอยู่บนหน้าเว็บไซต์
+* ข้อมูลทั้งหมดเกี่ยวกับ ${clientName} ที่อยู่ในเว็บไซต์ ข้อมูลตัวเลขสถิติที่สำคัญหรือฟีเจอร์ที่สำคัญ, 
+* วิเคราะห์ ${clientName} และจุดแข็งที่แตกต่างจากคู่แข่งโดยเน้นไปที่ ฟีเจอร์ของสินค้าหรือบริการที่แตกต่าง 
+* โปรโมชั่นหรือแคมเปญ โดยถ้ามีตัวเลขหรือสถิติจะดีมาก หรือการนำเสนอราคาหรือค่าทำเนียมที่ถูกกว่าที่เป็นตัวเลขเมื่อเทียบกับคู่แข่ง 
+* ทำการ Research เกี่ยวกับคู่แข่ง และ หาข่าวหรือกระแสเทรนข่าวในช่วง ${Date.now()}ที่เกี่ยวข้องกับประเภทธุรกิจนี้ อาจจะเป็นข่าวในโซเชียลมีเดียในไทยหรือทั่วโลก
+* อยากได้ข้อมูลในหลายแง่มุมมากที่สุด เพื่อให้สามารถผลิตข้อมูลที่มีคุณภาพและครบถ้วน  
+* คู่แข่งที่สำคัญได้แก่: ${competitorNames} โดยอยากให้มีข้อมูลเกี่ยวกับคู่แข่งที่ชัดเจน คอนเทนต์หรือโปรโมชั่นล่าสุด ณ วันที่ ${Date.now()} หรือข้อมูลข่าวหรือฟีเจอร์หรือจุดแข็งหรือข้อได้เปรียบของคู่แข่งแต่ละเจ้า
 สำคัญมาก: กรุณาตอบกลับเป็น JSON เท่านั้น ไม่ต้องมีข้อความแนะนำหรือคำอธิบายใดๆ ไม่ต้องมีหัวข้อหรือ Bold text ที่ไม่ใช่ JSON
 ไม่ต้องเริ่มต้นด้วยคำว่า "แน่นอนครับ" หรือข้อความอื่นๆ ให้ส่งเฉพาะโครงสร้าง JSON นี้เท่านั้น ตอบเป็นภาษาไทย:
 
@@ -145,7 +151,7 @@ async function fetchMarketTrendsWithGrounding(clientName: string, competitors: C
 
     try {
         console.log(`[API /competitor-analysis] Calling Gemini with Google Grounding Search for ${clientName} market trends...`);
-        const trendsText = await callGeminiAPI(prompt, GEMINI_API_KEY, "gemini-2.0-flash", true);
+        const trendsText = await callGeminiAPI(prompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-04-17", true);
         console.log("[API /competitor-analysis] Grounding Search response received.");
         
         // Clean the response before parsing
@@ -234,7 +240,7 @@ ${JSON.stringify(competitorData, null, 2)}
 
     try {
         console.log("[API /competitor-analysis] Calling Gemini for competitor analysis via HTTP API...");
-        const analysisText = await callGeminiAPI(prompt, GEMINI_API_KEY, "gemini-2.0-flash");
+        const analysisText = await callGeminiAPI(prompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-04-17");
         console.log("[API /competitor-analysis] Gemini response received.");
         
         // Clean the response before parsing
