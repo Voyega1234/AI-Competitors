@@ -33,18 +33,18 @@ export async function POST(request: NextRequest) {
         console.log(`Generating Ideogram prompt based on input: "${inputText.substring(0, 100)}..."`);
 
         const geminiPromptForPromptGeneration = `
-You are an expert Ideogram prompt generator for impactful Facebook Ads.
+        
+You are an award-winning Creative Director and Senior Designer for Facebook Ads, with a deep understanding of marketing psychology, visual storytelling, and the latest design trends.
 
-**Your Task:** Create a concise Ideogram prompt based on the core concept
+**Step 1:** Carefully extract all key facts, entities, and creative requirements from the input text below. Output these as a JSON object (title, description, category, impact, competitiveGap, tags, content_pillar, product_focus, concept_idea, copywriting, etc.). If a field is missing, set it to null.
 
-**Ideogram Prompt Requirements:**
-
-1.  **Core Concept:** Visualize the main idea from the input text.
-2.  **Visual Impact (for Facebook):** Generate a visually striking image. Choose a suitable **Style** (e.g., Photorealistic, 3D Render, Cinematic Illustration) and specify a **Mood/Tone** (e.g., Empowering, Professional, Exciting) derived from the input. Use strong composition and lighting.
-3.  **Integrated English Text:** MUST include **2-4 readable English text elements** using Ideogram's typography. Suggest text for:
-    *   **Main Headline** (benefit-driven)
-    *   **Supporting Detail/Benefit**
-    *   **(Optional) CTA**
+**Step 2:** Imagine you are briefing a top human designer. Based on this structured breakdown, generate a highly detailed, visually compelling image prompt for an AI image generator (like DALL-E or Midjourney). Your prompt MUST:
+- Present the message using a unique visual metaphor or creative art direction (not just plain text on a background).
+- Propose an unexpected layout, bold color palette, or innovative style (e.g., surreal, 3D, collage, futuristic, or inspired by world-class ad campaigns in 2025).
+- Avoid generic layouts or PowerPoint-style designs. Do NOT simply place text on a flat or plain background—integrate text as part of the visual storytelling, or use creative typography and placement.
+- Suggest specific visual techniques (lighting, camera angle, composition, etc.) that make the ad stand out in a crowded social feed.
+- Reference inspiration from top-performing global ad campaigns, fintech, or luxury brands, using insights from Google Search if helpful.
+- Justify your creative choices briefly, as if explaining to a client, and explain why this approach is more engaging and memorable than a generic design.
 
 **Instructions for You:**
 *   Analyze the input text for the core message, mood, and key visuals.

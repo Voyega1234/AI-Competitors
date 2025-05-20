@@ -41,7 +41,7 @@ async function generateImagePrompt(concept: RequestBody): Promise<string> {
           - Pain Points/Emotional: ${concept.topicIdeas.painPointsEmotional?.join(', ') || 'None'}
           - Promotion/Pricing: ${concept.topicIdeas.promotionPricing?.join(', ') || 'None'}
 
-        Based on the creative concept details above, act as a professional creative director and photographer. Generate a highly detailed and evocative image generation prompt suitable for an AI image generator like DALL-E or Midjourney. The prompt should capture the essence of the focus target and key message, potentially incorporating relevant topic ideas. Describe the scene, composition, lighting, mood, style, and any specific elements clearly. The prompt should be in English.
+        Based on the creative concept details above, act as a professional creative director and photographer. Generate a highly detailed and evocative image generation prompt suitable for an AI image generator like DALL-E or Midjourney. The prompt should capture the essence of the focus target and key message, potentially incorporating relevant topic ideas. Describe the scene, composition, lighting, mood, style, and any specific elements clearly Or just go with an infographic image. The prompt should be in English.
     `;
 
     try {
@@ -69,7 +69,7 @@ async function generateImageFromPrompt(prompt: string): Promise<string> {
         console.log(`[API /generate-concept-image] Calling OpenAI with prompt: "${prompt}"`);
         const response = await openai.images.generate({
             // If this fails, consider changing to 'dall-e-3'.
-            model: "dall-e-3", // Ensure model is dall-e-3
+            model: "gpt-image-1", // Ensure model is dall-e-3
             prompt: prompt,
             n: 1, // Generate one image
             // size: "1024x1024", // Default size for dall-e-3 is 1024x1024

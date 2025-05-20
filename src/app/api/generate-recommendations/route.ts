@@ -264,26 +264,10 @@ export async function GET(request: NextRequest) {
                 if (!competitorAnalysisResult.error) {
                     // Format the competitor analysis data for the prompt
                     competitorAnalysisData = `
-## Key Strengths
-${competitorAnalysisResult.strengths?.map((s: string) => `- ${s}`).join('\n') || 'No data available.'}
 
-## Weaknesses
-${competitorAnalysisResult.weaknesses?.map((w: string) => `- ${w}`).join('\n') || 'No data available.'}
+                ## Market Research & Insights (Google Search)
+                ${competitorAnalysisResult.research?.map((r: string) => `- ${r}`).join('\n') || 'No research data available.'}
 
-## Shared Patterns
-${competitorAnalysisResult.shared_patterns?.map((p: string) => `- ${p}`).join('\n') || 'No data available.'}
-
-## Market Gaps
-${competitorAnalysisResult.market_gaps?.map((g: string) => `- ${g}`).join('\n') || 'No data available.'}
-
-## Differentiation Strategies
-${competitorAnalysisResult.differentiation_strategies?.map((d: string) => `- ${d}`).join('\n') || 'No data available.'}
-
-## Market Research & Insights (Google Search)
-${competitorAnalysisResult.research?.map((r: string) => `- ${r}`).join('\n') || 'No research data available.'}
-
-## Summary
-${competitorAnalysisResult.summary || 'No summary available.'}
 `;
                     console.log(`[Refactor] Successfully fetched competitor analysis. Length: ${competitorAnalysisData.length}`);
                 } else {
@@ -347,15 +331,16 @@ ${competitorAnalysisResult.summary || 'No summary available.'}
 *(This section provides recent context about ${analysisRunData.clientName}. Consider these details alongside the core client information to ensure recommendations are timely and relevant. Use specific points from here where they offer a clear advantage or fresh angle.)*
 ` : '';
 
-        // Use provided competitorAnalysisText if available, otherwise fall back to competitorSummary
-        const competitorSection = competitorAnalysisText || summarizeCompetitors(competitorsData || []);
+        // Use provided competitorAnalysisText ONLY if valid, otherwise leave blank so frontend can prompt user to retry
+        const competitorSection = competitorAnalysisText && !competitorAnalysisText.toLowerCase().includes('error')
+          ? competitorAnalysisText
+          : '';
+
 
         return `
-You are an expert marketing strategist and copywriter, highly skilled in psychological persuasion and proven advertising methods. Your task is to create compelling, highly persuasive advertising copy designed to maximize customer attraction, engagement, and conversions.
-When creating the copy, use relevant psychological principles of persuasion and advertising techniques, particularly those outlined in Drew Eric Whitman’s book “Cashvertising”— including but not limited to the Life-Force 8 (LF8), the Nine Learned (Secondary) Wants, Ego Morphing, Transfer of Credibility, Bandwagon Effect, Fear Factor, Means-End Chain, and Robert Cialdini’s Six Weapons of Influence (Comparison, Liking, Authority, Reciprocation, Commitment/Consistency, Scarcity)—but only where these principles naturally apply and genuinely enhance effectiveness.
-Critically, do not limit yourself exclusively to the techniques mentioned; incorporate any additional creative strategies, psychological insights, and proven persuasion techniques that you consider effective or innovative, based on your broad expertise.
-
-Ensure your copy aligns with modern, high-quality advertising standards and is tailored to effectively resonate with the specific target audience provided
+    
+You are an expert marketing strategist and copywriter, who understands how to turn brand strengths into emotionally engaging content that stands out. highly skilled in psychological persuasion and proven advertising methods. Your task is to create compelling, highly persuasive advertising copy designed to maximize customer attraction, engagement, and conversions in the creative way.
+When creating the copy, You should think carefully about how to present and phrase your Ideas to truly captivate your audience. You're tired of the same old, repetitive presentations — you crave originality that delivers both quality and impact. Thinking outside the box is your strength, but even then, your creativity remains clear and easy for the audience to understand. 
 
 **Client Information:**
 *   Name: ${analysisRunData.clientName}
@@ -366,13 +351,16 @@ ${userBrief ? `
 ${userBrief}
 ` : ''}
 ${groundedSection}
+
 ${bookSummaryContent ? `
 **Optional Book Summary Contexts:**
+ํYou can use these principle from book to help you create impactfull and outstanding ideas
 ${bookSummaryContent}
 ` : ''}
-**Competitor Landscape Summary:**
+
+Must shoud use Market Research & Insights for Create Each Creative Ideas that Outstanding, Showcase our capabilities, strengths, competitive advantages, reputation, and social proof. and Uptodate with a Trend
+**Market Research & Insights (Google Search):**
 ${competitorSection}
-*(Analyze the competitor summary, recent client info, and optional book context...)*
 
 **Task:**
 ${taskSectionParam ? taskSectionParam.replace(/\{clientName\}/g, analysisRunData.clientName).replace(/\{market\}/g, analysisRunData.market).replace(/\{productFocus\}/g, analysisRunData.productFocus || 'products/services') :
@@ -394,22 +382,26 @@ ${detailsSectionParam ? detailsSectionParam.replace(/\{productFocus\}/g, analysi
                                     *   **\`bullets\`:** รายการจุดเด่น 2-4 ข้อที่เน้นประโยชน์หลัก, ฟีเจอร์ หรือเหตุผลที่น่าเชื่อถือ **(ภาษาไทย)**.
                                     *   **\`cta\`:** ข้อความเรียกร้องให้ดำเนินการ (Call To Action) ที่ชัดเจน **(ภาษาไทย)** (เช่น "เรียนรู้เพิ่มเติม", "ซื้อเลย", "ดูเดโม", "เข้าร่วม Waiting List", "ดาวน์โหลดคู่มือ").`}
 
+                                Ensure your copy aligns with modern, high-quality advertising standards and is tailored to effectively resonate with the specific target audience provided
+
 **Output Format Requirements:**
-*   Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting (like \`\`\`json\`\`).
+*   Output ONLY a valid JSON object. Do NOT include markdown formatting (no triple backticks), no explanation, no introduction, and no trailing text.
+*   All property names and string values must use double quotes (").
 *   The JSON object MUST strictly follow the structure below.
-*   **Crucially, the values for \`content_pillar\`, \`product_focus\`, \`concept_idea\`, and all fields within \`copywriting\` (\`headline\`, \`sub_headline_1\`, \`sub_headline_2\`, \`bullets\`, \`cta\`) MUST be generated in THAI LANGUAGE.**
+*   If a value is missing, use null or an empty string.
+*   Do NOT include any comments or extra fields.
+*   *   **Crucially, the values for \`content_pillar\`, \`product_focus\`, \`concept_idea\`, and all fields within \`copywriting\` (\`headline\`, \`sub_headline_1\`, \`sub_headline_2\`, \`bullets\`, \`cta\`) MUST be generated in THAI LANGUAGE.**
 *   \`title\` and \`description\` fields should also be generated in THAI LANGUAGE.
 *   Use "High", "Medium", or "Low" for the impact field (bias towards "High").
 *   Provide a concise "competitiveGap" string (in THAI LANGUAGE).
 *   Include 2-4 relevant and specific keyword strings in the "tags" array (in THAI LANGUAGE).
 
-**Required JSON Structure:**
-\`\`\`json
+Example output (strictly follow this format, with double quotes and valid JSON):
 {
   "recommendations": [
     {
-      "title": "หัวข้อแนะนำ (ภาษาไทย) โดยอาจจะมีตัวเลขหรือสถิติหรือชื่อสินค้าที่ต้องการนำเสนอ", // Thai - Must be original
-      "description": "รายละเอียดแนวคิดสร้างสรรค์ ที่ไม่ซ้ำใคร และมีประสิทธิภาพ (ภาษาไทย)", // Thai - Must be original
+      "title": "หัวข้อแนะนำ (ภาษาไทย) โดยอาจจะมีตัวเลขหรือสถิติหรือชื่อสินค้าที่ต้องการนำเสนอ เช่น 'เปลี่ยนวิธีคิดเรื่องทองคำ: จาก 'ซื้อเก็บ' เป็น 'ลงทุน' สร้างอนาคต', 'ลงทุนทองคำรูปแบบใหม่ ที่นักลงทุน 174 สัญชาติทั่วโลกให้ความไว้วางใจ'", // Thai - Must be original
+      "description": "รายละเอียดแนวคิดสร้างสรรค์ ที่ไม่ซ้ำใคร และมีประสิทธิภาพ (ภาษาไทย) อย่างละเอียด", // Thai - Must be original
       "category": "Campaign", // Keep category identifier standard
       "impact": "High",
       "competitiveGap": "ระบุช่องว่างทางการแข่งขันที่ไอเดียนี้เข้าไปตอบโจทย์ (ภาษาไทย)", // Thai - Must be original
@@ -432,13 +424,12 @@ ${detailsSectionParam ? detailsSectionParam.replace(/\{productFocus\}/g, analysi
     // ... more recommendation objects (7-10 total)
   ]
 }
-\`\`\`
+
+Return ONLY the JSON object above, nothing else.
 `;
     };
 
-    // --- Model Competition Workflow Toggle ---
-    // Set this flag to true to enable the full Model Competition workflow (Gemini → GPT → Gemini)
-    // Set to false to disable, using only initial Gemini results
+    // ... (rest of the code remains the same)
     const useModelCompetition = false;
 
     // Step 1: Initial generation with Gemini
@@ -703,7 +694,7 @@ Please provide detailed research findings using Google Search. Focus on finding 
                             body: JSON.stringify({
                                 contents: [{ parts: [{ text: researchPrompt }] }],
                                 tools: [{ "google_search": {} }], // Enable Google Search for research phase
-                                generationConfig: { temperature: 2.0 }
+                                generationConfig: { temperature: 1.0 }
                             })
                         });
 
@@ -762,7 +753,7 @@ Do NOT include any text outside the JSON. No markdown formatting, no explanation
                                 contents: [{ parts: [{ text: finalPromptWithResearch }] }],
                                 // No tools in this request
                                 generationConfig: { 
-                                    temperature: 2.0,
+                                    temperature: 1.0,
                                     response_mime_type: "application/json"
                                 }
                             })

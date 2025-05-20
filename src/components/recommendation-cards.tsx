@@ -37,24 +37,37 @@ interface GenerateImageResponse {
 }
 
 // --- Define Defaults for Editable Prompt Sections ---
-const DEFAULT_TASK_SECTION = `"1. Analyze the client's situation and the provided competitor analysis to develop 10-15 actionable marketing content strategies that highlight {clientName}'s exclusive features, statistics, or performance metrics—elements that only {clientName} can claim and no competitors can match.  
-2. Focus on quantifiable proof points, proprietary data, or one-of-a-kind capabilities of {clientName} that directly address customer needs in ways competitors cannot.  
-3. Each strategy must creatively integrate current trends, cultural events, or relevant news stories to make the message timely and resonant.  
-4. For each strategy, explain the rationale and suggest specific content angles (e.g., social posts, videos, landing pages) that emphasize these unmatched figures or features.  
-5. Strategies should help {clientName} build strong brand authority, attract new customers, and establish trust by showing irrefutable advantages.  
-6. Include both online and offline content tactics suited to the {market}, with clear emphasis on measurable and exclusive value propositions.  
-7. Leverage any competitor blind spots or lack of data-backed communication to position {clientName} as the transparent, evidence-driven market leader.  
-8. Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting (like \`\`\json\`\`\`).`;
+// const DEFAULT_TASK_SECTION = `"1. Analyze the client's situation and the provided competitor analysis to develop 10-15 actionable marketing content strategies that highlight {clientName}'s exclusive features, statistics,social proof to build credibility or performance metrics—elements that only {clientName} can claim and no competitors can match.  
+// 2. Focus on quantifiable proof points, proprietary data, or one-of-a-kind capabilities of {clientName} that directly address customer needs in ways competitors cannot.  
+// 3. I need a creative idea that breaks the mold — something with strong internal logic, refined through multiple stages of thinking, and far from anything ordinary or easily accessible.
+// 4. Crafting Stop-Scrolling Titles & Content that Showcase Exclusive Metrics, Social proof to build credibility, and Transformative but use Use accessible language. such as 'เปลี่ยนวิธีคิดเรื่องทองคำ: จาก 'ซื้อเก็บ' เป็น 'ลงทุน' สร้างอนาคต', 'ลงทุนทองคำรูปแบบใหม่ ที่นักลงทุน xxx สัญชาติทั่วโลกให้ความไว้วางใจ','StashAway บริหารจัดการทรัพย์มากกว่า xxx พันล้านเหรียญสหรัฐ'. 
+// 5. Strategies should help {clientName} build strong brand authority, attract new customers, and establish trust by showing irrefutable advantages.  
+// 6. Each strategy should be Apply with Framework from books or more creative idea" 
+// 7. Let’s make sure the idea taps into something that only we can do a true brand signature that competitors simply can’t replicate.
+// 8. Find the pain of the customer and offer the our solution or Show social proof to build credibility. that what we can do to solve the pain. 
+// 9. Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting (like \`\`\json\`\`\`).`;
 
-const DEFAULT_DETAILS_SECTION = `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** ที่เน้นการนำเสนอจุดแข็งที่คู่แข่งไม่มี เช่น "สถิติที่เราคนเดียวมี", "เบื้องหลังเทคโนโลยีเฉพาะ", "ความสำเร็จที่พิสูจน์ได้", "มาตรฐานเฉพาะของเรา", "ค่าธรรมเนียมเพียง 0.2%", "ค่าบริการเพียง 100 บาท".
-b.  **\`product_focus\`:** ระบุ {productFocus} หรือฟีเจอร์/ตัวเลข/มาตรฐานที่มีเพียงแบรนด์เราที่นำเสนอได้ **(ภาษาไทย)**.
-c.  **\`concept_idea\`:** สรุปแนวคิดสร้างสรรค์หลัก (1-2 ประโยค) ที่นำเสนอความเหนือกว่าด้วยหลักฐานชัดเจน เช่น ตัวเลขเปรียบเทียบ, ประสิทธิภาพ, หรือสิทธิบัตรเฉพาะ **(ภาษาไทย)**.
-d.  **\`copywriting\`:** สร้างสรรค์องค์ประกอบข้อความโฆษณา **(ภาษาไทย)** ที่ชูจุดแข็งเฉพาะของแบรนด์:
-    *   **\`headline\`:** พาดหัวที่เน้นจุดเด่นที่มีแค่เรา พร้อมตัวเลขหรือข้อเท็จจริง.
-    *   **\`sub_headline_1\`:** พาดหัวรองที่เสริมข้อมูลหรือสถิติที่น่าเชื่อถือ.
-    *   **\`sub_headline_2\`:** พาดหัวรองเสริม (ถ้ามี) ที่อ้างอิงกระแสหรือเทรนด์ปัจจุบันเพื่อเพิ่มความทันสมัย (ใช้ \`null\` หากไม่ต้องการ).
-    *   **\`bullets\`:** รายการจุดเด่น 2-4 ข้อที่เน้นฟีเจอร์, ประสิทธิภาพ หรือผลลัพธ์ที่วัดได้จริง — สิ่งที่ไม่มีใครทำได้เหมือนเรา.
-    *   **\`cta\`:** ข้อความ Call To Action ที่ชัดเจน กระตุ้นให้ผู้ชมสัมผัส “ความต่าง” ของแบรนด์ เช่น "ดูผลลัพธ์จริง", "ท้าพิสูจน์ฟีเจอร์นี้", "เปรียบเทียบกับคู่แข่ง", "ทดลองใช้งานฟรี".`;
+const DEFAULT_TASK_SECTION = `"1": "Generate 10–12 original marketing content ideas for {clientName} that are **'ออกจากกรอบ' (clever, unconventional, innovative)**. These ideas must be emotionally resonant, creatively persuasive, and stem from advantages so unique that competitors **cannot replicate** them. 'ออกจากกรอบ' status is achieved by: a) Identifying hyper-specific, perhaps counter-intuitive, customer segments and their unique motivations. b) Linking the product/service to non-obvious cultural insights or societal trends. c) Using proprietary data to reveal a surprising truth or challenge a common assumption. You can get reference from Market Research & Insights (Google Search) for create ideas",
+  "2": "Each idea must leverage **quantifiable proof points, surprising or non-obvious proprietary data, unique customer behavior patterns, or overlooked cultural nuances** unique to {clientName}. This is to directly address customer needs or deeply felt (perhaps unarticulated) pain points in ways competitors definitively cannot, potentially reframing common pain points unexpectedly.",
+  "3": "Employ **emotional storytelling, powerful comparisons, or potent psychological triggers** (e.g., authority, curiosity sparked by paradox/anomaly, fear of missing out on belonging to a uniquely defined group, strong social proof, scarcity, or cognitive dissonance resolution). The aim is to make the reader *feel* something significant, spark a profound insight, or reposition a core belief. Think unexpected angles, surprising juxtapositions of concepts, human truths, or connecting {clientName}'s offering to everyday objects, seemingly unrelated cultural moments, niche hobbies, or common sayings in a completely fresh way.",
+  "4": "Content for each idea should originate from a **core strategic title that offers a fresh perspective or insight** (e.g., the gold example: 'Shift your thinking on gold: From 'buy and store' to 'invest and build future wealth'). The detailed titles and copywriting must then effectively: grab attention, utilize exclusive metrics or compelling social proof (fact-news style for credibility), demonstrate transformative value, and be presented in accessible language.",
+  "5": "Ultimately, all strategies and content ideas must demonstrably help {clientName} **build strong brand authority, attract new customers, and establish irrefutable trust** by showcasing these undeniable and unique advantages.",
+  "6": "Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting (like \`\`\`json\`\`\`)."`;
+
+
+const DEFAULT_DETAILS_SECTION = `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** ที่เน้นการนำเสนอจุดแข็งที่คู่แข่งไม่มี เช่น "ข้อมูลเชิงลึกของเราเท่านั้น", "ความแตกต่างจากคู่แข่ง", "ผลลัพธ์จริงของลูกค้า", "เทคโนโลยีเฉพาะที่ไม่มีใครใช้", "ค่าธรรมเนียมแบบใหม่", "มาตรฐานที่ยืนยันได้".
+
+b.  **\`product_focus\`:** ระบุ {productFocus} หรือฟีเจอร์, ตัวเลข, หรือข้อเสนอที่แบรนด์คุณมีคนเดียว เช่น “ค่าธรรมเนียม 0.2%”, “ไม่มีขั้นต่ำ”, “พอร์ตทองคำพร้อมปรับตามเศรษฐกิจ” **(ภาษาไทย)**.
+
+c.  **\`concept_idea\`:** สรุปแนวคิดสร้างสรรค์หลัก (1-2 ประโยค) ที่เน้น *มุมมองใหม่* หรือ *การหักล้างความเชื่อเดิม* ด้วยหลักฐาน เช่น สถิติ, ความสำเร็จของลูกค้า, หรือเทคโนโลยีที่พิสูจน์แล้ว **(ภาษาไทย)**.
+
+d.  **\`copywriting\`:** สร้างสรรค์องค์ประกอบข้อความโฆษณา **(ภาษาไทย)** ที่จับใจ และ “เล่าเรื่องให้เห็นภาพ” โดยไม่ใช่แค่บอกข้อดี:
+    *   **\`headline\`:** พาดหัวที่น่าสนใจ สร้าง curiosity หรือ shock ด้วยข้อมูลจริงหรือ insight.
+    *   **\`sub_headline_1\`:** ขยายมุมมองเพิ่มเติม อาจใช้ social proof หรือ logic support.
+    *   **\`sub_headline_2\`:** อิงกระแส, เทรนด์ หรือ context ปัจจุบันเพื่อความเชื่อมโยง (ใช้ \`null\` หากไม่จำเป็น).
+    *   **\`bullets\`:** จุดขาย 2-4 ข้อที่เจาะจง, วัดผลได้ หรือแตกต่างจริง เช่น “ปรับพอร์ตอัตโนมัติ”, “ไม่มี lock-in”, “มีทีมคอยดูแล”.
+    *   **\`cta\`:** Call To Action ที่เชิญชวนให้ลอง, เปรียบเทียบ, หรือเห็นผล เช่น "ดูตัวอย่างจริง", "ทดลองวันนี้", "เปรียบเทียบก่อนตัดสินใจ".
+`;
 
 // --- Define available models ---
 const AVAILABLE_MODELS = ['gemini', 'openai', 'claude']; // Define model names
@@ -225,6 +238,7 @@ const VisualJourneyLayout = ({ journey }: { journey: CustomerJourneyStructured |
 interface SelectedConcept {
     focusTarget: string;
     keyMessage: string;
+    title?: string; // Optional, for Ad Copy Details display
 }
 
 // Fix for object with name/description being rendered directly
@@ -254,45 +268,60 @@ export function RecommendationCards() {
         const [showCompetitorAnalysis, setShowCompetitorAnalysis] = useState<boolean>(false);
     
         // --- Helper function to fetch competitor analysis ---
-        const fetchCompetitorAnalysis = async () => {
-            if (!selectedClientName || !selectedProductFocus) return;
-            
-            setIsCompetitorAnalysisLoading(true);
-            setCompetitorAnalysisError(null);
-            setCompetitorAnalysis(null);
-            
-            try {
-                console.log(`Fetching competitor analysis for ${selectedClientName}, ${selectedProductFocus}`);
-                // Include runId if available
-                const queryParams = new URLSearchParams();
-                queryParams.set('clientName', selectedClientName);
-                queryParams.set('productFocus', selectedProductFocus);
-                if (selectedRunId) {
-                    queryParams.set('runId', selectedRunId);
-                }
-                
-                const response = await fetch(`/api/competitor-analysis?${queryParams.toString()}`);
-                
-                if (!response.ok) {
-                    throw new Error(`Error fetching competitor analysis: ${response.status}`);
-                }
-                
-                const data = await response.json();
-                console.log("Competitor analysis data received:", JSON.stringify(data, null, 2));
-                
-                // Store the entire response object
-                setCompetitorAnalysis(data);
-                setShowCompetitorAnalysis(true);
-                
-                return data; // Return the data for use in other functions
-            } catch (error) {
-                console.error("Error fetching competitor analysis:", error);
-                setCompetitorAnalysisError(error instanceof Error ? error.message : String(error));
-                return null;
-            } finally {
-                setIsCompetitorAnalysisLoading(false);
-            }
-        };
+        const fetchCompetitorAnalysis = async (retryCount = 0) => {
+    if (!selectedClientName || !selectedProductFocus) return;
+
+    setIsCompetitorAnalysisLoading(true);
+    setCompetitorAnalysisError(null);
+    setCompetitorAnalysis(null);
+
+    try {
+        console.log(`Fetching competitor analysis for ${selectedClientName}, ${selectedProductFocus}`);
+        // Include runId if available
+        const queryParams = new URLSearchParams();
+        queryParams.set('clientName', selectedClientName);
+        queryParams.set('productFocus', selectedProductFocus);
+        if (selectedRunId) {
+            queryParams.set('runId', selectedRunId);
+        }
+
+        const response = await fetch(`/api/competitor-analysis?${queryParams.toString()}`);
+
+        if (!response.ok) {
+            throw new Error(`Error fetching competitor analysis: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log("Competitor analysis data received:", JSON.stringify(data, null, 2));
+
+        // If Gemini JSON error, retry up to 3 times with a 10s delay
+        if (
+            data &&
+            data.analysis &&
+            typeof data.analysis.error === 'string' &&
+            data.analysis.error.includes('Gemini response was not valid JSON') &&
+            retryCount < 3
+        ) {
+            console.warn(`Gemini JSON error detected. Retrying competitor analysis in 10 seconds... (attempt ${retryCount + 1}/3)`);
+            setTimeout(() => {
+                fetchCompetitorAnalysis(retryCount + 1);
+            }, 10000); // 10 seconds
+            return;
+        }
+
+        // Store the entire response object
+        setCompetitorAnalysis(data);
+        setShowCompetitorAnalysis(true);
+
+        return data; // Return the data for use in other functions
+    } catch (error) {
+        console.error("Error fetching competitor analysis:", error);
+        setCompetitorAnalysisError(error instanceof Error ? error.message : String(error));
+        return null;
+    } finally {
+        setIsCompetitorAnalysisLoading(false);
+    }
+};
     
     // --- State for Client/Product Selection ---
     const [clientNames, setClientNames] = useState<string[]>([]);
@@ -325,7 +354,7 @@ export function RecommendationCards() {
     const [conceptsError, setConceptsError] = useState<string | null>(null);
 
     // --- NEW State for Image Generation with References ---
-    const [selectedConceptForImage, setSelectedConceptForImage] = useState<CreativeConcept | null>(null);
+    const [selectedConceptForImage, setSelectedConceptForImage] = useState<SelectedConcept | null>(null);
     const [productImages, setProductImages] = useState<File[]>([]);
     const [adReferenceImages, setAdReferenceImages] = useState<File[]>([]);
     const [isGeneratingImage, setIsGeneratingImage] = useState<boolean>(false);
@@ -791,10 +820,14 @@ export function RecommendationCards() {
             if (!response.ok) {
                 throw new Error(data.error || `API Error: ${response.status}`);
             }
-            if (!data.imageUrl) {
-                 throw new Error('API did not return an image URL.');
-            }
+            if (!data.imageUrl && !data.b64Image) {
+             throw new Error('API did not return an image.');
+        }
+        if (data.imageUrl) {
             setGeneratedImageUrl(data.imageUrl);
+        } else if (data.b64Image) {
+            setGeneratedImageUrl(`data:image/png;base64,${data.b64Image}`);
+        }
 
         } catch (err: any) {
             console.error("Failed to generate image:", err);
@@ -1106,7 +1139,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                     </div>
 
                     {/* Editable Task Section */}
-                    <div className="grid gap-1.5 w-full">
+                    {/* <div className="grid gap-1.5 w-full">
                         <Label htmlFor="editable-task-section" className="text-sm font-medium">Editable Prompt: Task Section</Label>
                         <Textarea
                             id="editable-task-section"
@@ -1116,7 +1149,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                             className="min-h-[150px] bg-background font-mono text-xs"
                             disabled={isAnyModelLoading || isMetaLoading}
                         />
-                    </div>
+                    </div> */}
 
                     {/* Editable Details Section */}
                     {/* <div className="grid gap-1.5 w-full">
@@ -1323,12 +1356,16 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
 
                                 {/* Error State for this model */}
                                 {error[modelName] && !isLoading[modelName] && (
-                                    <div className="flex flex-col justify-center items-center p-10 border border-destructive bg-destructive/10 rounded-lg min-h-[200px] text-destructive">
-                                        <AlertTriangle className="h-8 w-8 mb-2" />
-                                        <p className="font-semibold mb-1 capitalize">Error Generating with {modelName}</p>
-                                        <p className="text-sm text-center">{error[modelName]}</p>
-                                    </div>
-                                )}
+    <div className="flex flex-col justify-center items-center p-10 border border-destructive bg-destructive/10 rounded-lg min-h-[200px] text-destructive">
+        <AlertTriangle className="h-8 w-8 mb-2" />
+        <p className="font-semibold mb-1 capitalize">Error Generating with {modelName}</p>
+        <p className="text-sm text-center">
+            {modelName === 'gemini' && error[modelName]?.includes('Failed to parse recommendations JSON from initial Gemini')
+                ? 'Something went wrong. Please retry to generate ideas.'
+                : error[modelName]}
+        </p>
+    </div>
+)}
 
                                 {/* No Recommendations or Initial State for this model */}
                                 {!isLoading[modelName] && !error[modelName] && (!resultsByModel[modelName] || (resultsByModel[modelName]?.length ?? 0) === 0) && (
@@ -1612,7 +1649,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
 
 
                             {/* --- Image Generation Section --- */}
-                            <section className="space-y-3 pt-4 border-t mt-4">
+                            {/* <section className="space-y-3 pt-4 border-t mt-4">
                                 <h4 className="font-semibold">Generate Visual Concept (Ideogram)</h4>
                                 <div className="flex items-center gap-4">
                                     <Label htmlFor="aspect-ratio-select" className="text-sm whitespace-nowrap">Aspect Ratio:</Label>
@@ -1671,7 +1708,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                         <span className="text-muted-foreground text-sm">Click "Generate Image" to visualize the concept.</span>
                                     )}
                                 </div>
-                            </section>
+                            </section> */}
 
                         </div>
                     </ScrollArea>
@@ -1855,50 +1892,53 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                 {/* Ad Copy Inputs */}
                                 <div className="space-y-4 border rounded-lg p-4 bg-muted/10">
                                     <h4 className="font-semibold">Ad Copy Details</h4>
-                                    
+                                    {selectedConceptForImage?.title && (
+                                        <div className="text-base font-bold text-primary mb-2">{selectedConceptForImage.title}</div>
+                                    )}
+
                                     {/* Description */}
                                     <div className="space-y-2">
                                         <Label htmlFor="description">รายละเอียด (Description)</Label>
                                         <Textarea
-                                            id="description"
-                                            placeholder="นำเสนอเนื้อหาเชิงลึกที่แสดงให้เห็นถึงคุณภาพและความทนทานของบล็อกไฟฟ้า iMan โดยอาจเปรียบเทียบกับเครื่องมือราคาถูกทั่วไป หรือแสดงการทดสอบความแข็งแรง เพื่อสร้างความน่าเชื่อถือและทักษ์ใจต่ออนของผู้..."
-                                            className="min-h-[100px]"
-                                            value={adCopyDetails.description}
-                                            onChange={(e) => setAdCopyDetails(prev => ({
-                                                ...prev,
-                                                description: e.target.value
-                                            }))}
-                                        />
+    id="description"
+    placeholder="นำเสนอเนื้อหาเชิงลึกที่แสดงให้เห็นถึงคุณภาพและความทนทานของบล็อกไฟฟ้า iMan โดยอาจเปรียบเทียบกับเครื่องมือราคาถูกทั่วไป หรือแสดงการทดสอบความแข็งแรง เพื่อสร้างความน่าเชื่อถือและทักษ์ใจต่ออนของผู้..."
+    className="min-h-[100px]"
+    value={adCopyDetails.description}
+    onChange={e => setAdCopyDetails(prev => ({
+        ...prev,
+        description: e.target.value
+    }))}
+/>
                                     </div>
 
                                     {/* Competitive Gap */}
                                     <div className="space-y-2">
                                         <Label htmlFor="competitiveGap">ช่องว่างทางการแข่งขัน (Competitive Gap Addressed)</Label>
                                         <Textarea
-                                            id="competitiveGap"
-                                            placeholder="ความกังวลเรื่องความทนทานของบล็อกไฟฟ้า กลัวซื้อมาแล้วใช้งานได้ไม่นาน เสียเงินโดยเปล่าประโยชน์"
-                                            className="min-h-[100px]"
-                                            value={adCopyDetails.competitiveGap}
-                                            onChange={(e) => setAdCopyDetails(prev => ({
-                                                ...prev,
-                                                competitiveGap: e.target.value
-                                            }))}
-                                        />
+    id="competitiveGap"
+    placeholder="ความกังวลเรื่องความทนทานของบล็อกไฟฟ้า กลัวซื้อมาแล้วใช้งานได้ไม่นาน เสียเงินโดยเปล่าประโยชน์"
+    className="min-h-[100px]"
+    value={adCopyDetails.competitiveGap}
+    onChange={e => setAdCopyDetails(prev => ({
+        ...prev,
+        competitiveGap: e.target.value
+    }))}
+/>
                                     </div>
 
                                     {/* Headline */}
                                     <div className="space-y-2">
                                         <Label htmlFor="headline">Headline</Label>
                                         <Textarea
-                                            id="headline"
-                                            placeholder="e.g., เปิดอู่รถชนิดนี้ ต้องใช้บล็อกรุ่นไหน?"
-                                            className="min-h-[60px]"
-                                            value={adCopyDetails.headline}
-                                            onChange={(e) => setAdCopyDetails(prev => ({
-                                                ...prev,
-                                                headline: e.target.value
-                                            }))}
-                                        />
+    id="headline"
+    placeholder="e.g., เปิดอู่รถชนิดนี้ ต้องใช้บล็อกรุ่นไหน?"
+    className="min-h-[60px]"
+    value={adCopyDetails.headline}
+    onChange={e => setAdCopyDetails(prev => ({
+        ...prev,
+        headline: e.target.value
+    }))}
+/>
                                     </div>
 
                                     {/* Sub-Headlines */}
@@ -1945,30 +1985,30 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                     <div className="space-y-2">
                                         <Label htmlFor="subheadline-cta">Sub-Headline + CTA</Label>
                                         <Textarea
-                                            id="subheadline-cta"
-                                            placeholder="e.g., บล็อกไฟฟ้าไร้สายจาก iMan พร้อมตอบโจทย์&#10;เลือกซื้อได้เลย!"
-                                            className="min-h-[80px]"
-                                            value={adCopyDetails.subHeadlineCta}
-                                            onChange={(e) => setAdCopyDetails(prev => ({
-                                                ...prev,
-                                                subHeadlineCta: e.target.value
-                                            }))}
-                                        />
+    id="subheadline-cta"
+    placeholder="e.g., บล็อกไฟฟ้าไร้สายจาก iMan พร้อมตอบโจทย์&#10;เลือกซื้อได้เลย!"
+    className="min-h-[80px]"
+    value={adCopyDetails.subHeadlineCta}
+    onChange={e => setAdCopyDetails(prev => ({
+        ...prev,
+        subHeadlineCta: e.target.value
+    }))}
+/>
                                     </div>
 
                                     {/* Bubble Points */}
                                     <div className="space-y-2">
                                         <Label htmlFor="bubble-points">Bubble Points</Label>
                                         <Textarea
-                                            id="bubble-points"
-                                            placeholder="e.g.,&#10;2 Years Warranty&#10;Free & Fast Maintenance&#10;Online Support 24/7"
-                                            className="min-h-[100px]"
-                                            value={adCopyDetails.bubblePoints.join('\n')}
-                                            onChange={(e) => setAdCopyDetails(prev => ({
-                                                ...prev,
-                                                bubblePoints: e.target.value.split('\n').filter(point => point.trim() !== '')
-                                            }))}
-                                        />
+    id="bubble-points"
+    placeholder="e.g.,\n2 Years Warranty\nFree & Fast Maintenance\nOnline Support 24/7"
+    className="min-h-[100px]"
+    value={adCopyDetails.bubblePoints.join('\n')}
+    onChange={e => setAdCopyDetails(prev => ({
+        ...prev,
+        bubblePoints: e.target.value.split('\n').filter(point => point.trim() !== '')
+    }))}
+/>
                                     </div>
                                 </div>
 

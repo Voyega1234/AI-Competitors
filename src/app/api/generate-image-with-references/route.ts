@@ -66,10 +66,15 @@ export async function POST(req: Request) {
         });
 
         // Construct a comprehensive prompt that includes all key elements
-        let prompt = `Create a professional, photorealistic advertisement image that effectively communicates the following:
+        let prompt = `You are an award-winning Creative Director and Senior Designer for Facebook Ads, with a deep understanding of marketing psychology, visual storytelling, and the latest design trends.
+        Create a professional, photorealistic advertisement image that effectively communicates the following:
 
+Main Ideas for Ads
+Main Ideas for Ads: ${concept.title}
 Main Focus: ${concept.focusTarget}
 Key Message: ${concept.keyMessage}
+
+Our Ads will be avariable on Thailand market
 
 Ad Structure:
 - Headline: ${concept.adCopy?.headline || ''}
@@ -90,7 +95,7 @@ Competitive Advantage: ${concept.competitiveGap || ''}
         if (adReferenceImages.length > 0) {
             prompt += `\n\nReference Image Guidelines:
 - Use the provided reference images as inspiration for the visual style and mood
-- Adapt the composition and layout while maintaining the product's focus
+- Adapt the composition , background and layout while maintaining the product's focus
 - Incorporate similar lighting techniques and color schemes where appropriate`;
         }
 

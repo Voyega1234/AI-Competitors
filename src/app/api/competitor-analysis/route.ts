@@ -133,14 +133,12 @@ async function fetchMarketTrendsWithGrounding(clientName: string, competitors: C
 
     // Thai prompt for market trends and news search with competitor information
     const prompt = `ช่วยหาข้อมูล, ข่าว หรือเทรนกระแสที่เกี่ยวข้องกับประเภทของธุรกิจ ${clientName} ในไทย
-    Search หาข้อมูลดังนี้
-
-    * ข้อมูลฟีเจอร์หรือสินค้าทุกอย่างที่เกี่ยวข้องกับ ${clientName}
-    * Social proof, ทำไมต้องใช้งาน StashAway ทำไมต้องซื้อ StashAway ทำไมเพราะอะไร มีความน่าเชื่อถืออะไรรองรับ
-    * IMPORTANT ค้นว่าทำไมต้อง ${clientName} ? ทำไมต้องใช้ ${clientName} ? ครบถ้วนและชัดเจน
-    * ต้องการข้อมูลที่มีความเป็น Fact มีตัวเลขและสถิติรองรับทั้งหมดที่แสดงอยู่บนหน้าเว็บไซต์
-    * ข้อมูลทั้งหมดเกี่ยวกับ ${clientName} ที่อยู่ในเว็บไซต์ ข้อมูลตัวเลขสถิติที่สำคัญหรือฟีเจอร์ที่สำคัญ,
-    * วิเคราะห์ ${clientName} และจุดแข็งที่แตกต่างจากคู่แข่งโดยเน้นไปที่ ฟีเจอร์ของสินค้าหรือบริการที่แตกต่าง
+    พยายามหาข้อมูลที่ล่าสุด ณ วันที่ ${Date.now()} ถ้าเป็นไปได้ โดย Search หาข้อมูลดังนี้โดยโฟกัสหาข้อมูลของ ${clientName} ให้ครบถ้วนก่อนหาของคู่แข่ง 
+    ขออย่างน้อย 20-30 Useful bullet data
+    * ข้อมูลฟีเจอร์หรือสินค้าทุกอย่างที่เกี่ยวข้องกับ ${clientName} และ ${competitorInfo} ล่าสุด
+    * Social proof, ทำไมต้องใช้งาน ${clientName} ทำไมต้องซื้อ ${clientName} ทำไมเพราะอะไร มีเหตุผลอะไรรองรับ
+    * ต้องการข้อมูลที่มีความเป็น Fact, News มีตัวเลขและสถิติรองรับทั้งหมดที่แสดงอยู่บนหน้าเว็บไซต์ของ ${clientName}
+    * วิเคราะห์ ${clientName} และจุดแข็งที่แตกต่างจากคู่แข่งโดยเน้นไปที่ ฟีเจอร์ของสินค้าหรือบริการที่แตกต่างกับ ${competitorInfo}
     อยากได้ข้อมูลในหลายแง่มุมมากที่สุด เพื่อให้สามารถผลิตข้อมูลที่มีคุณภาพและครบถ้วน ทุกข้อมูลควรมีตัวเลขรองรับถ้าเป็นไปได้
     สำคัญมาก: กรุณาตอบกลับเป็น JSON เท่านั้น ไม่ต้องมีข้อความแนะนำหรือคำอธิบายใดๆ ไม่ต้องมีหัวข้อหรือ Bold text ที่ไม่ใช่ JSON
     ไม่ต้องเริ่มต้นด้วยคำว่า "แน่นอนครับ" หรือข้อความอื่นๆ ให้ส่งเฉพาะโครงสร้าง JSON นี้เท่านั้น ตอบเป็นภาษาไทย:
@@ -222,8 +220,8 @@ async function analyzeCompetitorsWithGemini(competitors: Competitor[], clientNam
 
 ${JSON.stringify(competitorData, null, 2)}
 
-ฉันต้องการการวิเคราะห์ของคุณในรูปแบบ JSON เพื่อการประมวลผลโดยแอปพลิเคชันของฉัน
-ส่งคืนโครงสร้าง JSON ต่อไปนี้เท่านั้น โดยไม่มีการจัดรูปแบบมาร์กดาวน์ ไม่มีบล็อกโค้ด ไม่มีเครื่องหมาย backtick และไม่มีข้อความอธิบาย:
+I need your analysis in JSON format for direct parsing by my application.
+Return ONLY the following JSON structure with no markdown formatting, no code blocks, no backticks, and no explanatory text:
 
 {
   "strengths": [...], // จุดแข็งและตำแหน่งที่โดดเด่นของคู่แข่งแต่ละราย (เป็นภาษาไทย)
@@ -234,7 +232,7 @@ ${JSON.stringify(competitorData, null, 2)}
   "summary": "..." // บทสรุปหนึ่งย่อหน้า (เป็นภาษาไทย)
 }
 
-สำคัญ: คำตอบของคุณต้องเป็น JSON ที่ถูกต้องและสามารถแยกวิเคราะห์ได้ ห้ามรวมข้อความใดๆ นอกเหนือจากวัตถุ JSON อย่าห่อ JSON ในบล็อกโค้ดหรือเครื่องหมาย backtick
+สำคัญ: คำตอบของคุณต้องเป็น JSON ที่ถูกต้องและสามารถแยกวิเคราะห์ได้ ห้ามรวมข้อความใดๆ นอกเหนือจากวัตถุ JSON อย่าห่อ JSON ในบล็อกโค้ดหรือเครื่องหมาย backtick ได้โปรดทำให้ถูกต้องตาม syntax ที่กำหนดไว้ ผมขอร้อง
 
 โปรดตอบเป็นภาษาไทยทั้งหมดในทุกส่วนของการวิเคราะห์`;
 
@@ -319,7 +317,7 @@ export async function GET(request: NextRequest) {
 As an expert marketing analyst, I need a detailed analysis of competitors for ${clientName} in the ${productFocus} space.
 
 I need your analysis in JSON format for direct parsing by my application.
-Return ONLY the following JSON structure with no markdown formatting, no code blocks, no backticks, and no explanatory text:
+Return ONLY the following JSON structure with no markdown formatting, no code blocks, no backticks, and no explanatory text Please give me the right json syntax am begging you:
 
 {
   "strengths": ["..."], // Key strengths of competitors in this market
@@ -330,7 +328,7 @@ Return ONLY the following JSON structure with no markdown formatting, no code bl
   "summary": "..." // One-paragraph summary of the competitive landscape
 }
 
-IMPORTANT: Your response must be valid, parseable JSON. Do not include any text outside the JSON object. Do not wrap the JSON in code blocks or backticks.`;
+IMPORTANT: Your response must be valid, parseable JSON. Do not include any text outside the JSON object. Do not wrap the JSON in code blocks or backticks. Please give me the right json syntax am begging you`;
             try {
                 console.log("[API /competitor-analysis] Calling Gemini for direct competitor analysis via HTTP API...");
                 const analysisText = await callGeminiAPI(directAnalysisPrompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-04-17");
@@ -434,7 +432,7 @@ IMPORTANT: Your response must be valid, parseable JSON. Do not include any text 
 As an expert marketing analyst, I need a detailed analysis of competitors for ${clientName} in the ${productFocus} space.
 
 I need your analysis in JSON format for direct parsing by my application.
-Return ONLY the following JSON structure with no markdown formatting, no code blocks, no backticks, and no explanatory text:
+Return ONLY the following JSON structure with no markdown formatting, no code blocks, no backticks, and no explanatory text no '\n':
 
 {
   "strengths": ["..."], // Key strengths of competitors in this market
@@ -445,7 +443,7 @@ Return ONLY the following JSON structure with no markdown formatting, no code bl
   "summary": "..." // One-paragraph summary of the competitive landscape
 }
 
-IMPORTANT: Your response must be valid, parseable JSON. Do not include any text outside the JSON object. Do not wrap the JSON in code blocks or backticks.`;
+IMPORTANT: Your response must be valid, parseable JSON. Do not include any text outside the JSON object. Do not wrap the JSON in code blocks or backticks. Please give me the right json syntax am begging you`;
             try {
                 console.log("[API /competitor-analysis] Calling Gemini for direct competitor analysis via HTTP API...");
                 const analysisText = await callGeminiAPI(directAnalysisPrompt, GEMINI_API_KEY, "gemini-2.0-flash");
@@ -591,7 +589,7 @@ Return ONLY the following JSON structure with no markdown formatting, no code bl
   "summary": "..." // One-paragraph summary of the competitive landscape
 }
 
-IMPORTANT: Your response must be valid, parseable JSON. Do not include any text outside the JSON object. Do not wrap the JSON in code blocks or backticks.`;
+IMPORTANT: Your response must be valid, parseable JSON. Do not include any text outside the JSON object. Do not wrap the JSON in code blocks or backticks. Please give me the right json syntax am begging you`;
             try {
                 console.log("[API /competitor-analysis] Calling Gemini for direct competitor analysis via HTTP API...");
                 const analysisText = await callGeminiAPI(directAnalysisPrompt, GEMINI_API_KEY, "gemini-2.0-flash");
@@ -701,7 +699,7 @@ Return ONLY the following JSON structure with no markdown formatting, no code bl
   "summary": "..." // One-paragraph summary of the competitive landscape
 }
 
-IMPORTANT: Your response must be valid, parseable JSON. Do not include any text outside the JSON object. Do not wrap the JSON in code blocks or backticks. and Thai language.`;
+IMPORTANT: Your response must be valid, parseable JSON. Do not include any text outside the JSON object. Do not wrap the JSON in code blocks or backticks. and Thai language. Please give me the right json syntax am begging you`;
             try {
                 console.log("[API /competitor-analysis] Calling Gemini for direct competitor analysis via HTTP API...");
                 const analysisText = await callGeminiAPI(directAnalysisPrompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-04-17");
