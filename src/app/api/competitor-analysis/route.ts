@@ -22,7 +22,7 @@ interface Competitor {
 }
 
 // Helper function to call Gemini API via HTTP POST
-async function callGeminiAPI(prompt: string, apiKey: string, model: string = "gemini-2.5-flash-preview-04-17", useGrounding: boolean = false) {
+async function callGeminiAPI(prompt: string, apiKey: string, model: string = "gemini-2.5-flash-preview-04-17", useGrounding: boolean = true) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
     
     let body: any = {
@@ -58,8 +58,12 @@ async function callGeminiAPI(prompt: string, apiKey: string, model: string = "ge
     }
     
     const result = await response.json();
+    console.log("Gemini API response grounding chunks:", result.candidates?.[0]?.groundingMetadata?.groundingChunks);
     // Extract the model's response text
-    return result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    // Extract text and groundingChunks
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const groundingChunks = result.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    return { text, groundingChunks };
 }
 
 // Helper function to clean Gemini response of code blocks and other formatting
@@ -140,33 +144,38 @@ async function fetchMarketTrendsWithGrounding(clientName: string, competitors: C
     * ต้องการข้อมูลที่มีความเป็น Fact, News มีตัวเลขและสถิติรองรับทั้งหมดที่แสดงอยู่บนหน้าเว็บไซต์ของ ${clientName}
     * วิเคราะห์ ${clientName} และจุดแข็งที่แตกต่างจากคู่แข่งโดยเน้นไปที่ ฟีเจอร์ของสินค้าหรือบริการที่แตกต่างกับ ${competitorInfo}
     อยากได้ข้อมูลในหลายแง่มุมมากที่สุด เพื่อให้สามารถผลิตข้อมูลที่มีคุณภาพและครบถ้วน ทุกข้อมูลควรมีตัวเลขรองรับถ้าเป็นไปได้
-    สำคัญมาก: กรุณาตอบกลับเป็น JSON เท่านั้น ไม่ต้องมีข้อความแนะนำหรือคำอธิบายใดๆ ไม่ต้องมีหัวข้อหรือ Bold text ที่ไม่ใช่ JSON
+    สำคัญมาก ไม่ต้องมีข้อความแนะนำหรือคำอธิบายใดๆ ไม่ต้องมีหัวข้อหรือ Bold text ที่ไม่ใช่ JSON
     ไม่ต้องเริ่มต้นด้วยคำว่า "แน่นอนครับ" หรือข้อความอื่นๆ ให้ส่งเฉพาะโครงสร้าง JSON นี้เท่านั้น ตอบเป็นภาษาไทย:
-
 {
   "research": ["ข้อมูลงานวิจัย 1", "ข้อมูลงานวิจัย 2", "ข้อมูลงานวิจัย 3", ...] // ทำไมต้อง ${clientName} ?, วิเคราะห์ ${clientName} และจุดแข็งที่แตกต่างจากคู่แข่ง ผลการค้นหาที่เกี่ยวข้องกับธุรกิจและคู่แข่ง รวมทั้งข่าวล่าสุด, เทรนด์ตลาด, และโอกาสทางธุรกิจ
 }`;
+
 // * คู่แข่งที่สำคัญได้แก่: ${competitorNames} โดยอยากให้มีข้อมูลเกี่ยวกับคู่แข่งที่ชัดเจน คอนเทนต์หรือโปรโมชั่นล่าสุด ณ วันที่ ${Date.now()} หรือข้อมูลข่าวหรือฟีเจอร์หรือจุดแข็งหรือข้อได้เปรียบของคู่แข่งแต่ละเจ้า
     try {
         console.log(`[API /competitor-analysis] Calling Gemini with Google Grounding Search for ${clientName} market trends...`);
-        const trendsText = await callGeminiAPI(prompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-04-17", true);
-        console.log("[API /competitor-analysis] Grounding Search response received.");
-        
-        // Clean the response before parsing
-        const cleanedText = cleanGeminiResponse(trendsText);
+        const geminiResult = await callGeminiAPI(prompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-04-17", true);
+        // Use new return shape: { text, groundingChunks }
+        let cleanedText = geminiResult.text ? cleanGeminiResponse(geminiResult.text) : '';
+        let groundingMetadata = { groundingChunks: geminiResult.groundingChunks };
+        let rawGemini = geminiResult;
+        // No need to extract from candidates/content anymore
         
         // Log the cleaned text for debugging
         console.log("[API /competitor-analysis] Cleaned Grounding Search response:", cleanedText.substring(0, 100) + '...');
-        
         // Try to parse JSON
         try {
-            return JSON.parse(cleanedText);
+            const parsed = JSON.parse(cleanedText);
+            return {
+                ...parsed,
+                groundingMetadata,
+                geminiRaw: rawGemini,
+            };
         } catch (e) {
             console.error("[API /competitor-analysis] Failed to parse Grounding Search response as JSON:", e);
             
             // Fallback: Try to extract useful information even if not valid JSON
             // Look for patterns that might contain research points in Thai text
-            const lines = trendsText.split('\n').filter((line: string) => 
+            const lines = cleanedText.split('\n').filter((line: string) => 
                 line.trim().length > 20 && // Only substantial lines
                 !line.includes('```') && // Not markdown formatting
                 !line.startsWith('แน่นอนครับ') // Not starting with "Certainly"
@@ -175,10 +184,11 @@ async function fetchMarketTrendsWithGrounding(clientName: string, competitors: C
             const extractedResearch = lines.length > 0 
                 ? lines.map((line: string) => line.trim()) 
                 : ["ข้อมูลไม่พร้อมใช้งาน (ปัญหาการแปลง JSON)"];
-            
-            return { 
-                error: "Grounding Search response was not valid JSON", 
-                research: extractedResearch.slice(0, 5) // Limit to 5 items maximum
+            return {
+                error: "Grounding Search response was not valid JSON",
+                research: extractedResearch.slice(0, 5),
+                groundingMetadata,
+                geminiRaw: rawGemini,
             };
         }
     } catch (error) {
@@ -238,27 +248,29 @@ Return ONLY the following JSON structure with no markdown formatting, no code bl
 
     try {
         console.log("[API /competitor-analysis] Calling Gemini for competitor analysis via HTTP API...");
-        const analysisText = await callGeminiAPI(prompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-04-17");
-        console.log("[API /competitor-analysis] Gemini response received.");
-        
-        // Clean the response before parsing
-        const cleanedText = cleanGeminiResponse(analysisText);
+        const geminiResult = await callGeminiAPI(prompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-04-17");
+        // Use new return shape: { text, groundingChunks }
+        let cleanedText = geminiResult.text ? cleanGeminiResponse(geminiResult.text) : '';
+        let groundingMetadata = { groundingChunks: geminiResult.groundingChunks };
+        let rawGemini = geminiResult;
+        // No need to extract from candidates/content anymore
         
         // Try to parse JSON
         try {
             // Get market trends with grounding search in parallel
             const marketTrends = await fetchMarketTrendsWithGrounding(clientName, competitors);
-            
             // Combine the results
             const combinedResults = {
                 ...JSON.parse(cleanedText),
-                research: marketTrends.research || []
+                research: marketTrends.research || [],
+                // Forward grounding metadata from marketTrends if present
+                groundingMetadata: marketTrends.groundingMetadata || marketTrends.geminiRaw?.candidates?.[0]?.groundingMetadata,
+                geminiRaw: marketTrends.geminiRaw,
             };
-            
             return combinedResults;
         } catch (e) {
             // fallback: return as string if not valid JSON
-            return { error: "Gemini response was not valid JSON", raw: analysisText };
+            return { error: "Gemini response was not valid JSON", raw: geminiResult, groundingMetadata, geminiRaw: rawGemini };
         }
     } catch (error) {
         console.error("[API /competitor-analysis] Error calling Gemini:", error);
@@ -334,7 +346,7 @@ IMPORTANT: Your response must be valid, parseable JSON. Do not include any text 
                 const analysisText = await callGeminiAPI(directAnalysisPrompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-04-17");
                 
                 // Clean the response before parsing
-                const cleanedText = cleanGeminiResponse(analysisText);
+                const cleanedText = cleanGeminiResponse(typeof analysisText === 'object' && analysisText !== null && 'text' in analysisText ? analysisText.text : analysisText);
                 
                 try {
                     const analysis = JSON.parse(cleanedText);
@@ -416,11 +428,14 @@ IMPORTANT: Your response must be valid, parseable JSON. Do not include any text 
         if (competitorsData && competitorsData.length > 0) {
             console.log("Competitors found in database, generating analysis");
             const analysis = await analyzeCompetitorsWithGemini(competitorsData, clientName);
-            console.log("API competitor-analysis response:", { analysis, competitors: competitorsData });
+            // Always extract groundingMetadata if possible
+            let groundingMetadata = analysis.groundingMetadata || analysis.geminiRaw?.candidates?.[0]?.groundingMetadata;
             return NextResponse.json({ 
                 analysis,
                 competitors: competitorsData,
-                isJson: !analysis.error // If no error, analysis is JSON
+                isJson: !analysis.error, // If no error, analysis is JSON
+                groundingMetadata,
+                geminiRaw: analysis.geminiRaw,
             });
         } else {
             // If no competitors found, do direct Gemini analysis
@@ -449,7 +464,7 @@ IMPORTANT: Your response must be valid, parseable JSON. Do not include any text 
                 const analysisText = await callGeminiAPI(directAnalysisPrompt, GEMINI_API_KEY, "gemini-2.0-flash");
                 
                 // Clean the response before parsing
-                const cleanedText = cleanGeminiResponse(analysisText);
+                const cleanedText = cleanGeminiResponse(typeof analysisText === 'object' && analysisText !== null && 'text' in analysisText ? analysisText.text : analysisText);
                 
                 try {
                     const analysis = JSON.parse(cleanedText);
@@ -595,7 +610,7 @@ IMPORTANT: Your response must be valid, parseable JSON. Do not include any text 
                 const analysisText = await callGeminiAPI(directAnalysisPrompt, GEMINI_API_KEY, "gemini-2.0-flash");
                 
                 // Clean the response before parsing
-                const cleanedText = cleanGeminiResponse(analysisText);
+                const cleanedText = cleanGeminiResponse(typeof analysisText === 'object' && analysisText !== null && 'text' in analysisText ? analysisText.text : analysisText);
                 
                 try {
                     const analysis = JSON.parse(cleanedText);
@@ -705,7 +720,7 @@ IMPORTANT: Your response must be valid, parseable JSON. Do not include any text 
                 const analysisText = await callGeminiAPI(directAnalysisPrompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-04-17");
                 
                 // Clean the response before parsing
-                const cleanedText = cleanGeminiResponse(analysisText);
+                const cleanedText = cleanGeminiResponse(typeof analysisText === 'object' && analysisText !== null && 'text' in analysisText ? analysisText.text : analysisText);
                 
                 try {
                     const analysis = JSON.parse(cleanedText);

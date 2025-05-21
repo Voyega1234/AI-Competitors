@@ -18,6 +18,9 @@ import { CreativeConcept, TopicIdeas, SelectedRecommendationForCreative } from "
 import { ImageGenerationDialog } from "@/components/ImageGenerationDialog";
 import { useDropzone } from "react-dropzone";
 import { Input } from "@/components/ui/input";
+// --- Added for type safety for grounding chunks ---
+// If the structure is known, define a type for groundingChunks
+
 
 // Define interfaces
 interface AdCopyDetails {
@@ -1167,14 +1170,26 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                         <div className="grid gap-1.5 w-full mb-6 border-2 border-primary/20 rounded-lg p-4 bg-primary/5 shadow-sm">
                             <div className="flex items-center justify-between">
                                 <Label className="text-lg font-semibold text-primary">Competitor Analysis</Label>
-                                <Button 
-                                    variant="outline" 
-                                    size="sm" 
-                                    onClick={() => setShowCompetitorAnalysis(!showCompetitorAnalysis)}
-                                    className="border-primary text-primary hover:bg-primary/10"
-                                >
-                                    {showCompetitorAnalysis ? "Hide Analysis" : "Show Analysis"}
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                    <Button 
+                                        variant="outline" 
+                                        size="sm" 
+                                        onClick={() => setShowCompetitorAnalysis(!showCompetitorAnalysis)}
+                                        className="border-primary text-primary hover:bg-primary/10"
+                                    >
+                                        {showCompetitorAnalysis ? "Hide Analysis" : "Show Analysis"}
+                                    </Button>
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={() => fetchCompetitorAnalysis()}
+                                        disabled={isCompetitorAnalysisLoading}
+                                        className="border-primary text-primary hover:bg-primary/10"
+                                    >
+                                        {isCompetitorAnalysisLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                        Regenerate
+                                    </Button>
+                                </div>
                             </div>
                             
                             {isCompetitorAnalysisLoading && (
@@ -1207,12 +1222,15 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                                 Key Strengths
                                             </h3>
                                             <ul className="list-disc pl-5 space-y-2 text-sm">
-                                                {competitorAnalysis && competitorAnalysis.analysis && Array.isArray(competitorAnalysis.analysis.strengths) && competitorAnalysis.analysis.strengths.length > 0 ? 
-                                                    competitorAnalysis.analysis.strengths.map((item: string, i: number) => (
-                                                        <li key={i} className="text-gray-700">{item}</li>
-                                                    )) : 
+                                                {competitorAnalysis && competitorAnalysis.analysis && Array.isArray(competitorAnalysis.analysis.strengths) && competitorAnalysis.analysis.strengths.length > 0 ? (
+                                                    competitorAnalysis.analysis.strengths.map((item: any, i: number) => (
+                                                        <li key={i} className="text-gray-700">
+                                                            {item.brand && item.description ? `${item.brand}: ${item.description}` : item.description || item.brand || item}
+                                                        </li>
+                                                    ))
+                                                ) : (
                                                     <li className="text-gray-500">No strengths data available</li>
-                                                }
+                                                )}
                                             </ul>
                                         </div>
                                         
@@ -1225,12 +1243,15 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                                 Weaknesses
                                             </h3>
                                             <ul className="list-disc pl-5 space-y-2 text-sm">
-                                                {competitorAnalysis && competitorAnalysis.analysis && Array.isArray(competitorAnalysis.analysis.weaknesses) && competitorAnalysis.analysis.weaknesses.length > 0 ? 
-                                                    competitorAnalysis.analysis.weaknesses.map((item: string, i: number) => (
-                                                        <li key={i} className="text-gray-700">{item}</li>
-                                                    )) : 
+                                                {competitorAnalysis && competitorAnalysis.analysis && Array.isArray(competitorAnalysis.analysis.weaknesses) && competitorAnalysis.analysis.weaknesses.length > 0 ? (
+                                                    competitorAnalysis.analysis.weaknesses.map((item: any, i: number) => (
+                                                        <li key={i} className="text-gray-700">
+                                                            {item.brand && item.description ? `${item.brand}: ${item.description}` : item.description || item.brand || item}
+                                                        </li>
+                                                    ))
+                                                ) : (
                                                     <li className="text-gray-500">No weaknesses data available</li>
-                                                }
+                                                )}
                                             </ul>
                                         </div>
                                         
@@ -1243,12 +1264,15 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                                 Shared Patterns
                                             </h3>
                                             <ul className="list-disc pl-5 space-y-2 text-sm">
-                                                {competitorAnalysis && competitorAnalysis.analysis && Array.isArray(competitorAnalysis.analysis.shared_patterns) && competitorAnalysis.analysis.shared_patterns.length > 0 ? 
-                                                    competitorAnalysis.analysis.shared_patterns.map((item: string, i: number) => (
-                                                        <li key={i} className="text-gray-700">{item}</li>
-                                                    )) : 
+                                                {competitorAnalysis && competitorAnalysis.analysis && Array.isArray(competitorAnalysis.analysis.shared_patterns) && competitorAnalysis.analysis.shared_patterns.length > 0 ? (
+                                                    competitorAnalysis.analysis.shared_patterns.map((item: any, i: number) => (
+                                                        <li key={i} className="text-gray-700">
+                                                            {item.brand && item.description ? `${item.brand}: ${item.description}` : item.description || item.brand || item}
+                                                        </li>
+                                                    ))
+                                                ) : (
                                                     <li className="text-gray-500">No shared patterns data available</li>
-                                                }
+                                                )}
                                             </ul>
                                         </div>
                                         
@@ -1308,19 +1332,60 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                         </div>
                                         
                                         {/* Summary Section - Full Width */}
-                                        {competitorAnalysis && competitorAnalysis.analysis && competitorAnalysis.analysis.summary && (
-                                            <div className="p-4 border rounded-lg bg-gray-50 shadow-sm col-span-2">
-                                                <h3 className="text-lg font-semibold text-gray-700 mb-3 flex items-center">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                    </svg>
-                                                    Summary
-                                                </h3>
-                                                <p className="text-sm text-gray-600 leading-relaxed">
-                                                    {competitorAnalysis.analysis.summary}
-                                                </p>
-                                            </div>
-                                        )}
+                                        {/* Reference Links from groundingChunks (web.uri or web.url) */}
+{(() => {
+    // Helper to extract all web URLs from groundingChunks
+    function extractReferenceUrls(obj: any): { url: string, title?: string }[] {
+        let chunks: any[] = [];
+        // Try all possible sources for groundingChunks
+        if (obj?.groundingMetadata?.groundingChunks) chunks = obj.groundingMetadata.groundingChunks;
+        else if (obj?.groundingChunks) chunks = obj.groundingChunks;
+        else if (obj?.geminiRaw?.candidates?.[0]?.groundingMetadata?.groundingChunks) chunks = obj.geminiRaw.candidates[0].groundingMetadata.groundingChunks;
+        else if (obj?.grounding_raw?.candidates?.[0]?.groundingMetadata?.groundingChunks) chunks = obj.grounding_raw.candidates[0].groundingMetadata.groundingChunks;
+        const refs: { url: string, title?: string }[] = [];
+        chunks.forEach(chunk => {
+            if (chunk && chunk.web && (chunk.web.uri || chunk.web.url)) {
+                refs.push({ url: chunk.web.uri || chunk.web.url, title: chunk.web.title });
+            }
+        });
+        return refs;
+    }
+    const referenceLinks = extractReferenceUrls(competitorAnalysis);
+    if (!referenceLinks.length) return null;
+    return (
+        <div className="p-4 border rounded-lg bg-orange-50 shadow-sm col-span-2">
+            <h3 className="text-lg font-semibold text-orange-700 mb-3 flex items-center">
+                <ExternalLink className="h-5 w-5 mr-2" />
+                References
+            </h3>
+            <ul className="list-none pl-0 space-y-2 text-sm">
+                {referenceLinks.map((ref, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                        <a href={ref.url} target="_blank" rel="noopener noreferrer" className="flex items-center text-orange-800 hover:underline">
+                            <ExternalLink className="h-4 w-4 mr-1 inline-block opacity-70" />
+                            <span>{ref.title ? ref.title : ref.url}</span>
+                        </a>
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
+})()}
+
+{competitorAnalysis && competitorAnalysis.analysis && competitorAnalysis.analysis.summary && (
+    <div className="p-4 border rounded-lg bg-gray-50 shadow-sm col-span-2">
+        <h3 className="text-lg font-semibold text-gray-700 mb-3 flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Summary
+        </h3>
+        <p className="text-sm text-gray-600 leading-relaxed">
+            {competitorAnalysis.analysis.summary}
+        </p>
+    </div>
+)}
+
                                     </div>
                                 </div>
                             )}
