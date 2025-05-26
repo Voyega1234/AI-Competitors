@@ -3,6 +3,21 @@ import supabaseAdmin from '@/lib/supabaseClient'; // Import Supabase client
 import fs from 'fs/promises'; // Add fs import
 import path from 'path'; // Add path import
 
+// Helper function to clean Gemini responses from markdown code blocks
+export function cleanGeminiResponse(text: string): string {
+    // Remove markdown code blocks if present
+    if (text.includes('```json') && text.includes('```')) {
+        text = text.replace(/```json\n/, '');
+        text = text.replace(/```/, '');
+    }
+    
+    // Remove any additional markdown formatting
+    text = text.replace(/```/g, '');
+    text = text.trim();
+    
+    return text;
+}
+
 // Define interfaces for API responses and data structures
 interface RecommendationObject {
   title: string;
@@ -339,8 +354,7 @@ export async function GET(request: NextRequest) {
 
         return `
     
-You are an expert marketing strategist and copywriter, who understands how to turn brand strengths into emotionally engaging content that stands out. highly skilled in psychological persuasion and proven advertising methods. Your task is to create compelling, highly persuasive advertising copy designed to maximize customer attraction, engagement, and conversions in the creative way.
-When creating the copy, You should think carefully about how to present and phrase your Ideas to truly captivate your audience. You're tired of the same old, repetitive presentations — you crave originality that delivers both quality and impact. Thinking outside the box is your strength, but even then, your creativity remains clear and easy for the audience to understand. 
+Analyze the following client information, recent grounded search results (if available), competitor summary, and optional book context to conceptualize groundbreaking creative recommendations and their initial execution details **IN THAI**. **ALL TEXTUAL OUTPUT IN THE FINAL JSON RESPONSE MUST BE IN THAI.** **Crucially, leverage your access to real-time information via search grounding (if applicable to the model/call) to ensure ideas are timely, relevant, and informed by the latest digital landscape.**
 
 **Client Information:**
 *   Name: ${analysisRunData.clientName}
@@ -384,12 +398,14 @@ ${detailsSectionParam ? detailsSectionParam.replace(/\{productFocus\}/g, analysi
 
                                 Ensure your copy aligns with modern, high-quality advertising standards and is tailored to effectively resonate with the specific target audience provided
 
-**Output Format Requirements:**
-*   Output ONLY a valid JSON object. Do NOT include markdown formatting (no triple backticks), no explanation, no introduction, and no trailing text.
+**Output Format Requirements (CRITICAL):**
+*   YOU MUST RETURN PURE RAW JSON WITHOUT ANY MARKDOWN CODE BLOCKS. DO NOT WRAP IN CODE BLOCKS.
+*   Output ONLY a valid JSON object. NO markdown formatting, NO triple backticks, NO explanation, NO introduction, and NO trailing text.
 *   All property names and string values must use double quotes (").
 *   The JSON object MUST strictly follow the structure below.
 *   If a value is missing, use null or an empty string.
 *   Do NOT include any comments or extra fields.
+*   IMPORTANT: NEVER WRAP YOUR RESPONSE IN CODE BLOCKS. RETURN ONLY THE RAW JSON.
 *   *   **Crucially, the values for \`content_pillar\`, \`product_focus\`, \`concept_idea\`, and all fields within \`copywriting\` (\`headline\`, \`sub_headline_1\`, \`sub_headline_2\`, \`bullets\`, \`cta\`) MUST be generated in THAI LANGUAGE.**
 *   \`title\` and \`description\` fields should also be generated in THAI LANGUAGE.
 *   Use "High", "Medium", or "Low" for the impact field (bias towards "High").
@@ -400,7 +416,7 @@ Example output (strictly follow this format, with double quotes and valid JSON):
 {
   "recommendations": [
     {
-      "title": "หัวข้อแนะนำ (ภาษาไทย) โดยอาจจะมีตัวเลขหรือสถิติหรือชื่อสินค้าที่ต้องการนำเสนอ เช่น 'เปลี่ยนวิธีคิดเรื่องทองคำ: จาก 'ซื้อเก็บ' เป็น 'ลงทุน' สร้างอนาคต', 'ลงทุนทองคำรูปแบบใหม่ ที่นักลงทุน 174 สัญชาติทั่วโลกให้ความไว้วางใจ'", // Thai - Must be original
+      "title": " ตั้งชื่อหรือหัวข้อที่ดึงดูดความสนใจ สื่อสารจุดขายหลักของแคมเปญหรือสินค้าอย่างกระชับและโดดเด่น เพื่อกระตุ้นให้กลุ่มเป้าหมายสนใจและลงมือทำตามเป้าหมายที่ต้องการ.
       "description": "รายละเอียดแนวคิดสร้างสรรค์ ที่ไม่ซ้ำใคร และมีประสิทธิภาพ (ภาษาไทย) อย่างละเอียด", // Thai - Must be original
       "category": "Campaign", // Keep category identifier standard
       "impact": "High",
@@ -455,14 +471,15 @@ Return ONLY the JSON object above, nothing else.
 
         // --- Call Gemini API ---
         console.log("Sending initial request to Gemini API...");
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${GEMINI_API_KEY}`;
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-05-06:generateContent?key=${GEMINI_API_KEY}`;
         const geminiPayload = {
             contents: [{ parts: [{ text: finalGeminiPrompt }] }],
             generationConfig: { 
-                temperature: 2.0,
-                response_mime_type: "application/json",
-            } 
+                temperature: 1.0,
+            },
+            // tools: [{ "google_search": {} }]
         };
+
         const geminiResponse = await fetch(geminiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -482,11 +499,42 @@ Return ONLY the JSON object above, nothing else.
 
         // --- Parse Initial Gemini Response ---
         let jsonString = generatedText.trim();
+        console.log("Raw Gemini Response:", jsonString.substring(0, 200) + '...');
+        
+        // Clean the response using our enhanced function
+        jsonString = cleanGeminiResponse(jsonString);
+        console.log("Cleaned Gemini Response:", jsonString.substring(0, 200) + '...');
+        
         try {
-            const parsedRecommendations = JSON.parse(jsonString);
+            // Try to parse the JSON
+            let parsedRecommendations;
+            try {
+                parsedRecommendations = JSON.parse(jsonString);
+            } catch (parseError) {
+                console.error("Initial JSON parse failed:", parseError);
+                
+                // Additional fallback: Look for recommendations array pattern
+                const recommendationsMatch = jsonString.match(/"recommendations"\s*:\s*(\[[\s\S]*?\])/);
+                if (recommendationsMatch && recommendationsMatch[1]) {
+                    try {
+                        console.log("Attempting to parse recommendations array directly");
+                        const recsArray = JSON.parse(recommendationsMatch[1]);
+                        parsedRecommendations = { recommendations: recsArray };
+                        console.log("Direct recommendations array parsing successful");
+                    } catch (arrayParseError) {
+                        console.error("Failed to parse recommendations array directly:", arrayParseError);
+                        throw parseError; // Throw the original error
+                    }
+                } else {
+                    throw parseError; // No pattern found, throw the original error
+                }
+            }
+            
+            // Validate the parsed result
             if (!parsedRecommendations || !Array.isArray(parsedRecommendations.recommendations)) {
                 throw new Error("Parsed JSON does not contain a 'recommendations' array.");
             }
+            
             initialGeminiOutput = parsedRecommendations.recommendations;
             console.log("Initial Gemini generation successful.");
             
@@ -845,7 +893,7 @@ Do NOT include any text outside the JSON. No markdown formatting, no explanation
                             
                             // Set the model competition flag to true
                             finalResults['_metadata'] = {
-                                modelCompetition: true,
+                                modelCompetition: false,
                                 steps: ['gemini_initial', 'openai_improvement', 'gemini_final']
                             };
                             
@@ -1179,10 +1227,9 @@ ${brief}
 
             return `
 
-You are an expert marketing strategist and copywriter, highly skilled in psychological persuasion and proven advertising methods. Your task is to create compelling, highly persuasive advertising copy designed to maximize customer attraction, engagement, and conversions.
-When creating the copy, use relevant psychological principles of persuasion and advertising techniques, particularly those outlined in Drew Eric Whitman’s book “Cashvertising”— including but not limited to the Life-Force 8 (LF8), the Nine Learned (Secondary) Wants, Ego Morphing, Transfer of Credibility, Bandwagon Effect, Fear Factor, Means-End Chain, and Robert Cialdini’s Six Weapons of Influence (Comparison, Liking, Authority, Reciprocation, Commitment/Consistency, Scarcity)—but only where these principles naturally apply and genuinely enhance effectiveness.
-Critically, do not limit yourself exclusively to the techniques mentioned; incorporate any additional creative strategies, psychological insights, and proven persuasion techniques that you consider effective or innovative, based on your broad expertise.
-
+You are an expert marketing agencies strategist and ideas manager, highly skilled in psychological persuasion and proven advertising methods. Your task is to create compelling, highly persuasive advertising ideas strategies copy designed to maximize customer attraction, engagement, and conversions.
+When creating the ideas, you can apply relevant psychological principles of persuasion and advertising techniques, particularly those outlined in Drew Eric Whitman’s book “Cashvertising”— including but not limited to the Life-Force 8 (LF8), the Nine Learned (Secondary) Wants, Ego Morphing, Transfer of Credibility, Bandwagon Effect, Fear Factor, Means-End Chain, and Robert Cialdini’s Six Weapons of Influence (Comparison, Liking, Authority, Reciprocation, Commitment/Consistency, Scarcity)—but only where these principles naturally apply and genuinely enhance effectiveness.
+Critically, do not limit yourself exclusively to the techniques or command i just give youmentioned; incorporate any additional creative strategies, psychological insights, and proven persuasion techniques that you consider effective or innovative, based on your broad expertise.
 
 **Client Information:**
 *   Name: ${clientInfo.clientName}
@@ -1216,7 +1263,7 @@ Ensure your copy aligns with modern, high-quality advertising standards and is t
 {
   "recommendations": [
     {
-      "title": "หัวข้อแนะนำ (ภาษาไทย)", // Thai - Must be original
+      "title": "หัวข้อที่อธิบายว่าไอเดียนี้สื่อถึงอะไร นำเสนออะไร ใช้บริการหรือสินค้าอะไรหรือเน้นย้ำจุดแข็งอะไรของแบรนด์ อธิบายแบบละเอียด (ภาษาไทย)", // Thai - Must be original
       "description": "รายละเอียดแนวคิดสร้างสรรค์ ที่ไม่ซ้ำใคร และมีประสิทธิภาพ (ภาษาไทย)", // Thai - Must be original
       "category": "Campaign", // Keep category identifier standard
       "impact": "High",

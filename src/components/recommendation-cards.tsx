@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Bookmark, Share2, Loader2, AlertTriangle, BrainCircuit, X, Info, CheckSquare, UploadCloud, ExternalLink } from "lucide-react"
+import { Bookmark, Share2, Loader2, AlertTriangle, BrainCircuit, X, Info, CheckSquare, UploadCloud, ExternalLink, Copy, Download, EyeOff, FileText, Image as LucideImage, Link, List, MoreHorizontal, Plus, Sparkles, UserPlus, ThumbsUp, ThumbsDown, MessageCircle, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useState, useEffect } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -50,12 +50,13 @@ interface GenerateImageResponse {
 // 8. Find the pain of the customer and offer the our solution or Show social proof to build credibility. that what we can do to solve the pain. 
 // 9. Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting (like \`\`\json\`\`\`).`;
 
-const DEFAULT_TASK_SECTION = `"1": "Generate 10–12 original marketing content ideas for {clientName} that are **'ออกจากกรอบ' (clever, unconventional, innovative)**. These ideas must be emotionally resonant, creatively persuasive, and stem from advantages so unique that competitors **cannot replicate** them. 'ออกจากกรอบ' status is achieved by: a) Identifying hyper-specific, perhaps counter-intuitive, customer segments and their unique motivations. b) Linking the product/service to non-obvious cultural insights or societal trends. c) Using proprietary data to reveal a surprising truth or challenge a common assumption. You can get reference from Market Research & Insights (Google Search) for create ideas",
+const DEFAULT_TASK_SECTION = `** I want to focusing on how our product give the solutions base on pain point of customer **
+"1": "Generate 10–12 original marketing content ideas for {clientName} that are **'ออกจากกรอบ' (clever, unconventional, innovative)**. These ideas must be emotionally resonant, creatively persuasive, and stem from advantages so unique that competitors **cannot replicate** them. 'ออกจากกรอบ' status is achieved by: a) Identifying hyper-specific, perhaps counter-intuitive, customer segments and their unique motivations. b) Linking the product/service to non-obvious cultural insights or societal trends. c) Using proprietary data to reveal a surprising truth or challenge a common assumption. You can get reference from Market Research & Insights (Google Search) for create ideas",
   "2": "Each idea must leverage **quantifiable proof points, surprising or non-obvious proprietary data, unique customer behavior patterns, or overlooked cultural nuances** unique to {clientName}. This is to directly address customer needs or deeply felt (perhaps unarticulated) pain points in ways competitors definitively cannot, potentially reframing common pain points unexpectedly.",
   "3": "Employ **emotional storytelling, powerful comparisons, or potent psychological triggers** (e.g., authority, curiosity sparked by paradox/anomaly, fear of missing out on belonging to a uniquely defined group, strong social proof, scarcity, or cognitive dissonance resolution). The aim is to make the reader *feel* something significant, spark a profound insight, or reposition a core belief. Think unexpected angles, surprising juxtapositions of concepts, human truths, or connecting {clientName}'s offering to everyday objects, seemingly unrelated cultural moments, niche hobbies, or common sayings in a completely fresh way.",
-  "4": "Content for each idea should originate from a **core strategic title that offers a fresh perspective or insight** (e.g., the gold example: 'Shift your thinking on gold: From 'buy and store' to 'invest and build future wealth'). The detailed titles and copywriting must then effectively: grab attention, utilize exclusive metrics or compelling social proof (fact-news style for credibility), demonstrate transformative value, and be presented in accessible language.",
+  "4": "The content for each idea must start from a main headline that presents the core concept—the fundamental insight or message the idea represents (for example, the gold example: 'Shift your thinking on gold: From ‘buy and store’ to ‘invest and build future wealth’'). The headline and supporting copy must: grab attention, use exclusive metrics or compelling social proof (in a fact-news style for credibility), demonstrate transformative value, and be presented in accessible language.",
   "5": "Ultimately, all strategies and content ideas must demonstrably help {clientName} **build strong brand authority, attract new customers, and establish irrefutable trust** by showcasing these undeniable and unique advantages.",
-  "6": "Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting (like \`\`\`json\`\`\`)."`;
+  "6": "Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting  (like \`\`\`json\`\`\`)."`;
 
 
 const DEFAULT_DETAILS_SECTION = `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** ที่เน้นการนำเสนอจุดแข็งที่คู่แข่งไม่มี เช่น "ข้อมูลเชิงลึกของเราเท่านั้น", "ความแตกต่างจากคู่แข่ง", "ผลลัพธ์จริงของลูกค้า", "เทคโนโลยีเฉพาะที่ไม่มีใครใช้", "ค่าธรรมเนียมแบบใหม่", "มาตรฐานที่ยืนยันได้".
@@ -123,9 +124,28 @@ interface Recommendation {
 }
 
 // --- Types for Multi-Model State ---
-type ModelResults = { [modelName: string]: Recommendation[] | null };
-type ModelLoadingState = { [modelName: string]: boolean };
-type ModelErrorState = { [modelName: string]: string | null };
+interface ModelResults {
+  [modelName: string]: Recommendation[];
+}
+
+interface ModelLoadingState {
+  [modelName: string]: boolean;
+}
+
+interface ModelErrorState {
+  [modelName: string]: string | null;
+}
+
+// --- Types for Idea Evaluation ---
+interface IdeaFeedback {
+  id: string;
+  vote: "good" | "bad" | null;
+  comment: string;
+}
+
+interface IdeaFeedbackMap {
+  [id: string]: IdeaFeedback;
+};
 
 // --- Import/Define the structured journey interface (must match backend) ---
 export interface CustomerJourneyStructured {
@@ -359,6 +379,12 @@ export function RecommendationCards() {
     // --- NEW State for Image Generation with References ---
     const [selectedConceptForImage, setSelectedConceptForImage] = useState<SelectedConcept | null>(null);
     const [productImages, setProductImages] = useState<File[]>([]);
+    
+    // --- State for Idea Evaluation ---
+    const [ideaFeedback, setIdeaFeedback] = useState<IdeaFeedbackMap>({});
+    const [editingFeedbackId, setEditingFeedbackId] = useState<string | null>(null);
+    const [isRegeneratingIdea, setIsRegeneratingIdea] = useState<boolean>(false);
+    const [regeneratingIdeaId, setRegeneratingIdeaId] = useState<string | null>(null);
     const [adReferenceImages, setAdReferenceImages] = useState<File[]>([]);
     const [isGeneratingImage, setIsGeneratingImage] = useState<boolean>(false);
     // Add state for image size
@@ -537,6 +563,12 @@ export function RecommendationCards() {
         setCreativeConcepts(null); // Clear concepts
         setIsGeneratingConcepts(false);
         setConceptsError(null);
+        
+        // Reset feedback state when generating new ideas
+        setIdeaFeedback({});
+        setEditingFeedbackId(null);
+        setIsRegeneratingIdea(false);
+        setRegeneratingIdeaId(null);
 
         try {
             console.log(`Fetching recommendations for runId: ${selectedRunId}, Models: ${selectedModels.join(', ')}`);
@@ -975,6 +1007,9 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
         setAdReferenceImages(prev => prev.filter((_, i) => i !== index));
     };
 
+    // Add a new state for tracking tab to display
+    const [activeTabForModel, setActiveTabForModel] = useState<Record<string, "recommendation" | "analysis">>({});
+
     // Add a new state for dialog visibility
     const [isDialogOpen, setIsDialogOpen] = useState(false);
 
@@ -1013,6 +1048,166 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
             ...prev,
             bubblePoints: prev.bubblePoints.filter((_, i) => i !== index)
         }));
+    };
+    
+    // --- Idea Evaluation Functions ---
+    
+    // Handle voting on an idea (good or bad) with toggle functionality
+    const handleVoteIdea = (id: string, vote: "good" | "bad") => {
+        setIdeaFeedback(prev => {
+            const existing = prev[id] || { id, vote: null, comment: '' };
+            // If user clicks the same vote again, toggle it off (cancel the vote)
+            const newVote = existing.vote === vote ? null : vote;
+            
+            return {
+                ...prev,
+                [id]: {
+                    ...existing,
+                    vote: newVote
+                }
+            };
+        });
+    };
+    
+    // Handle feedback comment for an idea
+    const handleFeedbackComment = (id: string, comment: string) => {
+        setIdeaFeedback(prev => {
+            const existing = prev[id] || { id, vote: null, comment: '' };
+            return {
+                ...prev,
+                [id]: {
+                    ...existing,
+                    comment
+                }
+            };
+        });
+    };
+    
+    // Toggle feedback editing mode for an idea
+    const toggleFeedbackEditing = (id: string | null) => {
+        setEditingFeedbackId(id);
+    };
+    
+    // Save all feedback to a JSON file
+    const saveFeedbackToFile = () => {
+        // Only save if there's feedback to save
+        if (Object.keys(ideaFeedback).length === 0) {
+            alert('No feedback to save');
+            return;
+        }
+        
+        // Create a data object with metadata
+        const feedbackData = {
+            clientName: selectedClientName,
+            productFocus: selectedProductFocus,
+            runId: selectedRunId,
+            timestamp: new Date().toISOString(),
+            feedback: ideaFeedback
+        };
+        
+        // Convert to JSON and create a downloadable file
+        const jsonString = JSON.stringify(feedbackData, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        // Create a download link and trigger it
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `idea-feedback-${selectedClientName}-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        
+        // Clean up
+        setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }, 100);
+    };
+    
+    // Regenerate a single idea
+    const regenerateIdea = async (id: string) => {
+        // Find which model generated this idea
+        let modelName = '';
+        let ideaIndex = -1;
+        let idea: Recommendation | null = null;
+        
+        // Loop through all models to find the idea
+        for (const [model, recommendations] of Object.entries(resultsByModel)) {
+            if (!Array.isArray(recommendations)) continue;
+            
+            const index = recommendations.findIndex(rec => rec.tempId === id);
+            if (index !== -1) {
+                modelName = model;
+                ideaIndex = index;
+                idea = recommendations[index];
+                break;
+            }
+        }
+        
+        // If idea not found, return
+        if (!idea || !modelName || ideaIndex === -1) {
+            console.error('Cannot regenerate: idea not found');
+            return;
+        }
+        
+        // Set regenerating state
+        setIsRegeneratingIdea(true);
+        setRegeneratingIdeaId(id);
+        
+        try {
+            // Call API to regenerate this specific idea
+            const response = await fetch(`/api/regenerate-idea`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    runId: selectedRunId,
+                    model: modelName,
+                    ideaIndex,
+                    feedback: ideaFeedback[id]?.comment || ''
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Failed to regenerate idea: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            // Update the idea in the results
+            if (data.regeneratedIdea) {
+                setResultsByModel(prev => {
+                    // Deep clone the current results
+                    const updated = JSON.parse(JSON.stringify(prev));
+                    
+                    // Find and replace the regenerated idea
+                    if (updated[modelName] && Array.isArray(updated[modelName])) {
+                        const index = updated[modelName].findIndex((rec: Recommendation) => rec.tempId === id);
+                        if (index !== -1) {
+                            // Preserve the tempId but update everything else
+                            updated[modelName][index] = {
+                                ...data.regeneratedIdea,
+                                tempId: id
+                            };
+                        }
+                    }
+                    
+                    return updated;
+                });
+                
+                // Clear feedback for this idea
+                setIdeaFeedback(prev => {
+                    const updated = {...prev};
+                    delete updated[id];
+                    return updated;
+                });
+            }
+        } catch (error) {
+            console.error('Error regenerating idea:', error);
+            alert(`Failed to regenerate idea: ${error instanceof Error ? error.message : String(error)}`);
+        } finally {
+            setIsRegeneratingIdea(false);
+            setRegeneratingIdeaId(null);
+        }
     };
 
     return (
@@ -1142,7 +1337,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                     </div>
 
                     {/* Editable Task Section */}
-                    {/* <div className="grid gap-1.5 w-full">
+                    <div className="grid gap-1.5 w-full">
                         <Label htmlFor="editable-task-section" className="text-sm font-medium">Editable Prompt: Task Section</Label>
                         <Textarea
                             id="editable-task-section"
@@ -1152,7 +1347,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                             className="min-h-[150px] bg-background font-mono text-xs"
                             disabled={isAnyModelLoading || isMetaLoading}
                         />
-                    </div> */}
+                    </div>
 
                     {/* Editable Details Section */}
                     {/* <div className="grid gap-1.5 w-full">
@@ -1403,11 +1598,26 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                 {/* --- Display Area (Updated for Tabs) --- */}
                 {modelsRequestedInLastRun.length > 0 ? (
                     <Tabs defaultValue={defaultTab} className="w-full">
-                        <TabsList className="grid w-full grid-cols-3"> {/* Adjust grid-cols based on number of models */}
-                            {modelsRequestedInLastRun.map(modelName => (
-                                <TabsTrigger key={modelName} value={modelName} className="capitalize">{modelName}</TabsTrigger>
-                            ))}
-                        </TabsList>
+                        <div className="flex justify-between items-center mb-4">
+                            <TabsList className="grid w-full grid-cols-3"> {/* Adjust grid-cols based on number of models */}
+                                {modelsRequestedInLastRun.map(modelName => (
+                                    <TabsTrigger key={modelName} value={modelName} className="capitalize">{modelName}</TabsTrigger>
+                                ))}
+                            </TabsList>
+                            
+                            {/* Save All Feedback Button - Only visible when feedback exists */}
+                            {Object.keys(ideaFeedback).length > 0 && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={saveFeedbackToFile}
+                                    className="flex items-center ml-4 bg-blue-50 hover:bg-blue-100 border-blue-200"
+                                >
+                                    <Download className="h-4 w-4 mr-1" />
+                                    Save Feedback ({Object.keys(ideaFeedback).length})
+                                </Button>
+                            )}
+                        </div>
 
                         {modelsRequestedInLastRun.map(modelName => (
                             <TabsContent key={modelName} value={modelName} className="mt-4">
@@ -1482,6 +1692,134 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                                     </CardHeader>
                                                     <CardContent className="flex-grow text-sm text-muted-foreground pb-3">
                                                         <p className="line-clamp-4 mb-2">{rec.description}</p>
+                                                        
+                                                        {/* Idea Evaluation UI */}
+                                                        <div className="mt-3 pt-3 border-t border-dashed">
+                                                            <p className="text-xs font-medium mb-2 text-gray-600">Rate this idea:</p>
+                                                            <div className="flex space-x-2 mb-3">
+                                                                <Button 
+                                                                    variant={ideaFeedback[rec.tempId!]?.vote === 'good' ? 'default' : 'outline'}
+                                                                    size="sm"
+                                                                    className={ideaFeedback[rec.tempId!]?.vote === 'good' ? 'bg-green-600 hover:bg-green-700' : ''}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleVoteIdea(rec.tempId!, 'good');
+                                                                    }}
+                                                                >
+                                                                    <ThumbsUp className="h-4 w-4 mr-1" />
+                                                                    Good
+                                                                </Button>
+                                                                <Button 
+                                                                    variant={ideaFeedback[rec.tempId!]?.vote === 'bad' ? 'default' : 'outline'}
+                                                                    size="sm"
+                                                                    className={ideaFeedback[rec.tempId!]?.vote === 'bad' ? 'bg-red-600 hover:bg-red-700' : ''}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleVoteIdea(rec.tempId!, 'bad');
+                                                                    }}
+                                                                >
+                                                                    <ThumbsDown className="h-4 w-4 mr-1" />
+                                                                    Bad
+                                                                </Button>
+                                                            </div>
+                                                            
+                                                            {/* Feedback textarea */}
+                                                            {(editingFeedbackId === rec.tempId! || ideaFeedback[rec.tempId!]?.comment) && (
+                                                                <div className="mb-3">
+                                                                    {editingFeedbackId === rec.tempId! ? (
+                                                                        <>
+                                                                            <Textarea 
+                                                                                placeholder="Why do you like/dislike this idea?"
+                                                                                className="w-full text-xs"
+                                                                                value={ideaFeedback[rec.tempId!]?.comment || ''}
+                                                                                onChange={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    handleFeedbackComment(rec.tempId!, e.target.value);
+                                                                                }}
+                                                                                onClick={(e) => e.stopPropagation()}
+                                                                            />
+                                                                            <div className="flex flex-wrap gap-2">
+                                                                                {Object.keys(ideaFeedback).length > 0 && (
+                                                                                    <Button
+                                                                                        variant="outline"
+                                                                                        size="sm"
+                                                                                        onClick={saveFeedbackToFile}
+                                                                                        className="flex items-center bg-blue-50 hover:bg-blue-100 border-blue-200"
+                                                                                    >
+                                                                                        <Download className="h-4 w-4 mr-1" />
+                                                                                        Save All Feedback
+                                                                                    </Button>
+                                                                                )}
+                                                                                <Button
+                                                                                    variant="outline"
+                                                                                    size="sm"
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        toggleFeedbackEditing(null);
+                                                                                    }}
+                                                                                >
+                                                                                    Done
+                                                                                </Button>
+                                                                            </div>
+                                                                        </>
+                                                                    ) : (
+                                                                        <div 
+                                                                            className="p-2 bg-muted rounded-md text-xs cursor-pointer hover:bg-muted/80"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                toggleFeedbackEditing(rec.tempId!);
+                                                                            }}
+                                                                        >
+                                                                            <p>{ideaFeedback[rec.tempId!]?.comment}</p>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                            
+                                                            {/* Add feedback or regenerate buttons */}
+                                                            <div className="flex space-x-2">
+                                                                {!ideaFeedback[rec.tempId!]?.comment && (
+                                                                    <Button 
+                                                                        variant="outline" 
+                                                                        size="sm"
+                                                                        className="text-xs"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            toggleFeedbackEditing(rec.tempId!);
+                                                                        }}
+                                                                    >
+                                                                        <MessageCircle className="h-3 w-3 mr-1" />
+                                                                        Add Feedback
+                                                                    </Button>
+                                                                )}
+                                                                
+                                                                {/* Regenerate button - only visible if feedback exists */}
+                                                                {ideaFeedback[rec.tempId!]?.comment && (
+                                                                    <Button 
+                                                                        variant="outline" 
+                                                                        size="sm"
+                                                                        className="text-xs"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            regenerateIdea(rec.tempId!);
+                                                                        }}
+                                                                        disabled={isRegeneratingIdea && regeneratingIdeaId === rec.tempId!}
+                                                                    >
+                                                                        {isRegeneratingIdea && regeneratingIdeaId === rec.tempId! ? (
+                                                                            <>
+                                                                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                                                                Regenerating...
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <RefreshCw className="h-3 w-3 mr-1" />
+                                                                                Regenerate
+                                                                            </>
+                                                                        )}
+                                                                    </Button>
+                                                                )}
+                                                            </div>
+                                                        </div>
 
                                                         {/* RE-ADD View Journey Button - Conditional - Now shows if journey exists for *this* card */}
                                                         {cardJourneyIsAvailable && (

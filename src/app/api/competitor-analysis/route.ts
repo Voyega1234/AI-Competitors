@@ -22,7 +22,7 @@ interface Competitor {
 }
 
 // Helper function to call Gemini API via HTTP POST
-async function callGeminiAPI(prompt: string, apiKey: string, model: string = "gemini-2.5-flash-preview-04-17", useGrounding: boolean = true) {
+async function callGeminiAPI(prompt: string, apiKey: string, model: string = "gemini-2.5-flash-preview-05-20", useGrounding: boolean = true) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
     
     let body: any = {
@@ -139,10 +139,9 @@ async function fetchMarketTrendsWithGrounding(clientName: string, competitors: C
     const prompt = `ช่วยหาข้อมูล, ข่าว หรือเทรนกระแสที่เกี่ยวข้องกับประเภทของธุรกิจ ${clientName} ในไทย
     พยายามหาข้อมูลที่ล่าสุด ณ วันที่ ${Date.now()} ถ้าเป็นไปได้ โดย Search หาข้อมูลดังนี้โดยโฟกัสหาข้อมูลของ ${clientName} ให้ครบถ้วนก่อนหาของคู่แข่ง 
     ขออย่างน้อย 20-30 Useful bullet data
-    * ข้อมูลฟีเจอร์หรือสินค้าทุกอย่างที่เกี่ยวข้องกับ ${clientName} และ ${competitorInfo} ล่าสุด
+    * เข้าใจธุรกิจหรือสินค้าโดยเปรียบเสมือนเราเป็นผู้ใช้งานหรือลูกค้าจริงๆ คัดสรรมาแค่ข้อมูลสำคัญ
     * Social proof, ทำไมต้องใช้งาน ${clientName} ทำไมต้องซื้อ ${clientName} ทำไมเพราะอะไร มีเหตุผลอะไรรองรับ
-    * ต้องการข้อมูลที่มีความเป็น Fact, News มีตัวเลขและสถิติรองรับทั้งหมดที่แสดงอยู่บนหน้าเว็บไซต์ของ ${clientName}
-    * วิเคราะห์ ${clientName} และจุดแข็งที่แตกต่างจากคู่แข่งโดยเน้นไปที่ ฟีเจอร์ของสินค้าหรือบริการที่แตกต่างกับ ${competitorInfo}
+    * หาข่าวสดรายวันทั่วไปที่เกี่ยวข้องกับแวดวงธุรกิจของ ${clientName} ที่สามารถคิดไอเดียใหม่ๆ หรือข้อเสนอแนะใหม่ๆ อาจจะเอามาจาก Facebook, Pantip, Social Medias ณ วันที่ ${Date.now()}
     อยากได้ข้อมูลในหลายแง่มุมมากที่สุด เพื่อให้สามารถผลิตข้อมูลที่มีคุณภาพและครบถ้วน ทุกข้อมูลควรมีตัวเลขรองรับถ้าเป็นไปได้
     สำคัญมาก ไม่ต้องมีข้อความแนะนำหรือคำอธิบายใดๆ ไม่ต้องมีหัวข้อหรือ Bold text ที่ไม่ใช่ JSON
     ไม่ต้องเริ่มต้นด้วยคำว่า "แน่นอนครับ" หรือข้อความอื่นๆ ให้ส่งเฉพาะโครงสร้าง JSON นี้เท่านั้น ตอบเป็นภาษาไทย:
@@ -153,7 +152,7 @@ async function fetchMarketTrendsWithGrounding(clientName: string, competitors: C
 // * คู่แข่งที่สำคัญได้แก่: ${competitorNames} โดยอยากให้มีข้อมูลเกี่ยวกับคู่แข่งที่ชัดเจน คอนเทนต์หรือโปรโมชั่นล่าสุด ณ วันที่ ${Date.now()} หรือข้อมูลข่าวหรือฟีเจอร์หรือจุดแข็งหรือข้อได้เปรียบของคู่แข่งแต่ละเจ้า
     try {
         console.log(`[API /competitor-analysis] Calling Gemini with Google Grounding Search for ${clientName} market trends...`);
-        const geminiResult = await callGeminiAPI(prompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-04-17", true);
+        const geminiResult = await callGeminiAPI(prompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-05-20", true);
         // Use new return shape: { text, groundingChunks }
         let cleanedText = geminiResult.text ? cleanGeminiResponse(geminiResult.text) : '';
         let groundingMetadata = { groundingChunks: geminiResult.groundingChunks };
@@ -248,7 +247,7 @@ Return ONLY the following JSON structure with no markdown formatting, no code bl
 
     try {
         console.log("[API /competitor-analysis] Calling Gemini for competitor analysis via HTTP API...");
-        const geminiResult = await callGeminiAPI(prompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-04-17");
+        const geminiResult = await callGeminiAPI(prompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-05-20");
         // Use new return shape: { text, groundingChunks }
         let cleanedText = geminiResult.text ? cleanGeminiResponse(geminiResult.text) : '';
         let groundingMetadata = { groundingChunks: geminiResult.groundingChunks };
@@ -343,7 +342,7 @@ Return ONLY the following JSON structure with no markdown formatting, no code bl
 IMPORTANT: Your response must be valid, parseable JSON. Do not include any text outside the JSON object. Do not wrap the JSON in code blocks or backticks. Please give me the right json syntax am begging you`;
             try {
                 console.log("[API /competitor-analysis] Calling Gemini for direct competitor analysis via HTTP API...");
-                const analysisText = await callGeminiAPI(directAnalysisPrompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-04-17");
+                const analysisText = await callGeminiAPI(directAnalysisPrompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-05-20");
                 
                 // Clean the response before parsing
                 const cleanedText = cleanGeminiResponse(typeof analysisText === 'object' && analysisText !== null && 'text' in analysisText ? analysisText.text : analysisText);
@@ -717,7 +716,7 @@ Return ONLY the following JSON structure with no markdown formatting, no code bl
 IMPORTANT: Your response must be valid, parseable JSON. Do not include any text outside the JSON object. Do not wrap the JSON in code blocks or backticks. and Thai language. Please give me the right json syntax am begging you`;
             try {
                 console.log("[API /competitor-analysis] Calling Gemini for direct competitor analysis via HTTP API...");
-                const analysisText = await callGeminiAPI(directAnalysisPrompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-04-17");
+                const analysisText = await callGeminiAPI(directAnalysisPrompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-05-20");
                 
                 // Clean the response before parsing
                 const cleanedText = cleanGeminiResponse(typeof analysisText === 'object' && analysisText !== null && 'text' in analysisText ? analysisText.text : analysisText);
