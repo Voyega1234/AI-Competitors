@@ -353,8 +353,11 @@ export async function GET(request: NextRequest) {
 
 
         return `
-    
-Analyze the following client information, recent grounded search results (if available), competitor summary, and optional book context to conceptualize groundbreaking creative recommendations and their initial execution details **IN THAI**. **ALL TEXTUAL OUTPUT IN THE FINAL JSON RESPONSE MUST BE IN THAI.** **Crucially, leverage your access to real-time information via search grounding (if applicable to the model/call) to ensure ideas are timely, relevant, and informed by the latest digital landscape.**
+
+Analyze the following client information, recent grounded search results (if available), competitor summary, and optional book context to conceptualize groundbreaking creative recommendations and their initial execution details IN THAI.
+ALL TEXTUAL OUTPUT IN THE FINAL JSON RESPONSE MUST BE IN THAI.
+Crucially, leverage your access to real-time information via search grounding (if applicable to the model/call) to ensure ideas are timely, relevant, and informed by the latest digital landscape.
+You have no limits to your creativity. You are free.
 
 **Client Information:**
 *   Name: ${analysisRunData.clientName}
@@ -368,7 +371,7 @@ ${groundedSection}
 
 ${bookSummaryContent ? `
 **Optional Book Summary Contexts:**
-ํYou can use these principle from book to help you create impactfull and outstanding ideas
+ํYou can use these principle or framework from book to help you create impactfull and outstanding ideas
 ${bookSummaryContent}
 ` : ''}
 
@@ -456,11 +459,24 @@ Return ONLY the JSON object above, nothing else.
     let gptImprovedOutput: any[] = [];
     let finalGeminiOutput: any[] = [];
     
-    console.log("Starting Model Competition Workflow...");
+    // Only run Gemini if it's specifically requested or if model competition is enabled
+    const shouldRunGemini = requestedModels.includes('gemini') || useModelCompetition;
+    // Only run OpenAI if it's specifically requested (and not running through model competition)
+    const shouldRunOpenAI = requestedModels.includes('openai');
+    // Only run Claude if it's specifically requested (and not running through model competition)
+    const shouldRunClaude = requestedModels.includes('claude');
 
-    // --- STEP 1: Initial Gemini Generation ---
-    console.log("STEP 1: Starting initial Gemini generation...");
-    try {
+    // If only a specific model is requested and not Gemini, skip the competition workflow
+    if (!shouldRunGemini && (shouldRunOpenAI || shouldRunClaude)) {
+        console.log(`Skipping Gemini and running only the requested model(s): ${requestedModels.join(', ')}`);
+    } else {
+        console.log("Starting Model Competition Workflow...");
+    }
+
+    // --- STEP 1: Initial Gemini Generation (only if requested or part of competition) ---
+    if (shouldRunGemini) {
+        console.log("STEP 1: Starting initial Gemini generation...");
+        try {
         // --- Prepare Gemini Prompt (using common builder) ---
         const finalGeminiPrompt = buildFinalUserPrompt(groundedClientInfoCommon, competitorAnalysisData);
 
@@ -550,10 +566,14 @@ Return ONLY the JSON object above, nothing else.
             // Model Competition is DISABLED: Use only initial Gemini results
             console.log("Model Competition workflow is DISABLED. Skipping GPT and final Gemini steps.");
             finalResults['gemini'] = initialGeminiOutput;
-            return new NextResponse(
-                JSON.stringify({ results: finalResults, errors: finalErrors }),
-                { status: 200, headers: { 'Content-Type': 'application/json' } }
-            );
+            
+            // Only return early if we're not running other models
+            if (!shouldRunOpenAI && !shouldRunClaude) {
+                return new NextResponse(
+                    JSON.stringify({ results: finalResults, errors: finalErrors }),
+                    { status: 200, headers: { 'Content-Type': 'application/json' } }
+                );
+            }
         }
         // --- STEP 2: Pass to GPT-4.1 for improvement ---
         if (initialGeminiOutput.length > 0 && OPENAI_API_KEY) {
@@ -924,6 +944,7 @@ Do NOT include any text outside the JSON. No markdown formatting, no explanation
         finalErrors['gemini'] = initialGeminiError.message || "An unknown error occurred during Gemini generation.";
         finalResults['gemini'] = null; // Ensure no stale results
     }
+    } // Close shouldRunGemini if block
     
     // Skip individual model generation if we did the competition workflow
     if (finalResults['_metadata']?.modelCompetition) {
@@ -939,7 +960,7 @@ Do NOT include any text outside the JSON. No markdown formatting, no explanation
     }
 
     // --- OpenAI Generation (Conditional) ---
-    if (requestedModels.includes('openai')) {
+    if (shouldRunOpenAI) {
         console.log("Starting OpenAI generation...");
         try {
             // --- Prepare OpenAI Prompt (using common builder, no grounding needed here) ---
@@ -954,7 +975,7 @@ Do NOT include any text outside the JSON. No markdown formatting, no explanation
             console.log("Sending request to OpenAI API...");
             const openaiUrl = "https://api.openai.com/v1/chat/completions";
             const openaiPayload = {
-                model: "gpt-4.1-mini", // Use the desired OpenAI model
+                model: "gpt-4.1-mini", // Using a current model that exists
                 messages: [
                     // Optional System prompt can be added here if desired for OpenAI
                     // { role: "system", content: systemPrompt }, 
@@ -1013,7 +1034,7 @@ Do NOT include any text outside the JSON. No markdown formatting, no explanation
     }
 
     // --- Claude Generation (Conditional) ---
-    if (requestedModels.includes('claude')) {
+    if (shouldRunClaude) {
         console.log("Starting Claude generation...");
         try {
             // --- Prepare Claude Prompt (using common builder, no grounding needed here) ---
@@ -1032,7 +1053,7 @@ Do NOT include any text outside the JSON. No markdown formatting, no explanation
             console.log("Sending request to Anthropic API...");
             const claudeUrl = "https://api.anthropic.com/v1/messages";
             const claudePayload = {
-                model: "claude-3-7-sonnet-20250219", // Ensure this model is correct/available
+                model: "claude-sonnet-4-20250514", // Updated to a current model name
                 max_tokens: 64000,
                 system: systemPromptClaude, // Use the specific system prompt
                 messages: [
