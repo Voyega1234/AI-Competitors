@@ -5,7 +5,7 @@ import { cleanGeminiResponse } from "@/utils/text-utils";
 // Configure Gemini API
 const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
 // Using gemini-1.5-flash for Google Search capabilities
-const GEMINI_API_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-05-06:generateContent";
+const GEMINI_API_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent";
 
 
 export async function POST(request: NextRequest) {
@@ -104,17 +104,20 @@ Ensure all text fields contain Thai language content only.
     }
     
     const regenerationPrompt = [
-      "You are an expert ideation assistant with access to Google Search. I previously generated a set of marketing ideas,",
-      "but one of them needs to be regenerated based on user feedback.",
+      "You are an expert ideation assistant with access to Google Search. I previously generated a marketing idea",
+      "that needs optimization based on user feedback. DO NOT create a completely new idea - instead REFINE and ENHANCE the original concept.",
+      "",
+      "Here is the original idea you need to optimize:",
+      `"${requestData.originalIdea ? JSON.stringify(requestData.originalIdea, null, 2) : 'Not provided'}"`,
       "",
       "The user provided this feedback about the idea:",
       `"${userFeedback}"`,
       "",
       "IMPORTANT: Use Google Search to research current market trends, competitor strategies, and real-time data",
-      "to make this idea more relevant, timely, and effective. Incorporate real market insights into your response.",
+      "to optimize this idea. Incorporate real market insights to address the specific user feedback.",
       "",
-      "Please generate a new, improved version of this idea that addresses the feedback.", 
-      "Make it creative, specific, and actionable with real-world data.",
+      "Please provide an OPTIMIZED VERSION of the original idea that specifically addresses the feedback points.", 
+      "Keep the core concept intact while making it more effective, actionable, and data-driven.",
       
       // Add competitor insights if available
       competitorInsights,

@@ -10,12 +10,9 @@ import { useState, useEffect } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import Image from "next/image";
 import { Checkbox } from "@/components/ui/checkbox";
-import ReactMarkdown from 'react-markdown';
-import { Skeleton } from "@/components/ui/skeleton";
+
 import { CreativeConcept, TopicIdeas, SelectedRecommendationForCreative } from "@/types/creative";
-import { ImageGenerationDialog } from "@/components/ImageGenerationDialog";
 import { useDropzone } from "react-dropzone";
 import { Input } from "@/components/ui/input";
 // --- Added for type safety for grounding chunks ---
@@ -50,14 +47,15 @@ interface GenerateImageResponse {
 // 8. Find the pain of the customer and offer the our solution or Show social proof to build credibility. that what we can do to solve the pain. 
 // 9. Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting (like \`\`\json\`\`\`).`;
 
-const DEFAULT_TASK_SECTION = `** I want to focusing on how our product give the solutions base on pain point of customer **
-"1": "Generate 10–12 original marketing content ideas for {clientName} that are **'ออกจากกรอบ' (clever, unconventional, innovative)**. These ideas must be emotionally resonant, creatively persuasive, and stem from advantages so unique that competitors **cannot replicate** them. 'ออกจากกรอบ' status is achieved by: a) Identifying hyper-specific, perhaps counter-intuitive, customer segments and their unique motivations. b) Linking the product/service to non-obvious cultural insights or societal trends. c) Using proprietary data to reveal a surprising truth or challenge a common assumption. You can get reference from Market Research & Insights (Google Search) for create ideas",
-  "2": "Each idea must leverage **quantifiable proof points, surprising or non-obvious proprietary data, unique customer behavior patterns, or overlooked cultural nuances** unique to {clientName}. This is to directly address customer needs or deeply felt (perhaps unarticulated) pain points in ways competitors definitively cannot, potentially reframing common pain points unexpectedly.",
-  "3": "Employ **emotional storytelling, powerful comparisons, or potent psychological triggers** (e.g., authority, curiosity sparked by paradox/anomaly, fear of missing out on belonging to a uniquely defined group, strong social proof, scarcity, or cognitive dissonance resolution). The aim is to make the reader *feel* something significant, spark a profound insight, or reposition a core belief. Think unexpected angles, surprising juxtapositions of concepts, human truths, or connecting {clientName}'s offering to everyday objects, seemingly unrelated cultural moments, niche hobbies, or common sayings in a completely fresh way.",
-  "4": "The content for each idea must start from a main headline that presents the core concept—the fundamental insight or message the idea represents (for example, the gold example: 'Shift your thinking on gold: From ‘buy and store’ to ‘invest and build future wealth’'). The headline and supporting copy must: grab attention, use exclusive metrics or compelling social proof (in a fact-news style for credibility), demonstrate transformative value, and be presented in accessible language.",
-  "5": "Ultimately, all strategies and content ideas must demonstrably help {clientName} **build strong brand authority, attract new customers, and establish irrefutable trust** by showcasing these undeniable and unique advantages.",
-  "6": "Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting  (like \`\`\`json\`\`\`)."`;
+// const DEFAULT_TASK_SECTION = `** I want to focusing on how our product give the solutions base on pain point of customer **
+// "1": "Generate 10–12 original marketing content ideas for {clientName} that are **'ออกจากกรอบ' (clever, unconventional, innovative)**. These ideas must be emotionally resonant, creatively persuasive, and stem from advantages so unique that competitors **cannot replicate** them. 'ออกจากกรอบ' status is achieved by: a) Identifying hyper-specific, perhaps counter-intuitive, customer segments and their unique motivations. b) Linking the product/service to non-obvious cultural insights or societal trends. c) Using proprietary data to reveal a surprising truth or challenge a common assumption. You can get reference from Market Research & Insights (Google Search) for create ideas",
+//   "2": "Each idea must leverage **quantifiable proof points, surprising or non-obvious proprietary data, unique customer behavior patterns, or overlooked cultural nuances** unique to {clientName}. This is to directly address customer needs or deeply felt (perhaps unarticulated) pain points in ways competitors definitively cannot, potentially reframing common pain points unexpectedly.",
+//   "3": "Employ **emotional storytelling, powerful comparisons, or potent psychological triggers** (e.g., authority, curiosity sparked by paradox/anomaly, fear of missing out on belonging to a uniquely defined group, strong social proof, scarcity, or cognitive dissonance resolution). The aim is to make the reader *feel* something significant, spark a profound insight, or reposition a core belief. Think unexpected angles, surprising juxtapositions of concepts, human truths, or connecting {clientName}'s offering to everyday objects, seemingly unrelated cultural moments, niche hobbies, or common sayings in a completely fresh way.",
+//   "4": "The content for each idea must start from a main headline that presents the core concept—the fundamental insight or message the idea represents (for example, the gold example: 'Shift your thinking on gold: From ‘buy and store’ to ‘invest and build future wealth’'). The headline and supporting copy must: grab attention, use exclusive metrics or compelling social proof (in a fact-news style for credibility), demonstrate transformative value, and be presented in accessible language.",
+//   "5": "Ultimately, all strategies and content ideas must demonstrably help {clientName} **build strong brand authority, attract new customers, and establish irrefutable trust** by showcasing these undeniable and unique advantages.",
+//   "6": "Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting  (like \`\`\`json\`\`\`)."`;
 
+const DEFAULT_TASK_SECTION = `ช่วยคิดไอเดีย Core Ideas Marketing Strategies จากข้อมูลนี้ 10 ไอเดีย เป็นไอเดียที่แปลกใหม่ คู่แข่งของ ClientName ไม่สามารถทำได้มีเฉพาะเราที่เล่าเรื่องราวนี้ได้เท่านั้น โดยคุณจะต้องใช้ข้อมูลของ ClientName สิ่งที่ ClientName มีผนวกรวมเข้ากับไอเดียใหม่ๆที่เข้ากับแบรนด์และ makesence ไม่เวิ่นเว้อ เป็นไอเดียที่แปลกใหม่การตลาดที่ประสบความสำเร็จ ไอเดียที่ผมต้องการ ไม่ใช่แค่การใช้คำที่ดูดึงดูด ใช้ title ที่น่าสนใจ แต่ต้องเป็น Core Ideas Concept ไอเดียที่ดีที่แสดงออกถึงแบรนด์และสร้างอิมแพคให้กับแบรนด์ นี่คือสิ่งที่จะทำให้คุณประสบความสำเร็จในงานนี้โดยต้องอิงหลักความเป็นจริง นำเสนอสิ่งที่ทำได้จริง ไม่ใช่การอวดอ้างหรือคิดไปเอง สามารถทำได้ตามความสามารถที่ ClientName สามารถทำได้เท่านั้น`;
 
 const DEFAULT_DETAILS_SECTION = `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** ที่เน้นการนำเสนอจุดแข็งที่คู่แข่งไม่มี เช่น "ข้อมูลเชิงลึกของเราเท่านั้น", "ความแตกต่างจากคู่แข่ง", "ผลลัพธ์จริงของลูกค้า", "เทคโนโลยีเฉพาะที่ไม่มีใครใช้", "ค่าธรรมเนียมแบบใหม่", "มาตรฐานที่ยืนยันได้".
 
@@ -141,6 +139,7 @@ interface IdeaFeedback {
   id: string;
   vote: "good" | "bad" | null;
   comment: string;
+  idea?: Recommendation; // Store the full idea for saving to database
 }
 
 interface IdeaFeedbackMap {
@@ -1059,11 +1058,35 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
             // If user clicks the same vote again, toggle it off (cancel the vote)
             const newVote = existing.vote === vote ? null : vote;
             
+            // If vote is being canceled and there's no comment, remove the item completely
+            if (newVote === null && (!existing.comment || existing.comment.trim() === '')) {
+                const newFeedback = { ...prev };
+                delete newFeedback[id];
+                return newFeedback;
+            }
+            
+            // Find the idea to save its details (same as in handleFeedbackComment)
+            let idea: Recommendation | undefined = existing.idea;
+            if (!idea) {
+                for (const [model, recommendations] of Object.entries(resultsByModel)) {
+                    if (!Array.isArray(recommendations)) continue;
+                    
+                    const foundIdea = recommendations.find(rec => rec.tempId === id);
+                    if (foundIdea) {
+                        idea = foundIdea;
+                        break;
+                    }
+                }
+                // If idea is still not found, it will remain undefined
+            }
+            
+            // Otherwise update the vote
             return {
                 ...prev,
                 [id]: {
                     ...existing,
-                    vote: newVote
+                    vote: newVote,
+                    idea // Include the full idea object
                 }
             };
         });
@@ -1072,12 +1095,28 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
     // Handle feedback comment for an idea
     const handleFeedbackComment = (id: string, comment: string) => {
         setIdeaFeedback(prev => {
-            const existing = prev[id] || { id, vote: null, comment: '' };
+            // Find the previous vote if any
+            const prevVote = prev[id]?.vote || null;
+            
+            // Find the idea to save its details
+            let idea: Recommendation | undefined = undefined;
+            for (const [model, recommendations] of Object.entries(resultsByModel)) {
+                if (!Array.isArray(recommendations)) continue;
+                
+                const foundIdea = recommendations.find(rec => rec.tempId === id);
+                if (foundIdea) {
+                    idea = foundIdea;
+                    break;
+                }
+            }
+            
             return {
                 ...prev,
                 [id]: {
-                    ...existing,
-                    comment
+                    id,
+                    vote: prevVote,
+                    comment,
+                    idea // Include the full idea object
                 }
             };
         });
@@ -1088,40 +1127,72 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
         setEditingFeedbackId(id);
     };
     
-    // Save all feedback to a JSON file
-    const saveFeedbackToFile = () => {
+    // Save all feedback to the database
+    const saveFeedbackToDatabase = async () => {
         // Only save if there's feedback to save
         if (Object.keys(ideaFeedback).length === 0) {
             alert('No feedback to save');
             return;
         }
         
-        // Create a data object with metadata
-        const feedbackData = {
-            clientName: selectedClientName,
-            productFocus: selectedProductFocus,
-            runId: selectedRunId,
-            timestamp: new Date().toISOString(),
-            feedback: ideaFeedback
-        };
-        
-        // Convert to JSON and create a downloadable file
-        const jsonString = JSON.stringify(feedbackData, null, 2);
-        const blob = new Blob([jsonString], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        
-        // Create a download link and trigger it
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `idea-feedback-${selectedClientName}-${new Date().toISOString().slice(0, 10)}.json`;
-        document.body.appendChild(a);
-        a.click();
-        
-        // Clean up
-        setTimeout(() => {
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        }, 100);
+        try {
+            // Show loading state
+            alert('Saving feedback to database...');
+
+            // For ideas without the full idea object reference, look them up before saving
+            // This ensures we have title, description, and competitiveGap for all feedback entries
+            const enhancedFeedback = {...ideaFeedback};
+            
+            // Ensure all feedback entries have the idea data
+            for (const [id, feedbackEntry] of Object.entries(enhancedFeedback) as [string, IdeaFeedback][]) {
+                // If this feedback entry doesn't have an idea reference or is missing required fields, find it
+                if (!feedbackEntry.idea || feedbackEntry.idea === null || !feedbackEntry.idea.title || !feedbackEntry.idea.description) {
+                    // Search all models for this idea
+                    for (const [model, recommendations] of Object.entries(resultsByModel)) {
+                        if (!Array.isArray(recommendations)) continue;
+                        
+                        const foundIdea = recommendations.find(rec => rec.tempId === id);
+                        if (foundIdea) {
+                            enhancedFeedback[id] = {
+                                ...feedbackEntry,
+                                idea: foundIdea
+                            };
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // Prepare the data to save
+            const feedbackData = {
+                clientName: selectedClientName,
+                productFocus: selectedProductFocus,
+                runId: selectedRunId,
+                timestamp: new Date().toISOString(),
+                feedback: enhancedFeedback // Use enhanced feedback with all idea data
+            };
+            
+            // First, save to the database via API call
+            const response = await fetch('/api/save-feedback', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(feedbackData)
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `Server responded with status: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            console.log('Feedback saved to database:', result);
+            alert(`Successfully saved ${Object.keys(ideaFeedback).length} feedback entries to database!`);
+        } catch (error) {
+            console.error('Error saving feedback:', error);
+            alert(`Failed to save feedback: ${error instanceof Error ? error.message : String(error)}`);
+        }
     };
     
     // Regenerate a single idea
@@ -1129,7 +1200,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
         // Find which model generated this idea
         let modelName = '';
         let ideaIndex = -1;
-        let idea: Recommendation | null = null;
+        let idea: Recommendation | undefined = undefined;
         
         // Loop through all models to find the idea
         for (const [model, recommendations] of Object.entries(resultsByModel)) {
@@ -1163,7 +1234,10 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                     runId: selectedRunId,
                     model: modelName,
                     ideaIndex,
-                    feedback: ideaFeedback[id]?.comment || ''
+                    feedback: ideaFeedback[id]?.comment || '',
+                    originalIdea: idea, // Send the original idea to optimize
+                    clientName: selectedClientName,
+                    productFocus: selectedProductFocus,
                 })
             });
             
@@ -1610,7 +1684,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={saveFeedbackToFile}
+                                    onClick={saveFeedbackToDatabase}
                                     className="flex items-center ml-4 bg-blue-50 hover:bg-blue-100 border-blue-200"
                                 >
                                     <Download className="h-4 w-4 mr-1" />
@@ -1743,7 +1817,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                                                                     <Button
                                                                                         variant="outline"
                                                                                         size="sm"
-                                                                                        onClick={saveFeedbackToFile}
+                                                                                        onClick={saveFeedbackToDatabase}
                                                                                         className="flex items-center bg-blue-50 hover:bg-blue-100 border-blue-200"
                                                                                     >
                                                                                         <Download className="h-4 w-4 mr-1" />
