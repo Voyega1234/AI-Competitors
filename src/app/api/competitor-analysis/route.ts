@@ -87,7 +87,7 @@ function cleanGeminiResponse(text: string): string {
 }
 
 // Function to fetch market trends and news using Google Grounding Search
-async function fetchMarketTrendsWithGrounding(clientName: string, competitors: Competitor[] = []): Promise<any> {
+async function fetchMarketTrendsWithGrounding(clientName: string, competitors: Competitor[] = [], productFocus?: string): Promise<any> {
     if (!GEMINI_API_KEY) {
         throw new Error("Missing GEMINI_API_KEY environment variable");
     }
@@ -144,55 +144,68 @@ async function fetchMarketTrendsWithGrounding(clientName: string, competitors: C
     * หาข่าวสดรายวันทั่วไปที่เกี่ยวข้องกับแวดวงธุรกิจของ ${clientName} ที่สามารถคิดไอเดียใหม่ๆ หรือข้อเสนอแนะใหม่ๆ อาจจะเอามาจาก Facebook, Pantip, Social Medias ณ วันที่ ${Date.now()}
     อยากได้ข้อมูลในหลายแง่มุมมากที่สุด เพื่อให้สามารถผลิตข้อมูลที่มีคุณภาพและครบถ้วน ทุกข้อมูลควรมีตัวเลขรองรับถ้าเป็นไปได้
     สำคัญมาก ไม่ต้องมีข้อความแนะนำหรือคำอธิบายใดๆ ไม่ต้องมีหัวข้อหรือ Bold text ที่ไม่ใช่ JSON
-    ไม่ต้องเริ่มต้นด้วยคำว่า "แน่นอนครับ" หรือข้อความอื่นๆ ให้ส่งเฉพาะโครงสร้าง JSON นี้เท่านั้น ตอบเป็นภาษาไทย:
+    ไม่ต้องเริ่มต้นด้วยคำว่า \"แน่นอนครับ\" หรือข้อความอื่นๆ ให้ส่งเฉพาะโครงสร้าง JSON นี้เท่านั้น ตอบเป็นภาษาไทย:
 {
   "research": ["ข้อมูลงานวิจัย 1", "ข้อมูลงานวิจัย 2", "ข้อมูลงานวิจัย 3", ...] // ทำไมต้อง ${clientName} ?, วิเคราะห์ ${clientName} และจุดแข็งที่แตกต่างจากคู่แข่ง ผลการค้นหาที่เกี่ยวข้องกับธุรกิจและคู่แข่ง รวมทั้งข่าวล่าสุด, เทรนด์ตลาด, และโอกาสทางธุรกิจ
 }`;
 
-// * คู่แข่งที่สำคัญได้แก่: ${competitorNames} โดยอยากให้มีข้อมูลเกี่ยวกับคู่แข่งที่ชัดเจน คอนเทนต์หรือโปรโมชั่นล่าสุด ณ วันที่ ${Date.now()} หรือข้อมูลข่าวหรือฟีเจอร์หรือจุดแข็งหรือข้อได้เปรียบของคู่แข่งแต่ละเจ้า
+    // Thai prompt for news search only (latest headlines and summaries from trusted sources)
+    const newsPrompt = `ขอข่าวสารล่าสุดที่เกี่ยวข้องกับธุรกิจของ ${clientName} หรือ ${competitorInfo} หรือสินค้าประเภท ${productFocus || ''} โดยจะนำข่าวเหล่านี้ไปใช้สำหรับการสร้างคอนเทนต์โฆษณา
+ขอเพียงหัวข้อข่าวและสรุปเนื้อหาสั้น ๆ ที่เกิดขึ้นภายในประเทศไทย เอาข้อมูลมาจากข่าวไทยรัฐ หรือ สำนักข่าวที่น่าเชื่อถืออื่นๆเท่านั้น ขออย่างน้อย 10 ข่าว โดยเป็นข่าวล่าสุด ณ วันที่ ${Date.now()} อยากได้แนวข่าวสดข่าวประชาชนทั่วไปที่คนให้ความสนใจหรือเทรนที่กำลังฮิต
+สำคัญมาก ส่งเฉพาะ JSON นี้เท่านั้น ห้ามมีข้อความอื่น:
+{
+  "research": ["หัวข้อข่าว 1: สรุปแบบรายละเอียดครบถ้วน", "หัวข้อข่าว 2: สรุปแบบรายละเอียดครบถ้วน", ...]
+}`;
+
+    // Make two separate Gemini API calls: one for market trends, one for news
     try {
+        // 1. Market Trends
         console.log(`[API /competitor-analysis] Calling Gemini with Google Grounding Search for ${clientName} market trends...`);
-        const geminiResult = await callGeminiAPI(prompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-05-20", true);
-        // Use new return shape: { text, groundingChunks }
-        let cleanedText = geminiResult.text ? cleanGeminiResponse(geminiResult.text) : '';
-        let groundingMetadata = { groundingChunks: geminiResult.groundingChunks };
-        let rawGemini = geminiResult;
-        // No need to extract from candidates/content anymore
-        
-        // Log the cleaned text for debugging
-        console.log("[API /competitor-analysis] Cleaned Grounding Search response:", cleanedText.substring(0, 100) + '...');
-        // Try to parse JSON
+        const trendsResult = await callGeminiAPI(prompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-05-20", true);
+        let cleanedTrends = trendsResult.text ? cleanGeminiResponse(trendsResult.text) : '';
+        let trendsGroundingMetadata = { groundingChunks: trendsResult.groundingChunks };
+        let trendsRawGemini = trendsResult;
+        let marketTrendsParsed: any = null;
         try {
-            const parsed = JSON.parse(cleanedText);
-            return {
-                ...parsed,
-                groundingMetadata,
-                geminiRaw: rawGemini,
-            };
+            marketTrendsParsed = JSON.parse(cleanedTrends);
         } catch (e) {
-            console.error("[API /competitor-analysis] Failed to parse Grounding Search response as JSON:", e);
-            
-            // Fallback: Try to extract useful information even if not valid JSON
-            // Look for patterns that might contain research points in Thai text
-            const lines = cleanedText.split('\n').filter((line: string) => 
-                line.trim().length > 20 && // Only substantial lines
-                !line.includes('```') && // Not markdown formatting
-                !line.startsWith('แน่นอนครับ') // Not starting with "Certainly"
-            );
-            
-            const extractedResearch = lines.length > 0 
-                ? lines.map((line: string) => line.trim()) 
-                : ["ข้อมูลไม่พร้อมใช้งาน (ปัญหาการแปลง JSON)"];
-            return {
-                error: "Grounding Search response was not valid JSON",
-                research: extractedResearch.slice(0, 5),
-                groundingMetadata,
-                geminiRaw: rawGemini,
-            };
+            console.error("[API /competitor-analysis] Failed to parse market trends JSON:", e);
+            marketTrendsParsed = { error: "Market trends response was not valid JSON", research: [] };
         }
+
+        // 2. News Insights
+        console.log(`[API /competitor-analysis] Calling Gemini for news insights for ${clientName}...`);
+        const newsResult = await callGeminiAPI(newsPrompt, GEMINI_API_KEY, "gemini-2.5-flash-preview-05-20", true);
+        let cleanedNews = newsResult.text ? cleanGeminiResponse(newsResult.text) : '';
+        let newsGroundingMetadata = { groundingChunks: newsResult.groundingChunks };
+        let newsRawGemini = newsResult;
+        let newsParsed: any = null;
+        try {
+            newsParsed = JSON.parse(cleanedNews);
+        } catch (e) {
+            console.error("[API /competitor-analysis] Failed to parse news insights JSON:", e);
+            newsParsed = { error: "News insights response was not valid JSON", research: [] };
+        }
+
+        // Combine research arrays from both sources
+        const combinedResearch = [
+            ...(marketTrendsParsed?.research || []),
+            ...(newsParsed?.research || [])
+        ];
+
+        // Return both results, plus combined research
+        return {
+            market_trends: marketTrendsParsed,
+            market_trends_grounding: trendsGroundingMetadata,
+            market_trends_gemini_raw: trendsRawGemini,
+            news_insights: newsParsed,
+            news_insights_grounding: newsGroundingMetadata,
+            news_insights_gemini_raw: newsRawGemini,
+            research: combinedResearch,
+        };
     } catch (error) {
-        console.error("[API /competitor-analysis] Error calling Gemini with Grounding Search:", error);
-        throw new Error("Failed to fetch market trends via Google Grounding Search.");
+        console.error("[API /competitor-analysis] Error calling Gemini with Grounding Search or News:", error);
+        throw new Error("Failed to fetch market trends or news via Google Grounding Search.");
     }
 }
 
@@ -265,6 +278,9 @@ Return ONLY the following JSON structure with no markdown formatting, no code bl
                 // Forward grounding metadata from marketTrends if present
                 groundingMetadata: marketTrends.groundingMetadata || marketTrends.geminiRaw?.candidates?.[0]?.groundingMetadata,
                 geminiRaw: marketTrends.geminiRaw,
+                // Also include the full market_trends and news_insights for reference if needed
+                market_trends: marketTrends.market_trends,
+                news_insights: marketTrends.news_insights,
             };
             return combinedResults;
         } catch (e) {

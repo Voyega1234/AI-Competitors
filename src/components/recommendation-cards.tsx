@@ -44,7 +44,7 @@ interface GenerateImageResponse {
 // 4. Crafting Stop-Scrolling Titles & Content that Showcase Exclusive Metrics, Social proof to build credibility, and Transformative but use Use accessible language. such as 'เปลี่ยนวิธีคิดเรื่องทองคำ: จาก 'ซื้อเก็บ' เป็น 'ลงทุน' สร้างอนาคต', 'ลงทุนทองคำรูปแบบใหม่ ที่นักลงทุน xxx สัญชาติทั่วโลกให้ความไว้วางใจ','StashAway บริหารจัดการทรัพย์มากกว่า xxx พันล้านเหรียญสหรัฐ'. 
 // 5. Strategies should help {clientName} build strong brand authority, attract new customers, and establish trust by showing irrefutable advantages.  
 // 6. Each strategy should be Apply with Framework from books or more creative idea" 
-// 7. Let’s make sure the idea taps into something that only we can do a true brand signature that competitors simply can’t replicate.
+// 7. Let's make sure the idea taps into something that only we can do a true brand signature that competitors simply can't replicate.
 // 8. Find the pain of the customer and offer the our solution or Show social proof to build credibility. that what we can do to solve the pain. 
 // 9. Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting (like \`\`\json\`\`\`).`;
 
@@ -52,7 +52,7 @@ interface GenerateImageResponse {
 // "1": "Generate 10–12 original marketing content ideas for {clientName} that are **'ออกจากกรอบ' (clever, unconventional, innovative)**. These ideas must be emotionally resonant, creatively persuasive, and stem from advantages so unique that competitors **cannot replicate** them. 'ออกจากกรอบ' status is achieved by: a) Identifying hyper-specific, perhaps counter-intuitive, customer segments and their unique motivations. b) Linking the product/service to non-obvious cultural insights or societal trends. c) Using proprietary data to reveal a surprising truth or challenge a common assumption. You can get reference from Market Research & Insights (Google Search) for create ideas",
 //   "2": "Each idea must leverage **quantifiable proof points, surprising or non-obvious proprietary data, unique customer behavior patterns, or overlooked cultural nuances** unique to {clientName}. This is to directly address customer needs or deeply felt (perhaps unarticulated) pain points in ways competitors definitively cannot, potentially reframing common pain points unexpectedly.",
 //   "3": "Employ **emotional storytelling, powerful comparisons, or potent psychological triggers** (e.g., authority, curiosity sparked by paradox/anomaly, fear of missing out on belonging to a uniquely defined group, strong social proof, scarcity, or cognitive dissonance resolution). The aim is to make the reader *feel* something significant, spark a profound insight, or reposition a core belief. Think unexpected angles, surprising juxtapositions of concepts, human truths, or connecting {clientName}'s offering to everyday objects, seemingly unrelated cultural moments, niche hobbies, or common sayings in a completely fresh way.",
-//   "4": "The content for each idea must start from a main headline that presents the core concept—the fundamental insight or message the idea represents (for example, the gold example: 'Shift your thinking on gold: From ‘buy and store’ to ‘invest and build future wealth’'). The headline and supporting copy must: grab attention, use exclusive metrics or compelling social proof (in a fact-news style for credibility), demonstrate transformative value, and be presented in accessible language.",
+//   "4": "The content for each idea must start from a main headline that presents the core concept—the fundamental insight or message the idea represents (for example, the gold example: 'Shift your thinking on gold: From 'buy and store' to 'invest and build future wealth'). The headline and supporting copy must: grab attention, use exclusive metrics or compelling social proof (in a fact-news style for credibility), demonstrate transformative value, and be presented in accessible language.",
 //   "5": "Ultimately, all strategies and content ideas must demonstrably help {clientName} **build strong brand authority, attract new customers, and establish irrefutable trust** by showcasing these undeniable and unique advantages.",
 //   "6": "Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting  (like \`\`\`json\`\`\`)."`;
 
@@ -60,15 +60,15 @@ const DEFAULT_TASK_SECTION = `ช่วยคิดไอเดีย Core Ideas
 
 const DEFAULT_DETAILS_SECTION = `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** ที่เน้นการนำเสนอจุดแข็งที่คู่แข่งไม่มี เช่น "ข้อมูลเชิงลึกของเราเท่านั้น", "ความแตกต่างจากคู่แข่ง", "ผลลัพธ์จริงของลูกค้า", "เทคโนโลยีเฉพาะที่ไม่มีใครใช้", "ค่าธรรมเนียมแบบใหม่", "มาตรฐานที่ยืนยันได้".
 
-b.  **\`product_focus\`:** ระบุ {productFocus} หรือฟีเจอร์, ตัวเลข, หรือข้อเสนอที่แบรนด์คุณมีคนเดียว เช่น “ค่าธรรมเนียม 0.2%”, “ไม่มีขั้นต่ำ”, “พอร์ตทองคำพร้อมปรับตามเศรษฐกิจ” **(ภาษาไทย)**.
+b.  **\`product_focus\`:** ระบุ {productFocus} หรือฟีเจอร์, ตัวเลข, หรือข้อเสนอที่แบรนด์คุณมีคนเดียว เช่น "ค่าธรรมเนียม 0.2%", "ไม่มีขั้นต่ำ", "พอร์ตทองคำพร้อมปรับตามเศรษฐกิจ" **(ภาษาไทย)**.
 
 c.  **\`concept_idea\`:** สรุปแนวคิดสร้างสรรค์หลัก (1-2 ประโยค) ที่เน้น *มุมมองใหม่* หรือ *การหักล้างความเชื่อเดิม* ด้วยหลักฐาน เช่น สถิติ, ความสำเร็จของลูกค้า, หรือเทคโนโลยีที่พิสูจน์แล้ว **(ภาษาไทย)**.
 
-d.  **\`copywriting\`:** สร้างสรรค์องค์ประกอบข้อความโฆษณา **(ภาษาไทย)** ที่จับใจ และ “เล่าเรื่องให้เห็นภาพ” โดยไม่ใช่แค่บอกข้อดี:
+d.  **\`copywriting\`:** สร้างสรรค์องค์ประกอบข้อความโฆษณา **(ภาษาไทย)** ที่จับใจ และ "เล่าเรื่องให้เห็นภาพ" โดยไม่ใช่แค่บอกข้อดี:
     *   **\`headline\`:** พาดหัวที่น่าสนใจ สร้าง curiosity หรือ shock ด้วยข้อมูลจริงหรือ insight.
     *   **\`sub_headline_1\`:** ขยายมุมมองเพิ่มเติม อาจใช้ social proof หรือ logic support.
     *   **\`sub_headline_2\`:** อิงกระแส, เทรนด์ หรือ context ปัจจุบันเพื่อความเชื่อมโยง (ใช้ \`null\` หากไม่จำเป็น).
-    *   **\`bullets\`:** จุดขาย 2-4 ข้อที่เจาะจง, วัดผลได้ หรือแตกต่างจริง เช่น “ปรับพอร์ตอัตโนมัติ”, “ไม่มี lock-in”, “มีทีมคอยดูแล”.
+    *   **\`bullets\`:** จุดขาย 2-4 ข้อที่เจาะจง, วัดผลได้ หรือแตกต่างจริง เช่น "ปรับพอร์ตอัตโนมัติ", "ไม่มี lock-in", "มีทีมคอยดูแล".
     *   **\`cta\`:** Call To Action ที่เชิญชวนให้ลอง, เปรียบเทียบ, หรือเห็นผล เช่น "ดูตัวอย่างจริง", "ทดลองวันนี้", "เปรียบเทียบก่อนตัดสินใจ".
 `;
 
@@ -1839,8 +1839,11 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                                         </div>
                                                     )}
                                                     <CardHeader className="pb-2">
-                                                        <CardTitle className="text-base leading-tight pr-8">{rec.title}</CardTitle>
+                                                        <CardTitle className="text-base leading-tight pr-8">
+                                                            {rec.concept_idea || rec.title}
+                                                        </CardTitle>
                                                         <CardDescription className="pt-1 text-sm">
+                                                            <span className="block font-semibold text-muted-foreground">{rec.title}</span>
                                                             <Badge variant="secondary" className="mr-1">{rec.category}</Badge>
                                                             <Badge variant={rec.impact === 'High' ? 'default' : rec.impact === 'Medium' ? 'outline' : 'secondary'} className={cn(
                                                                 rec.impact === 'High' ? 'bg-green-600 text-white' :

@@ -375,9 +375,6 @@ ${bookSummaryContent ? `
 ${bookSummaryContent}
 ` : ''}
 
-**Market Research & Insights (Google Search):**
-${competitorSection}
-
 **Task:**
 ${taskSectionParam ? taskSectionParam.replace(/\{clientName\}/g, analysisRunData.clientName).replace(/\{market\}/g, analysisRunData.market).replace(/\{productFocus\}/g, analysisRunData.productFocus || 'products/services') :
  `1. Spark and detail 7-10 fresh, distinctive, and engaging creative ideas for ${analysisRunData.clientName}, specifically focusing on concepts highly suitable for Facebook Ad campaigns. Focus on concepts that can present the client's specific ${analysisRunData.productFocus} from new perspectives that spark curiosity, drive engagement, or create a memorable impression within the ${analysisRunData.market} on social media. Ideas should build upon the client's strengths and available insights.
@@ -387,6 +384,12 @@ ${taskSectionParam ? taskSectionParam.replace(/\{clientName\}/g, analysisRunData
   5. Populate the corresponding fields in the final JSON object. Ensure all text output is original for this request
   6. Ideas to include but not limited to: why the solutions from ${analysisRunData.clientName} are different than what is being offered in the market currently. Talk about the differentiation of the product if and when it makes the client's product or service more appealing. 
   7. Competitor Analysis is important please use it to make a strategic idea.`}
+
+**Market Research & Insights (Google Search):**
+${competitorSection}
+
+ ** Your Ideas should be mix with News and Trending topics in Thailand in Market Research & Insights to make ideas fresh and relevant on time.
+  
 **Creative Execution Details (Per Recommendation - Populate these fields IN THAI for the JSON):**
 ${detailsSectionParam ? detailsSectionParam.replace(/\{productFocus\}/g, analysisRunData.productFocus || 'products/services') : `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** (เช่น "เคล็ดลับฮาวทู", "เบื้องหลังการทำงาน", "เรื่องราวความสำเร็จลูกค้า", "การหักล้างความเชื่อผิดๆ", "ไลฟ์สไตล์และการใช้งาน", "ปัญหาและการแก้ไข").
                                 b.  **\`product_focus\`:** ระบุ ${analysisRunData.productFocus || 'ผลิตภัณฑ์/บริการ'} ที่ต้องการเน้น **(ภาษาไทย)**.
@@ -418,7 +421,7 @@ Example output (strictly follow this format, with double quotes and valid JSON):
 {
   "recommendations": [
     {
-      "title": " ตั้งชื่อหรือหัวข้อที่ดึงดูดความสนใจ สื่อสารจุดขายหลักของแคมเปญหรือสินค้าอย่างกระชับและโดดเด่น เพื่อกระตุ้นให้กลุ่มเป้าหมายสนใจและลงมือทำตามเป้าหมายที่ต้องการ.
+      "title": " title ควรเป็น Coreconcept ที่ Summarize มาจาก Description เช่น LingoAce: ปูพื้นฐานภาษาอังกฤษที่สนุกและอ่อนโยนสำหรับเด็ก 3-6 ปี จาก description "details : "แคมเปญเจาะกลุ่มผู้ปกครองเด็กเล็ก (3-6 ปี) โดยเฉพาะ เน้นความอ่อนโยน ความสนุก และวิธีการสอนที่เหมาะสมกับพัฒนาการของเด็กเล็ก เพื่อสร้างความคุ้นเคยและทัศนคติที่ดีต่อการเรียนภาษาตั้งแต่เนิ่นๆ อ้างอิงข้อมูลที่ LingoAce เหมาะสำหรับเด็กอายุ 3-15 ปี และเทรนด์การปูพื้นฐานภาษาตั้งแต่ปฐมวัย"
       "description": "รายละเอียดแนวคิดสร้างสรรค์ ที่ไม่ซ้ำใคร และมีประสิทธิภาพ (ภาษาไทย) อย่างละเอียด", // Thai - Must be original
       "category": "Campaign", // Keep category identifier standard
       "impact": "High",
@@ -426,7 +429,7 @@ Example output (strictly follow this format, with double quotes and valid JSON):
       "tags": ["คำค้น1", "คำค้น2", "รูปแบบเนื้อหา"], // Thai - Must be original
       "content_pillar": "ตัวอย่าง: เคล็ดลับฮาวทู", // Thai - Must be original
       "product_focus": "ระบุ ${analysisRunData.productFocus || 'ผลิตภัณฑ์/บริการ'} ที่ระบุใน Input", // Thai - Must be original & specific to input
-      "concept_idea": "สรุปแนวคิดสร้างสรรค์หลักสำหรับการนำเสนอไอเดียนี้ (1-2 ประโยค)", // Thai - Must be original
+      "concept_idea": "สรุปแนวคิด Coreconcept ของไอเดียนี้ (1-2 ประโยค)", // Thai - Must be original
       "copywriting": {
         "headline": "พาดหัวหลักที่ดึงดูดความสนใจ", // Thai - Must be original
         "sub_headline_1": "พาดหัวรองที่ขยายความหรือเน้นประโยชน์", // Thai - Must be original
@@ -974,7 +977,7 @@ Do NOT include any text outside the JSON. No markdown formatting, no explanation
             console.log("Sending request to OpenAI API...");
             const openaiUrl = "https://api.openai.com/v1/chat/completions";
             const openaiPayload = {
-                model: "gpt-4.1-mini", // Using a current model that exists
+                model: "gpt-4.1", // Using a current model that exists
                 messages: [
                     // Optional System prompt can be added here if desired for OpenAI
                     // { role: "system", content: systemPrompt }, 
