@@ -375,7 +375,6 @@ ${bookSummaryContent ? `
 ${bookSummaryContent}
 ` : ''}
 
-Must shoud use Market Research & Insights for Create Each Creative Ideas that Outstanding, Showcase our capabilities, strengths, competitive advantages, reputation, and social proof. and Uptodate with a Trend
 **Market Research & Insights (Google Search):**
 ${competitorSection}
 
@@ -1161,7 +1160,7 @@ export async function POST(request: NextRequest) {
         const models = body.models || [];
         const brief = body.brief;
         const taskSection = body.taskSection;
-        const detailsSection = body.detailsSection;
+        // No longer using detailsSection from request body
         const competitorAnalysis = body.competitorAnalysis || "";
 
         console.log(`POST /api/generate-recommendations for runId: ${runId}, Models: ${models.join(', ')}`);
@@ -1244,7 +1243,8 @@ ${brief}
                                     *   **\`cta\`:** ข้อความเรียกร้องให้ดำเนินการ (Call To Action) ที่ชัดเจน **(ภาษาไทย)** (เช่น "เรียนรู้เพิ่มเติม", "ซื้อเลย", "ดูเดโม", "เข้าร่วม Waiting List", "ดาวน์โหลดคู่มือ").`;
 
             const taskSectionContent = taskSection || defaultTaskText;
-            const detailsSectionContent = detailsSection || defaultDetailsText;
+            // Always use the default details section
+            const detailsSectionContent = defaultDetailsText;
 
             return `
 
@@ -1313,7 +1313,7 @@ Ensure your copy aligns with modern, high-quality advertising standards and is t
         };
 
         try {
-            // Use competitorAnalysis directly from the request body
+            // Use competitorAnalysis directly from the request body, no longer passing detailsSection
             let finalPrompt = buildFinalUserPrompt('', competitorAnalysis);
             console.log(`Final prompt (first 200 chars): ${finalPrompt.substring(0, 200)}...`);
 

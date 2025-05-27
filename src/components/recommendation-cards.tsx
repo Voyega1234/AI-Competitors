@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 import { CreativeConcept, TopicIdeas, SelectedRecommendationForCreative } from "@/types/creative";
 import { useDropzone } from "react-dropzone";
@@ -391,6 +392,39 @@ export function RecommendationCards() {
 
     // Add new state for custom prompt
     const [customPrompt, setCustomPrompt] = useState<string>('');
+    
+    // --- State for Optional Brief Templates ---
+    const [isOptionalBriefOpen, setIsOptionalBriefOpen] = useState<boolean>(false);
+    const [selectedBriefTemplate, setSelectedBriefTemplate] = useState<string | null>(null);
+    
+    // Define the optional brief templates
+    const briefTemplates = [
+        {
+            id: "pain-point",
+            title: "Pain Point Solution Focus",
+            content: "I want you to generate ideas that directly address a key pain point of our target customers, and clearly show how our product or service uniquely solves this problem."
+        },
+        {
+            id: "testimonial",
+            title: "Emotional Testimonial Leverage",
+            content: "Please create ideas that leverage real or hypothetical testimonials—showing authentic customer voices and how their lives improved after using our product or service."
+        },
+        {
+            id: "data-driven",
+            title: "Data-Driven Proof",
+            content: "Develop ideas that use surprising, compelling, or quantifiable proof points (e.g., statistics, results, or proprietary data) to demonstrate the effectiveness of our product or service in a way that builds trust."
+        },
+        {
+            id: "comparison",
+            title: "Comparison/Before-After Stories",
+            content: "Generate ideas that use 'before and after' scenarios, direct comparisons, or transformation stories to vividly illustrate the difference our product or service makes."
+        },
+        {
+            id: "unexpected",
+            title: "Unexpected Use Cases or Benefits",
+            content: "I want you to come up with ideas that highlight unusual, overlooked, or unexpected ways our product or service can be used, providing fresh perspectives that competitors aren't talking about."
+        }
+    ];
 
     // --- Force re-render check ---
     useEffect(() => {
@@ -577,7 +611,7 @@ export function RecommendationCards() {
                 apiUrl += `&brief=${encodeURIComponent(userBrief.trim())}`;
             }
             apiUrl += `&taskSection=${encodeURIComponent(editableTaskSection)}`;
-            apiUrl += `&detailsSection=${encodeURIComponent(editableDetailsSection)}`;
+            // No longer sending detailsSection to the API
 
             const response = await fetch(apiUrl);
             const data = await response.json();
@@ -632,6 +666,25 @@ export function RecommendationCards() {
                 return prev.filter(m => m !== modelName);
             }
         });
+    };
+
+    // --- Handle brief template selection ---
+    const handleBriefTemplateSelection = (templateId: string, checked: boolean) => {
+        if (checked) {
+            // Find the template
+            const template = briefTemplates.find(t => t.id === templateId);
+            if (template) {
+                // Set the selected template and update the brief content
+                setSelectedBriefTemplate(templateId);
+                setUserBrief(template.content);
+            }
+        } else {
+            // If unchecked, clear the selection if it matches the current selection
+            if (selectedBriefTemplate === templateId) {
+                setSelectedBriefTemplate(null);
+                // Don't clear the user brief as they might have edited it
+            }
+        }
     };
 
     // --- UPDATED Card Click Handler (Toggle Single Selection) ---
@@ -1397,9 +1450,41 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                        </div>
                     </div>
 
-                    {/* User Brief Input */}
+                    {/* User Brief Input with Template Selection */}
                     <div className="grid gap-1.5 w-full">
-                        <Label htmlFor="rec-user-brief" className="text-sm font-medium">Optional Brief</Label>
+                        <div className="flex items-center justify-between">
+                            <Label htmlFor="rec-user-brief" className="text-sm font-medium">Optional Brief</Label>
+                            <Collapsible open={isOptionalBriefOpen} onOpenChange={setIsOptionalBriefOpen}>
+                                <CollapsibleTrigger asChild>
+                                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                                        {isOptionalBriefOpen ? "Hide Templates" : "Show Templates"}
+                                    </Button>
+                                </CollapsibleTrigger>
+                                <CollapsibleContent className="mt-2 space-y-2 border rounded-md p-3 bg-muted/30">
+                                    <div className="text-xs text-muted-foreground mb-2">Select a template to use as your brief:</div>
+                                    {briefTemplates.map((template) => (
+                                        <div key={template.id} className="flex items-start space-x-2">
+                                            <Checkbox 
+                                                id={`template-${template.id}`}
+                                                checked={selectedBriefTemplate === template.id}
+                                                onCheckedChange={(checked) => handleBriefTemplateSelection(template.id, !!checked)}
+                                                disabled={isAnyModelLoading || isMetaLoading}
+                                                className="mt-0.5"
+                                            />
+                                            <div className="grid gap-0.5">
+                                                <Label 
+                                                    htmlFor={`template-${template.id}`}
+                                                    className="text-xs font-medium cursor-pointer"
+                                                >
+                                                    {template.title}
+                                                </Label>
+                                                <p className="text-xs text-muted-foreground">{template.content}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </CollapsibleContent>
+                            </Collapsible>
+                        </div>
                         <Textarea
                             id="rec-user-brief"
                             placeholder="Provide additional context or specific instructions..."
