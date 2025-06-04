@@ -56,7 +56,40 @@ interface GenerateImageResponse {
 //   "5": "Ultimately, all strategies and content ideas must demonstrably help {clientName} **build strong brand authority, attract new customers, and establish irrefutable trust** by showcasing these undeniable and unique advantages.",
 //   "6": "Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting  (like \`\`\`json\`\`\`)."`;
 
-const DEFAULT_TASK_SECTION = `ช่วยคิดไอเดีย Core Ideas Marketing Strategies จากข้อมูลนี้ 10 ไอเดีย เป็นไอเดียที่แปลกใหม่ คู่แข่งของ ClientName ไม่สามารถทำได้มีเฉพาะเราที่เล่าเรื่องราวนี้ได้เท่านั้น โดยคุณจะต้องใช้ข้อมูลของ ClientName สิ่งที่ ClientName มีผนวกรวมเข้ากับไอเดียใหม่ๆที่เข้ากับแบรนด์และ makesence ไม่เวิ่นเว้อ เป็นไอเดียที่แปลกใหม่การตลาดที่ประสบความสำเร็จ ไอเดียที่ผมต้องการ ไม่ใช่แค่การใช้คำที่ดูดึงดูด ใช้ title ที่น่าสนใจ แต่ต้องเป็น Core Ideas Concept ไอเดียที่ดีที่แสดงออกถึงแบรนด์และสร้างอิมแพคให้กับแบรนด์ นี่คือสิ่งที่จะทำให้คุณประสบความสำเร็จในงานนี้โดยต้องอิงหลักความเป็นจริง นำเสนอสิ่งที่ทำได้จริง ไม่ใช่การอวดอ้างหรือคิดไปเอง สามารถทำได้ตามความสามารถที่ ClientName สามารถทำได้เท่านั้น`;
+const DEFAULT_TASK_SECTION = `You are a senior prompt engineer and content strategist with deep expertise in digital content for the Thai market.
+
+Task:
+Analyze the {clientname} brand info below. Use it as inspiration to create 20 unique, powerful “Core Content Concepts” (ideas) for the {clientname} Thailand Facebook page.
+
+Objectives:
+
+Grab the attention of Thai audiences (scroll-stopping ideas).
+
+Boost Facebook engagement (likes, comments, shares, saves).
+
+Spark interest in {clientname} and its services—making readers curious or motivated to learn more.
+
+Reflect {clientname} unique story, expertise, and point of view that competitors cannot copy.
+
+How to Think:
+
+Tap into real Thai pain points, dreams, and challenges around saving, investing, and managing money.
+
+Draw from brand stories, behind-the-scenes insights, customer experiences, unique data, and {clientname} special strengths.
+
+Turn technical/complex info into friendly, relatable stories or knowledge.
+
+Surprise, educate, or inspire readers (“Oh wow!” moments).
+
+Avoid direct selling or promotional language—focus on value, insight, or inspiration.
+
+Constraints:
+
+Exactly 20 ideas—no more, no less.
+
+Each idea = 1–3 sentences in Thai, describing the core concept (no titles, no call to action).
+
+Each idea must be distinctly different (no duplicates, no slight rewordings).`;
 
 const DEFAULT_DETAILS_SECTION = `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** ที่เน้นการนำเสนอจุดแข็งที่คู่แข่งไม่มี เช่น "ข้อมูลเชิงลึกของเราเท่านั้น", "ความแตกต่างจากคู่แข่ง", "ผลลัพธ์จริงของลูกค้า", "เทคโนโลยีเฉพาะที่ไม่มีใครใช้", "ค่าธรรมเนียมแบบใหม่", "มาตรฐานที่ยืนยันได้".
 
@@ -270,6 +303,18 @@ export function RecommendationCards() {
     // Remove router if no longer needed
     // const router = useRouter(); 
 
+    // --- State for Client/Product Selection ---
+    const [clientNames, setClientNames] = useState<string[]>([]);
+    const [productFocuses, setProductFocuses] = useState<string[]>([]);
+    const [selectedClientName, setSelectedClientName] = useState<string | null>(null);
+    const [selectedProductFocus, setSelectedProductFocus] = useState<string | null>(null);
+    const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+    const [isMetaLoading, setIsMetaLoading] = useState<boolean>(false);
+    const [metaError, setMetaError] = useState<string | null>(null);
+    const [userBrief, setUserBrief] = useState<string>("");
+    const [editableTaskSection, setEditableTaskSection] = useState<string>(DEFAULT_TASK_SECTION);
+    const [editableDetailsSection, setEditableDetailsSection] = useState<string>(DEFAULT_DETAILS_SECTION);
+
     // --- State for Data and Loading/Error (Updated for Multi-Model) ---
     const [resultsByModel, setResultsByModel] = useState<ModelResults>({});
     const [isLoading, setIsLoading] = useState<ModelLoadingState>({});
@@ -284,57 +329,117 @@ export function RecommendationCards() {
     const [isImageLoading, setIsImageLoading] = useState<boolean>(false);
     const [imageError, setImageError] = useState<string | null>(null);
 
-    // --- NEW: State for Competitor Analysis ---
-        const [competitorAnalysis, setCompetitorAnalysis] = useState<any>(null);
-        const [isCompetitorAnalysisLoading, setIsCompetitorAnalysisLoading] = useState<boolean>(false);
-        const [competitorAnalysisError, setCompetitorAnalysisError] = useState<string | null>(null);
-        const [showCompetitorAnalysis, setShowCompetitorAnalysis] = useState<boolean>(false);
-    
-        // --- Helper function to fetch competitor analysis ---
-        const fetchCompetitorAnalysis = async (retryCount = 0) => {
-    if (!selectedClientName || !selectedProductFocus) return;
+    // --- State for Competitor Analysis ---
+    const [competitorAnalysis, setCompetitorAnalysis] = useState<any>(null);
+    const [isCompetitorAnalysisLoading, setIsCompetitorAnalysisLoading] = useState<boolean>(false);
+    const [competitorAnalysisError, setCompetitorAnalysisError] = useState<string | null>(null);
+    const [showCompetitorAnalysis, setShowCompetitorAnalysis] = useState<boolean>(false);
 
-    setIsCompetitorAnalysisLoading(true);
-    setCompetitorAnalysisError(null);
-    setCompetitorAnalysis(null);
+    // --- Helper function to save competitor analysis ---
+    const saveCompetitorAnalysis = async (analysisData: any) => {
+        if (!selectedClientName || !selectedProductFocus) return false;
 
-    try {
-        console.log(`Fetching competitor analysis for ${selectedClientName}, ${selectedProductFocus}`);
-        // Include runId if available
-        const queryParams = new URLSearchParams();
-        queryParams.set('clientName', selectedClientName);
-        queryParams.set('productFocus', selectedProductFocus);
-        if (selectedRunId) {
-            queryParams.set('runId', selectedRunId);
+        try {
+            // Extract only the analysis data to save, not the entire response
+            const dataToSave = analysisData.analysis || analysisData;
+            
+            const response = await fetch('/api/competitor-analysis/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    clientName: selectedClientName,
+                    productFocus: selectedProductFocus,
+                    analysisData: dataToSave
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to save analysis');
+            }
+            return true;
+        } catch (error) {
+            console.error('Error saving analysis:', error);
+            return false;
         }
+    };
 
-        const response = await fetch(`/api/competitor-analysis?${queryParams.toString()}`);
+    // Load saved analysis when component mounts or client/product changes
+    useEffect(() => {
+        const loadSavedAnalysis = async () => {
+            if (!selectedClientName || !selectedProductFocus) return;
+            
+            try {
+                const response = await fetch(
+                    `/api/competitor-analysis/saved?client=${encodeURIComponent(selectedClientName)}&product=${encodeURIComponent(selectedProductFocus)}`
+                );
+                
+                if (response.ok) {
+                    const savedData = await response.json();
+                    if (savedData) {
+                        setCompetitorAnalysis(savedData);
+                        setShowCompetitorAnalysis(true);
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading saved analysis:', error);
+            }
+        };
 
-        if (!response.ok) {
-            throw new Error(`Error fetching competitor analysis: ${response.status}`);
-        }
+        loadSavedAnalysis();
+    }, [selectedClientName, selectedProductFocus]);
 
-        const data = await response.json();
-        console.log("Competitor analysis data received:", JSON.stringify(data, null, 2));
+    // --- Helper function to fetch competitor analysis ---
+    const fetchCompetitorAnalysis = async (retryCount = 0) => {
+        if (!selectedClientName || !selectedProductFocus) return;
 
-        // If Gemini JSON error, retry up to 3 times with a 10s delay
-        if (
-            data &&
-            data.analysis &&
-            typeof data.analysis.error === 'string' &&
-            data.analysis.error.includes('Gemini response was not valid JSON') &&
-            retryCount < 3
-        ) {
-            console.warn(`Gemini JSON error detected. Retrying competitor analysis in 10 seconds... (attempt ${retryCount + 1}/3)`);
-            setTimeout(() => {
-                fetchCompetitorAnalysis(retryCount + 1);
-            }, 10000); // 10 seconds
-            return;
-        }
+        setIsCompetitorAnalysisLoading(true);
+        setCompetitorAnalysisError(null);
+        setCompetitorAnalysis(null);
 
-        // Store the entire response object
-        setCompetitorAnalysis(data);
-        setShowCompetitorAnalysis(true);
+        try {
+            console.log(`Fetching competitor analysis for ${selectedClientName}, ${selectedProductFocus}`);
+            // Include runId if available
+            const queryParams = new URLSearchParams();
+            queryParams.set('clientName', selectedClientName);
+            queryParams.set('productFocus', selectedProductFocus);
+            if (selectedRunId) {
+                queryParams.set('runId', selectedRunId);
+            }
+
+            const response = await fetch(`/api/competitor-analysis?${queryParams.toString()}`);
+
+            if (!response.ok) {
+                throw new Error(`Error fetching competitor analysis: ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            if (
+                data &&
+                data.analysis &&
+                typeof data.analysis.error === 'string' &&
+                data.analysis.error.includes('Gemini response was not valid JSON') &&
+                retryCount < 3
+            ) {
+                console.warn(`Gemini JSON error detected. Retrying competitor analysis in 10 seconds... (attempt ${retryCount + 1}/3)`);
+                setTimeout(() => {
+                    fetchCompetitorAnalysis(retryCount + 1);
+                }, 10000); // 10 seconds
+                return;
+            }
+
+            // Auto-save the analysis
+            try {
+                await saveCompetitorAnalysis(data);
+                console.log('Analysis saved successfully');
+            } catch (saveError) {
+                console.error('Auto-save failed (non-critical):', saveError);
+                // Continue even if save fails
+            }
+
+            // Update the UI with the new data
+            setCompetitorAnalysis(data);
+            setShowCompetitorAnalysis(true);
 
         return data; // Return the data for use in other functions
     } catch (error) {
@@ -346,18 +451,6 @@ export function RecommendationCards() {
     }
 };
     
-    // --- State for Client/Product Selection ---
-    const [clientNames, setClientNames] = useState<string[]>([]);
-    const [productFocuses, setProductFocuses] = useState<string[]>([]);
-    const [selectedClientName, setSelectedClientName] = useState<string | null>(null);
-    const [selectedProductFocus, setSelectedProductFocus] = useState<string | null>(null);
-    const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-    const [isMetaLoading, setIsMetaLoading] = useState<boolean>(false);
-    const [metaError, setMetaError] = useState<string | null>(null);
-    const [userBrief, setUserBrief] = useState<string>("");
-    const [editableTaskSection, setEditableTaskSection] = useState<string>(DEFAULT_TASK_SECTION);
-    const [editableDetailsSection, setEditableDetailsSection] = useState<string>(DEFAULT_DETAILS_SECTION);
-
     // --- NEW: State for Model Selection ---
     const [selectedModels, setSelectedModels] = useState<string[]>(['gemini']); // Default to Gemini
 
@@ -1562,10 +1655,15 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                             
                             {showCompetitorAnalysis && competitorAnalysis && !isCompetitorAnalysisLoading && (
                                 <div className="border rounded-md bg-white p-4 max-h-[500px] overflow-y-auto">
+                                    {/* Enhanced debug output */}
                                     {(() => {
-                                        console.log("Rendering competitor analysis:", JSON.stringify(competitorAnalysis, null, 2));
+                                        console.log('Competitor Analysis Data:', competitorAnalysis);
+                                        console.log('Analysis Object:', competitorAnalysis.analysis);
+                                        console.log('Strengths:', competitorAnalysis.analysis?.strengths);
+                                        console.log('Is strengths array?', Array.isArray(competitorAnalysis.analysis?.strengths));
                                         return null;
                                     })()}
+                                    
                                     <div className="grid gap-6 grid-cols-1 md:grid-cols-2">
                                         {/* Strengths Section */}
                                         <div className="p-4 border rounded-lg bg-green-50 shadow-sm">
@@ -1576,12 +1674,18 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                                 Key Strengths
                                             </h3>
                                             <ul className="list-disc pl-5 space-y-2 text-sm">
-                                                {competitorAnalysis && competitorAnalysis.analysis && Array.isArray(competitorAnalysis.analysis.strengths) && competitorAnalysis.analysis.strengths.length > 0 ? (
-                                                    competitorAnalysis.analysis.strengths.map((item: any, i: number) => (
-                                                        <li key={i} className="text-gray-700">
-                                                            {item.brand && item.description ? `${item.brand}: ${item.description}` : item.description || item.brand || item}
-                                                        </li>
-                                                    ))
+                                                {competitorAnalysis?.analysis?.strengths?.length > 0 ? (
+                                                    competitorAnalysis.analysis.strengths.map((item: any, i: number) => {
+                                                        // Handle different possible item structures
+                                                        const displayText = item?.brand && item?.description 
+                                                            ? `${item.brand}: ${item.description}` 
+                                                            : item?.description || item?.brand || JSON.stringify(item);
+                                                        return (
+                                                            <li key={i} className="text-gray-700">
+                                                                {displayText}
+                                                            </li>
+                                                        );
+                                                    })
                                                 ) : (
                                                     <li className="text-gray-500">No strengths data available</li>
                                                 )}
@@ -1597,12 +1701,17 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                                 Weaknesses
                                             </h3>
                                             <ul className="list-disc pl-5 space-y-2 text-sm">
-                                                {competitorAnalysis && competitorAnalysis.analysis && Array.isArray(competitorAnalysis.analysis.weaknesses) && competitorAnalysis.analysis.weaknesses.length > 0 ? (
-                                                    competitorAnalysis.analysis.weaknesses.map((item: any, i: number) => (
-                                                        <li key={i} className="text-gray-700">
-                                                            {item.brand && item.description ? `${item.brand}: ${item.description}` : item.description || item.brand || item}
-                                                        </li>
-                                                    ))
+                                                {competitorAnalysis?.analysis?.weaknesses?.length > 0 ? (
+                                                    competitorAnalysis.analysis.weaknesses.map((item: any, i: number) => {
+                                                        const displayText = item?.brand && item?.description 
+                                                            ? `${item.brand}: ${item.description}` 
+                                                            : item?.description || item?.brand || JSON.stringify(item);
+                                                        return (
+                                                            <li key={i} className="text-gray-700">
+                                                                {displayText}
+                                                            </li>
+                                                        );
+                                                    })
                                                 ) : (
                                                     <li className="text-gray-500">No weaknesses data available</li>
                                                 )}
@@ -1618,12 +1727,17 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                                 Shared Patterns
                                             </h3>
                                             <ul className="list-disc pl-5 space-y-2 text-sm">
-                                                {competitorAnalysis && competitorAnalysis.analysis && Array.isArray(competitorAnalysis.analysis.shared_patterns) && competitorAnalysis.analysis.shared_patterns.length > 0 ? (
-                                                    competitorAnalysis.analysis.shared_patterns.map((item: any, i: number) => (
-                                                        <li key={i} className="text-gray-700">
-                                                            {item.brand && item.description ? `${item.brand}: ${item.description}` : item.description || item.brand || item}
-                                                        </li>
-                                                    ))
+                                                {competitorAnalysis?.analysis?.shared_patterns?.length > 0 ? (
+                                                    competitorAnalysis.analysis.shared_patterns.map((item: any, i: number) => {
+                                                        const displayText = item?.brand && item?.description 
+                                                            ? `${item.brand}: ${item.description}` 
+                                                            : item?.description || item?.brand || JSON.stringify(item);
+                                                        return (
+                                                            <li key={i} className="text-gray-700">
+                                                                {displayText}
+                                                            </li>
+                                                        );
+                                                    })
                                                 ) : (
                                                     <li className="text-gray-500">No shared patterns data available</li>
                                                 )}
@@ -1639,12 +1753,19 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                                 Market Gaps
                                             </h3>
                                             <ul className="list-disc pl-5 space-y-2 text-sm">
-                                                {competitorAnalysis && competitorAnalysis.analysis && Array.isArray(competitorAnalysis.analysis.market_gaps) && competitorAnalysis.analysis.market_gaps.length > 0 ? 
-                                                    competitorAnalysis.analysis.market_gaps.map((item: string, i: number) => (
-                                                        <li key={i} className="text-gray-700">{item}</li>
-                                                    )) : 
+                                                {competitorAnalysis?.analysis?.market_gaps?.length > 0 ? (
+                                                    competitorAnalysis.analysis.market_gaps.map((item: any, i: number) => {
+                                                        const displayText = typeof item === 'string' ? item : 
+                                                            (item?.description || JSON.stringify(item));
+                                                        return (
+                                                            <li key={i} className="text-gray-700">
+                                                                {displayText}
+                                                            </li>
+                                                        );
+                                                    })
+                                                ) : (
                                                     <li className="text-gray-500">No market gaps data available</li>
-                                                }
+                                                )}
                                             </ul>
                                         </div>
                                         
@@ -1657,12 +1778,19 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                                 Differentiation Strategies
                                             </h3>
                                             <ul className="list-disc pl-5 space-y-2 text-sm">
-                                                {competitorAnalysis && competitorAnalysis.analysis && Array.isArray(competitorAnalysis.analysis.differentiation_strategies) && competitorAnalysis.analysis.differentiation_strategies.length > 0 ? 
-                                                    competitorAnalysis.analysis.differentiation_strategies.map((item: string, i: number) => (
-                                                        <li key={i} className="text-gray-700">{item}</li>
-                                                    )) : 
+                                                {competitorAnalysis?.analysis?.differentiation_strategies?.length > 0 ? (
+                                                    competitorAnalysis.analysis.differentiation_strategies.map((item: any, i: number) => {
+                                                        const displayText = typeof item === 'string' ? item : 
+                                                            (item?.description || JSON.stringify(item));
+                                                        return (
+                                                            <li key={i} className="text-gray-700">
+                                                                {displayText}
+                                                            </li>
+                                                        );
+                                                    })
+                                                ) : (
                                                     <li className="text-gray-500">No differentiation strategies data available</li>
-                                                }
+                                                )}
                                             </ul>
                                         </div>
                                         
@@ -2212,68 +2340,6 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                 </section>
                             )}
 
-
-                            {/* --- Image Generation Section --- */}
-                            {/* <section className="space-y-3 pt-4 border-t mt-4">
-                                <h4 className="font-semibold">Generate Visual Concept (Ideogram)</h4>
-                                <div className="flex items-center gap-4">
-                                    <Label htmlFor="aspect-ratio-select" className="text-sm whitespace-nowrap">Aspect Ratio:</Label>
-                                    <Select
-                                        value={aspectRatio}
-                                        onValueChange={setAspectRatio}
-                                        disabled={isImageLoading}
-                                    >
-                                        <SelectTrigger className="h-9 w-[150px] bg-background" id="aspect-ratio-select">
-                                            <SelectValue placeholder="Select Ratio..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="ASPECT_16_9">16:9 (Landscape)</SelectItem>
-                                            <SelectItem value="ASPECT_1_1">1:1 (Square)</SelectItem>
-                                            <SelectItem value="ASPECT_9_16">9:16 (Portrait)</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                    <Button
-                                        onClick={handleGenerateImage}
-                                        disabled={isImageLoading || !selectedRecommendation}
-                                        size="sm"
-                                    >
-                                        {isImageLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                        {isImageLoading ? 'Generating...' : 'Generate Image'}
-                                    </Button>
-                                </div>
-
-                                <div className="mt-4 min-h-[200px] border rounded-md flex items-center justify-center bg-muted/20 p-4">
-                                    {isImageLoading && (
-                                        <div className="flex flex-col items-center text-muted-foreground">
-                                            <Loader2 className="h-8 w-8 animate-spin mb-2" />
-                                            <span>Generating image...</span>
-                                        </div>
-                                    )}
-                                    {imageError && !isImageLoading && (
-                                        <div className="flex flex-col items-center text-destructive text-center">
-                                            <AlertTriangle className="h-8 w-8 mb-2" />
-                                            <span className="font-semibold">Image Generation Failed</span>
-                                            <span className="text-xs mt-1">{imageError}</span>
-                                        </div>
-                                    )}
-                                    {!isImageLoading && !imageError && generatedImageUrl && (
-                                        <div className="w-full">
-                                            <h4 className="font-semibold mb-2">Generated Image:</h4>
-                                            <div className="relative w-full border rounded-lg overflow-hidden bg-muted/20">
-                                                <img
-                                                    src={generatedImageUrl}
-                                                    alt="Generated image"
-                                                    className="w-full object-contain mx-auto"
-                                                    style={{ maxHeight: '600px' }}
-                                                />
-                                            </div>
-                                        </div>
-                                    )}
-                                    {!isImageLoading && !imageError && !generatedImageUrl && (
-                                        <span className="text-muted-foreground text-sm">Click "Generate Image" to visualize the concept.</span>
-                                    )}
-                                </div>
-                            </section> */}
 
                         </div>
                     </ScrollArea>

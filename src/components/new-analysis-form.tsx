@@ -25,7 +25,9 @@ const formSchema = z.object({
   market: z.string({
     required_error: "Please select a market.",
   }),
-  productFocus: z.string().optional(),
+  productFocus: z.string().min(1, {
+    message: "Product/Service focus is required.",
+  }),
   additionalInfo: z.string().optional(),
   userCompetitors: z.string().optional(),
 })
