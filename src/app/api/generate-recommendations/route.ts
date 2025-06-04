@@ -259,29 +259,40 @@ export async function GET(request: NextRequest) {
         try {
             console.log(`[Refactor] Fetching competitor analysis from Supabase for client: ${analysisRunData.clientName}, product: ${analysisRunData.productFocus}`);
             
-            const { data: analysisData, error } = await supabaseAdmin
+            const { data: allAnalysisData, error } = await supabaseAdmin
                 .from('competitor_analysis')
-                .select('analysis_data')
-                .eq('client_name', analysisRunData.clientName)
-                .eq('product_focus', analysisRunData.productFocus || '')
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .single();
-            
+                .select('analysis_data, client_name, product_focus, created_at')
+                .eq('client_name', analysisRunData.clientName.trim())
+                .eq('product_focus', (analysisRunData.productFocus || '').trim())
+                .order('created_at', { ascending: false });
+
             if (error) {
-                console.warn(`[Refactor] Failed to fetch competitor analysis from Supabase:`, error);
-            } else if (analysisData) {
-                // Format the competitor analysis data for the prompt
-                const researchData = analysisData.analysis_data?.research || [];
-                competitorAnalysisData = `
+                console.error('[DB Query] Supabase error:', {
+                    message: error.message,
+                    code: error.code,
+                    details: error.details,
+                    hint: error.hint
+                });
+                throw error;
+            }
 
-## Market Research & Insights (Google Search)
-${researchData.map((r: string) => `- ${r}`).join('\n') || 'No research data available.'}
-
-`;
-                console.log(`[Refactor] Successfully fetched competitor analysis from Supabase. Length: ${competitorAnalysisData.length}`);
+            if (!allAnalysisData || allAnalysisData.length === 0) {
+                console.warn('[DB Query] No analysis data found for:', {
+                    client: analysisRunData.clientName,
+                    product: analysisRunData.productFocus
+                });
+                competitorAnalysisData = '## Market Research & Insights\nNo research data available.\n';
             } else {
-                console.warn('[Refactor] No competitor analysis found in Supabase');
+                const latestAnalysis = allAnalysisData[0];
+                console.log('[DB Query] Found data:', {
+                    client_name: latestAnalysis.client_name,
+                    product_focus: latestAnalysis.product_focus,
+                    created_at: latestAnalysis.created_at,
+                    data_keys: latestAnalysis.analysis_data ? Object.keys(latestAnalysis.analysis_data) : []
+                });
+                
+                // Include the entire analysis_data JSON in the prompt
+                competitorAnalysisData = `## Market Research & Insights\n${JSON.stringify(latestAnalysis.analysis_data, null, 2)}\n`;
             }
         } catch (error) {
             console.error("[Refactor] Error fetching competitor analysis from Supabase:", error);

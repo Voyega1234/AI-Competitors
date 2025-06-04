@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Bookmark, Share2, Loader2, AlertTriangle, BrainCircuit, X, Info, CheckSquare, UploadCloud, ExternalLink, Copy, Download, EyeOff, FileText, Image as LucideImage, Link, List, MoreHorizontal, Plus, Sparkles, UserPlus, ThumbsUp, ThumbsDown, MessageCircle, RefreshCw } from "lucide-react"
+import { Bookmark, Share2, Loader2, AlertTriangle, BrainCircuit, X, Info, CheckSquare, UploadCloud, ExternalLink, Copy, Download, EyeOff, FileText, Image as LucideImage, Link, List, MoreHorizontal, Plus, Sparkles, UserPlus, ThumbsUp, ThumbsDown, MessageCircle, RefreshCw, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useState, useEffect } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -37,24 +37,6 @@ interface GenerateImageResponse {
     error?: string;
 }
 
-// --- Define Defaults for Editable Prompt Sections ---
-// const DEFAULT_TASK_SECTION = `"1. Analyze the client's situation and the provided competitor analysis to develop 10-15 actionable marketing content strategies that highlight {clientName}'s exclusive features, statistics,social proof to build credibility or performance metrics—elements that only {clientName} can claim and no competitors can match.  
-// 2. Focus on quantifiable proof points, proprietary data, or one-of-a-kind capabilities of {clientName} that directly address customer needs in ways competitors cannot.  
-// 3. I need a creative idea that breaks the mold — something with strong internal logic, refined through multiple stages of thinking, and far from anything ordinary or easily accessible.
-// 4. Crafting Stop-Scrolling Titles & Content that Showcase Exclusive Metrics, Social proof to build credibility, and Transformative but use Use accessible language. such as 'เปลี่ยนวิธีคิดเรื่องทองคำ: จาก 'ซื้อเก็บ' เป็น 'ลงทุน' สร้างอนาคต', 'ลงทุนทองคำรูปแบบใหม่ ที่นักลงทุน xxx สัญชาติทั่วโลกให้ความไว้วางใจ','StashAway บริหารจัดการทรัพย์มากกว่า xxx พันล้านเหรียญสหรัฐ'. 
-// 5. Strategies should help {clientName} build strong brand authority, attract new customers, and establish trust by showing irrefutable advantages.  
-// 6. Each strategy should be Apply with Framework from books or more creative idea" 
-// 7. Let's make sure the idea taps into something that only we can do a true brand signature that competitors simply can't replicate.
-// 8. Find the pain of the customer and offer the our solution or Show social proof to build credibility. that what we can do to solve the pain. 
-// 9. Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting (like \`\`\json\`\`\`).`;
-
-// const DEFAULT_TASK_SECTION = `** I want to focusing on how our product give the solutions base on pain point of customer **
-// "1": "Generate 10–12 original marketing content ideas for {clientName} that are **'ออกจากกรอบ' (clever, unconventional, innovative)**. These ideas must be emotionally resonant, creatively persuasive, and stem from advantages so unique that competitors **cannot replicate** them. 'ออกจากกรอบ' status is achieved by: a) Identifying hyper-specific, perhaps counter-intuitive, customer segments and their unique motivations. b) Linking the product/service to non-obvious cultural insights or societal trends. c) Using proprietary data to reveal a surprising truth or challenge a common assumption. You can get reference from Market Research & Insights (Google Search) for create ideas",
-//   "2": "Each idea must leverage **quantifiable proof points, surprising or non-obvious proprietary data, unique customer behavior patterns, or overlooked cultural nuances** unique to {clientName}. This is to directly address customer needs or deeply felt (perhaps unarticulated) pain points in ways competitors definitively cannot, potentially reframing common pain points unexpectedly.",
-//   "3": "Employ **emotional storytelling, powerful comparisons, or potent psychological triggers** (e.g., authority, curiosity sparked by paradox/anomaly, fear of missing out on belonging to a uniquely defined group, strong social proof, scarcity, or cognitive dissonance resolution). The aim is to make the reader *feel* something significant, spark a profound insight, or reposition a core belief. Think unexpected angles, surprising juxtapositions of concepts, human truths, or connecting {clientName}'s offering to everyday objects, seemingly unrelated cultural moments, niche hobbies, or common sayings in a completely fresh way.",
-//   "4": "The content for each idea must start from a main headline that presents the core concept—the fundamental insight or message the idea represents (for example, the gold example: 'Shift your thinking on gold: From 'buy and store' to 'invest and build future wealth'). The headline and supporting copy must: grab attention, use exclusive metrics or compelling social proof (in a fact-news style for credibility), demonstrate transformative value, and be presented in accessible language.",
-//   "5": "Ultimately, all strategies and content ideas must demonstrably help {clientName} **build strong brand authority, attract new customers, and establish irrefutable trust** by showcasing these undeniable and unique advantages.",
-//   "6": "Return ONLY a single, valid JSON object. No introductory text, explanations, or markdown formatting  (like \`\`\`json\`\`\`)."`;
 
 const DEFAULT_TASK_SECTION = `You are a senior prompt engineer and content strategist with deep expertise in digital content for the Thai market.
 
@@ -329,33 +311,135 @@ export function RecommendationCards() {
     const [isImageLoading, setIsImageLoading] = useState<boolean>(false);
     const [imageError, setImageError] = useState<string | null>(null);
 
-    // --- State for Competitor Analysis ---
-    const [competitorAnalysis, setCompetitorAnalysis] = useState<any>(null);
+    // Define types for competitor analysis data
+interface CompetitorAnalysisData {
+    analysis?: any;
+    news?: Array<{title: string, summary: string}>;
+    [key: string]: any;
+}
+
+// --- State for Competitor Analysis ---
+    const [competitorAnalysis, setCompetitorAnalysis] = useState<CompetitorAnalysisData | null>(null);
     const [isCompetitorAnalysisLoading, setIsCompetitorAnalysisLoading] = useState<boolean>(false);
     const [competitorAnalysisError, setCompetitorAnalysisError] = useState<string | null>(null);
     const [showCompetitorAnalysis, setShowCompetitorAnalysis] = useState<boolean>(false);
+    const [news, setNews] = useState<Array<{title: string, summary: string, isExpanded: boolean}>>([]);
+    const [isNewsLoading, setIsNewsLoading] = useState<boolean>(false);
+    const [newsError, setNewsError] = useState<string | null>(null);
+
+    // --- Function to fetch related news ---
+    const fetchNews = async () => {
+        console.log('🔄 Starting to fetch news...');
+        if (!selectedClientName || !selectedProductFocus) {
+            console.log('❌ Missing client name or product focus');
+            return [];
+        }
+        
+        console.log(`📡 Fetching news for client: ${selectedClientName}, product: ${selectedProductFocus}`);
+        setIsNewsLoading(true);
+        setNewsError(null);
+        
+        try {
+            // Create abort controller for timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 200000); // 200 seconds
+            
+            console.log('🌐 Sending request to news API...');
+            const startTime = Date.now();
+            
+            const response = await fetch('https://convertcake-cvc.app.n8n.cloud/webhook/8b48c939-f6fc-4fc1-ba64-31753732197c', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    client_name: selectedClientName,
+                    product_focus: selectedProductFocus
+                }),
+                signal: controller.signal
+            });
+            
+            // Clear the timeout since the request completed
+            clearTimeout(timeoutId);
+            const requestTime = Date.now() - startTime;
+            console.log(`✅ Received response in ${requestTime}ms. Status: ${response.status}`);
+    
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+    
+            let result;
+            try {
+                result = await response.json();
+                console.log('📰 Raw news API response:', JSON.stringify(result, null, 2));
+            } catch (e) {
+                console.error('Failed to parse JSON response:', e);
+                throw new Error('Invalid response from server');
+            }
+            
+            // Handle both array response and nested response format
+            let newsData = [];
+            if (Array.isArray(result)) {
+                newsData = result;
+            } else if (result[0]?.response?.body?.output?.news_summaries) {
+                newsData = result[0].response.body.output.news_summaries;
+            } else if (result.news_summaries) {
+                newsData = result.news_summaries;
+            }
+            
+            console.log(`📊 Found ${newsData?.length || 0} news items`);
+            
+            const formattedNews = (newsData || []).map((item: any) => ({
+                title: item.title || 'No title',
+                summary: item.summary || 'No summary available',
+                isExpanded: true // Expanded by default
+            }));
+    
+            setNews(formattedNews);
+            console.log('🎉 Successfully updated news state');
+            return formattedNews;
+            
+        } catch (error) {
+            console.error('❌ Error fetching news:', error);
+            const errorMessage = error instanceof Error ? error.message : 'Failed to load news';
+            console.error('Error details:', error);
+            setNewsError(`News: ${errorMessage}. Will continue with available data.`);
+            return [];
+        } finally {
+            console.log('🏁 Finished news fetch operation');
+            setIsNewsLoading(false);
+        }
+    };
+
+    // Helper function to toggle news item expansion
+    const toggleNewsItem = (index: number) => {
+        setNews(prevNews => 
+            prevNews.map((item, i) => 
+                i === index ? { ...item, isExpanded: !item.isExpanded } : item
+            )
+        );
+    };
 
     // --- Helper function to save competitor analysis ---
     const saveCompetitorAnalysis = async (analysisData: any) => {
-        if (!selectedClientName || !selectedProductFocus) return false;
-
+        if (!selectedClientName || !selectedProductFocus) {
+            console.log('Cannot save: Missing client name or product focus');
+            return false;
+        }
+    
         try {
-            // Extract only the analysis data to save, not the entire response
-            const dataToSave = analysisData.analysis || analysisData;
-            
             const response = await fetch('/api/competitor-analysis/save', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     clientName: selectedClientName,
                     productFocus: selectedProductFocus,
-                    analysisData: dataToSave
+                    analysisData: analysisData
                 })
             });
-
+    
             if (!response.ok) {
                 throw new Error('Failed to save analysis');
             }
+    
             return true;
         } catch (error) {
             console.error('Error saving analysis:', error);
@@ -390,66 +474,94 @@ export function RecommendationCards() {
 
     // --- Helper function to fetch competitor analysis ---
     const fetchCompetitorAnalysis = async (retryCount = 0) => {
-        if (!selectedClientName || !selectedProductFocus) return;
-
+        if (!selectedClientName || !selectedProductFocus) {
+            console.log('Missing client name or product focus');
+            return null;
+        }
+    
         setIsCompetitorAnalysisLoading(true);
         setCompetitorAnalysisError(null);
-        setCompetitorAnalysis(null);
-
+    
         try {
-            console.log(`Fetching competitor analysis for ${selectedClientName}, ${selectedProductFocus}`);
-            // Include runId if available
-            const queryParams = new URLSearchParams();
-            queryParams.set('clientName', selectedClientName);
-            queryParams.set('productFocus', selectedProductFocus);
-            if (selectedRunId) {
-                queryParams.set('runId', selectedRunId);
+            // 1. Prepare query parameters
+            const queryParams = new URLSearchParams({
+                clientName: selectedClientName,
+                productFocus: selectedProductFocus,
+                ...(selectedRunId && { runId: selectedRunId })
+            });
+
+            console.log('Starting parallel API requests...');
+            
+            // 2. Start both API calls in parallel
+            const [analysisResponse, newsResponse] = await Promise.allSettled([
+                fetch(`/api/competitor-analysis?${queryParams.toString()}`),
+                fetchNews() // This will handle its own loading state
+            ]);
+
+            // 3. Handle analysis response
+            if (analysisResponse.status === 'rejected') {
+                throw new Error('Failed to fetch analysis data');
             }
-
-            const response = await fetch(`/api/competitor-analysis?${queryParams.toString()}`);
-
+            
+            const response = analysisResponse.value;
             if (!response.ok) {
                 throw new Error(`Error fetching competitor analysis: ${response.status}`);
             }
 
             const data = await response.json();
 
-            if (
-                data &&
-                data.analysis &&
-                typeof data.analysis.error === 'string' &&
-                data.analysis.error.includes('Gemini response was not valid JSON') &&
-                retryCount < 3
-            ) {
-                console.warn(`Gemini JSON error detected. Retrying competitor analysis in 10 seconds... (attempt ${retryCount + 1}/3)`);
-                setTimeout(() => {
-                    fetchCompetitorAnalysis(retryCount + 1);
-                }, 10000); // 10 seconds
-                return;
+            // Handle Gemini JSON errors with retry logic
+            if (data?.analysis?.error?.includes('Gemini response was not valid JSON') && retryCount < 3) {
+                console.log(`Retrying competitor analysis (attempt ${retryCount + 1}/3)...`);
+                return new Promise(resolve => {
+                    setTimeout(async () => {
+                        const result = await fetchCompetitorAnalysis(retryCount + 1);
+                        resolve(result);
+                    }, 3000);
+                });
             }
 
-            // Auto-save the analysis
-            try {
-                await saveCompetitorAnalysis(data);
-                console.log('Analysis saved successfully');
-            } catch (saveError) {
-                console.error('Auto-save failed (non-critical):', saveError);
-                // Continue even if save fails
+            // 4. Process news response
+            let newsData = [];
+            if (newsResponse.status === 'fulfilled') {
+                newsData = newsResponse.value;
+                // Update news state directly to ensure UI has the latest data
+                setNews(newsData);
+            } else {
+                console.warn('News fetch failed:', newsResponse.reason);
+                setNewsError('Could not load latest news. You can try refreshing later.');
             }
 
-            // Update the UI with the new data
-            setCompetitorAnalysis(data);
+            // 5. Combine analysis and news data
+            const combinedData = {
+                ...data,
+                news: newsData
+            };
+    
+            // 6. Save the combined data
+            const saveSuccess = await saveCompetitorAnalysis(combinedData);
+            if (!saveSuccess) {
+                console.warn('Failed to save competitor analysis');
+            }
+    
+            // 7. Update state with the complete data
+            setCompetitorAnalysis(prev => ({
+                ...prev,
+                ...combinedData
+            }));
             setShowCompetitorAnalysis(true);
-
-        return data; // Return the data for use in other functions
-    } catch (error) {
-        console.error("Error fetching competitor analysis:", error);
-        setCompetitorAnalysisError(error instanceof Error ? error.message : String(error));
-        return null;
-    } finally {
-        setIsCompetitorAnalysisLoading(false);
-    }
-};
+    
+            console.log('Analysis and news loaded successfully');
+            return combinedData;
+    
+        } catch (error) {
+            console.error("Error in fetchCompetitorAnalysis:", error);
+            setCompetitorAnalysisError("Failed to load analysis. Please try again later.");
+            return null;
+        } finally {
+            setIsCompetitorAnalysisLoading(false);
+        }
+    };
     
     // --- NEW: State for Model Selection ---
     const [selectedModels, setSelectedModels] = useState<string[]>(['gemini']); // Default to Gemini
@@ -884,12 +996,7 @@ export function RecommendationCards() {
         } catch (err: any) {
             console.error("[ui] Error generating customer journey:", err);
             setJourneyError(err.message || "Failed to generate customer journey.");
-            // Optionally clear the journey entry for this card if it failed
-            // setCustomerJourneys(prev => {
-            //     const newState = { ...prev };
-            //     delete newState[cardTempId];
-            //     return newState;
-            // });
+           
         } finally {
             setIsGeneratingJourneys(false); // Set loading false regardless of success/fail
         }
@@ -1589,7 +1696,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                     </div>
 
                     {/* Editable Task Section */}
-                    <div className="grid gap-1.5 w-full">
+                    {/* <div className="grid gap-1.5 w-full">
                         <Label htmlFor="editable-task-section" className="text-sm font-medium">Editable Prompt: Task Section</Label>
                         <Textarea
                             id="editable-task-section"
@@ -1599,7 +1706,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                             className="min-h-[150px] bg-background font-mono text-xs"
                             disabled={isAnyModelLoading || isMetaLoading}
                         />
-                    </div>
+                    </div> */}
 
                     {/* Editable Details Section */}
                     {/* <div className="grid gap-1.5 w-full">
@@ -1616,7 +1723,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                        {(competitorAnalysis || isCompetitorAnalysisLoading) && (
                         <div className="grid gap-1.5 w-full mb-6 border-2 border-primary/20 rounded-lg p-4 bg-primary/5 shadow-sm">
                             <div className="flex items-center justify-between">
-                                <Label className="text-lg font-semibold text-primary">Competitor Analysis</Label>
+                                <Label className="text-lg font-semibold text-primary">Market Research & Competitor Analysis</Label>
                                 <div className="flex items-center gap-2">
                                     <Button 
                                         variant="outline" 
@@ -1811,6 +1918,65 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                                     <li className="text-gray-500">No research data available</li>
                                                 }
                                             </ul>
+                                        </div>
+                                        
+                                        {/* Related News Highlights Section */}
+                                        <div className="p-4 border rounded-lg bg-amber-50 shadow-sm col-span-2">
+                                            <div className="flex justify-between items-center mb-3">
+                                                <h3 className="text-lg font-semibold text-amber-800 flex items-center">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
+                                                    </svg>
+                                                    Related News Highlights
+                                                </h3>
+                                                <Button 
+                                                    variant="outline" 
+                                                    size="sm" 
+                                                    onClick={fetchNews}
+                                                    disabled={isNewsLoading}
+                                                    className="text-xs h-7"
+                                                >
+                                                    {isNewsLoading ? (
+                                                        <>
+                                                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                                            Loading
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <RefreshCw className="mr-1 h-3 w-3" />
+                                                            Refresh
+                                                        </>
+                                                    )}
+                                                </Button>
+                                            </div>
+                                            
+                                            {isNewsLoading && !news.length ? (
+                                                <div className="flex items-center justify-center py-4">
+                                                    <Loader2 className="h-5 w-5 animate-spin text-amber-500 mr-2" />
+                                                    <span className="text-amber-700 text-sm">Loading news...</span>
+                                                </div>
+                                            ) : newsError ? (
+                                                <div className="p-3 bg-red-50 text-red-600 rounded text-sm">
+                                                    {newsError}
+                                                </div>
+                                            ) : news.length > 0 ? (
+                                                <ul className="space-y-3 list-disc pl-5">
+                                                    {news.map((item, index) => (
+                                                        <li key={index} className="text-amber-900">
+                                                            <div className="font-medium">{item.title}</div>
+                                                            {item.summary && (
+                                                                <div className="mt-1 text-sm text-amber-800">
+                                                                    {item.summary}
+                                                                </div>
+                                                            )}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            ) : (
+                                                <div className="text-center py-4 text-amber-700 text-sm">
+                                                    No recent news found. Try refreshing to check for updates.
+                                                </div>
+                                            )}
                                         </div>
                                         
                                         {/* Summary Section - Full Width */}
