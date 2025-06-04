@@ -255,42 +255,36 @@ export async function GET(request: NextRequest) {
     let competitorAnalysisData = '';
     
     if (GEMINI_API_KEY) { // Only attempt grounding if the key is available
-        // First, fetch competitor analysis from the competitor-analysis endpoint using POST
+        // Fetch competitor analysis directly from Supabase
         try {
-            console.log(`[Refactor] Fetching competitor analysis for client: ${analysisRunData.clientName}`);
+            console.log(`[Refactor] Fetching competitor analysis from Supabase for client: ${analysisRunData.clientName}, product: ${analysisRunData.productFocus}`);
             
-            // Use POST request to competitor-analysis endpoint
-            const competitorAnalysisResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/competitor-analysis`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    clientName: analysisRunData.clientName,
-                    productFocus: analysisRunData.productFocus || '',
-                    runId: runId, // Pass the runId for context
-                }),
-            });
+            const { data: analysisData, error } = await supabaseAdmin
+                .from('competitor_analysis')
+                .select('analysis_data')
+                .eq('client_name', analysisRunData.clientName)
+                .eq('product_focus', analysisRunData.productFocus || '')
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
             
-            if (!competitorAnalysisResponse.ok) {
-                console.warn(`[Refactor] Failed to fetch competitor analysis: ${competitorAnalysisResponse.status}`);
-            } else {
-                const competitorAnalysisResult = await competitorAnalysisResponse.json();
-                if (!competitorAnalysisResult.error) {
-                    // Format the competitor analysis data for the prompt
-                    competitorAnalysisData = `
+            if (error) {
+                console.warn(`[Refactor] Failed to fetch competitor analysis from Supabase:`, error);
+            } else if (analysisData) {
+                // Format the competitor analysis data for the prompt
+                const researchData = analysisData.analysis_data?.research || [];
+                competitorAnalysisData = `
 
-                ## Market Research & Insights (Google Search)
-                ${competitorAnalysisResult.research?.map((r: string) => `- ${r}`).join('\n') || 'No research data available.'}
+## Market Research & Insights (Google Search)
+${researchData.map((r: string) => `- ${r}`).join('\n') || 'No research data available.'}
 
 `;
-                    console.log(`[Refactor] Successfully fetched competitor analysis. Length: ${competitorAnalysisData.length}`);
-                } else {
-                    console.warn(`[Refactor] Competitor analysis returned error: ${competitorAnalysisResult.error}`);
-                }
+                console.log(`[Refactor] Successfully fetched competitor analysis from Supabase. Length: ${competitorAnalysisData.length}`);
+            } else {
+                console.warn('[Refactor] No competitor analysis found in Supabase');
             }
-        } catch (competitorAnalysisError: any) {
-            console.error("[Refactor] Error fetching competitor analysis:", competitorAnalysisError);
+        } catch (error) {
+            console.error("[Refactor] Error fetching competitor analysis from Supabase:", error);
             // Proceed without competitor analysis if fetch fails
         }
         
