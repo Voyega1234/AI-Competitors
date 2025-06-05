@@ -563,8 +563,11 @@ interface CompetitorAnalysisData {
         }
     };
     
-    // --- NEW: State for Model Selection ---
+    // --- State for Model Selection ---
     const [selectedModels, setSelectedModels] = useState<string[]>(['gemini']); // Default to Gemini
+    
+    // --- State for Competitor Analysis Toggle ---
+    const [includeCompetitorAnalysis, setIncludeCompetitorAnalysis] = useState<boolean>(true);
 
     // --- UPDATED: State for Card Selection (Single Selection) ---
     const [selectedCard, setSelectedCard] = useState<Recommendation | null>(null);
@@ -816,6 +819,10 @@ interface CompetitorAnalysisData {
                 apiUrl += `&brief=${encodeURIComponent(userBrief.trim())}`;
             }
             apiUrl += `&taskSection=${encodeURIComponent(editableTaskSection)}`;
+            apiUrl += `&includeCompetitorAnalysis=${includeCompetitorAnalysis}`;
+            apiUrl += `&clientName=${encodeURIComponent(selectedClientName || '')}`;
+            apiUrl += `&productFocus=${encodeURIComponent(selectedProductFocus || '')}`;
+            apiUrl += `&market=Thailand`;  // Default market
             // No longer sending detailsSection to the API
 
             const response = await fetch(apiUrl);
@@ -1648,6 +1655,29 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                </div>
                            ))}
                        </div>
+                    </div>
+
+                    {/* Competitor Analysis Toggle */}
+                    <div className="flex items-center space-x-2 p-3 bg-muted/30 rounded-md">
+                        <Checkbox 
+                            id="include-competitor-analysis"
+                            checked={includeCompetitorAnalysis}
+                            onCheckedChange={(checked) => setIncludeCompetitorAnalysis(checked === true)}
+                            disabled={isAnyModelLoading || isMetaLoading}
+                        />
+                        <div className="grid gap-1.5 leading-none">
+                            <label
+                                htmlFor="include-competitor-analysis"
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                            >
+                                Include Competitor Analysis
+                            </label>
+                            <p className="text-xs text-muted-foreground">
+                                {includeCompetitorAnalysis 
+                                    ? "Competitor analysis will be included in recommendations"
+                                    : "Recommendations will be generated without Market Research & Competitor Analysis Data"}
+                            </p>
+                        </div>
                     </div>
 
                     {/* User Brief Input with Template Selection */}

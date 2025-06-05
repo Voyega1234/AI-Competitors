@@ -74,6 +74,84 @@ interface GeminiRecommendationOutput {
 // Define the path to the book summaries directory (should match the one in /api/book-summaries)
 const booksDirectory = path.join(process.cwd(), 'src', 'app', 'api', 'generate-recommendations', 'books_prompts');
 
+// Function to build the final user prompt with all necessary parameters
+const buildFinalUserPrompt = (
+  clientName: string,
+  market: string,
+  productFocus: string | null,
+  userBrief: string,
+  groundedInfo: string,
+  bookSummaryContent: string,
+  competitorAnalysisText: string,
+  taskSectionParam: string | null,
+  detailsSectionParam: string | null
+) => {
+  const groundedSection = groundedInfo ? `
+---
+*(This section provides recent context about ${clientName}. Consider these details alongside the core client information to ensure recommendations are timely and relevant. Use specific points from here where they offer a clear advantage or fresh angle.)*
+` : '';
+
+  // Only include competitor section if text is provided and doesn't contain errors
+  const competitorSection = competitorAnalysisText && !competitorAnalysisText.toLowerCase().includes('error')
+    ? `
+**Market Research & Insights (Google Search):**
+${competitorAnalysisText}
+`
+    : '';
+
+  // Default task section if not provided
+  const defaultTaskSection = `1. Spark and detail 7-10 fresh, distinctive, and engaging creative ideas for ${clientName}, specifically focusing on concepts highly suitable for Facebook Ad campaigns. Focus on concepts that can present the client's specific ${productFocus || 'products/services'} from new perspectives that spark curiosity, drive engagement, or create a memorable impression within the ${market} on social media. Ideas should build upon the client's strengths and available insights.
+  2. Focus on Actionable Creativity for Facebook: Ensure each recommendation translates into tangible marketing ideas easily adaptable into compelling Facebook Ad formats (e.g., single image/video, carousel, stories, reels). Include potential ad angles, visual directions, and calls-to-action. Prioritize ideas that are visually arresting, memorable, shareable, emotionally resonant, and push creative boundaries for this specific client on Facebook.
+  3. Informed by Context: Where available, let the \`groundedClientInfo\` and \`bookSummarySection\` inform the relevance, timeliness, or strategic angle of your ideas, but the core inspiration should stem from the client's fundamental product/service and market position. Use grounding to verify trends or competitor actions if needed.
+  4. For EACH recommendation, provide the Creative Execution Details below, specifically tailored for a Facebook Ad context. Generate specific, compelling content for each field IN THAI LANGUAGE, imagining how the core idea translates into ad components (e.g., Headline, Ad Copy, Visual Description, Call-to-Action).
+  5. Populate the corresponding fields in the final JSON object. Ensure all text output is original for this request
+  6. Ideas to include but not limited to: why the solutions from ${clientName} are different than what is being offered in the market currently. Talk about the differentiation of the product if and when it makes the client's product or service more appealing.`;
+
+  // Default details section if not provided
+  const defaultDetailsSection = `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** (เช่น "เคล็ดลับฮาวทู", "เบื้องหลังการทำงาน", "เรื่องราวความสำเร็จลูกค้า", "การหักล้างความเชื่อผิดๆ", "ไลฟ์สไตล์และการใช้งาน", "ปัญหาและการแก้ไข").
+  b.  **\`product_focus\`:** ระบุ ${productFocus || 'ผลิตภัณฑ์/บริการ'} ที่ต้องการเน้น **(ภาษาไทย)**.
+  c.  **\`concept_idea\`:** สรุปแนวคิดสร้างสรรค์หลัก (1-2 ประโยค) สำหรับการนำเสนอไอเดียนี้ **(ภาษาไทย)**.
+  d.  **\`copywriting\`:** สร้างสรรค์องค์ประกอบข้อความโฆษณาเบื้องต้น **(ภาษาไทย)**:
+      *   **\`headline\`:** พาดหัวที่ดึงดูดความสนใจ **(ภาษาไทย)**.
+      *   **\`sub_headline_1\`:** พาดหัวรองที่ขยายความหรือเน้นประโยชน์ **(ภาษาไทย)**.
+      *   **\`sub_headline_2\`:** พาดหัวรองที่สอง (ถ้ามี) เพื่อเพิ่มบริบทหรือความเร่งด่วน **(ภาษาไทย)** (ใช้ \`null\` หากไม่ต้องการ).
+      *   **\`bullets\`:** รายการจุดเด่น 2-4 ข้อที่เน้นประโยชน์หลัก, ฟีเจอร์ หรือเหตุผลที่น่าเชื่อถือ **(ภาษาไทย)**.
+      *   **\`cta\`:** ข้อความเรียกร้องให้ดำเนินการ (Call To Action) ที่ชัดเจน **(ภาษาไทย)** (เช่น "เรียนรู้เพิ่มเติม", "ซื้อเลย", "ดูเดโม", "เข้าร่วม Waiting List", "ดาวน์โหลดคู่มือ").`;
+
+  return `
+Analyze the following client information, recent grounded search results (if available), competitor summary, and optional book context to conceptualize groundbreaking creative recommendations and their initial execution details IN THAI.
+ALL TEXTUAL OUTPUT IN THE FINAL JSON RESPONSE MUST BE IN THAI.
+Crucially, leverage your access to real-time information via search grounding (if applicable to the model/call) to ensure ideas are timely, relevant, and informed by the latest digital landscape.
+You have no limits to your creativity. You are free.
+
+**Client Information:**
+*   Name: ${clientName}
+*   Market: ${market}
+*   Product Focus: ${productFocus || 'N/A'}
+${userBrief ? `
+**Additional User Brief/Context:**
+${userBrief}
+` : ''}
+${groundedSection}
+
+${bookSummaryContent ? `
+**Optional Book Summary Contexts:**
+You can use these principles or frameworks from books to help create impactful and outstanding ideas:
+${bookSummaryContent}
+` : ''}
+
+**Task:**
+${taskSectionParam || defaultTaskSection}
+
+${competitorSection}
+
+**Creative Execution Details (Per Recommendation - Populate these fields IN THAI for the JSON):**
+${detailsSectionParam || defaultDetailsSection}
+
+// ... rest of the JSON output format requirements ...
+`;
+};
+
 // Helper function to create a concise summary of competitor data
 function summarizeCompetitors(competitors: Competitor[]): string {
     if (!competitors || competitors.length === 0) {
@@ -149,6 +227,7 @@ export async function GET(request: NextRequest) {
   const detailsSectionParam = searchParams.get('detailsSection');
   // const bookFilenamesParam = searchParams.get('bookFilenames'); // REMOVED - Now reading all books
   const modelsParam = searchParams.get('models'); // NEW: Read models parameter
+  const includeCompetitorAnalysis = searchParams.get('includeCompetitorAnalysis') !== 'false';
   const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
   const OPENAI_API_KEY = process.env.NEXT_PUBLIC_OPENAI_API_KEY; // Read OpenAI Key
   const ANTHROPIC_API_KEY = process.env.NEXT_PUBLIC_ANTHROPIC_API_KEY; // Read Anthropic Key
@@ -255,48 +334,52 @@ export async function GET(request: NextRequest) {
     let competitorAnalysisData = '';
     
     if (GEMINI_API_KEY) { // Only attempt grounding if the key is available
-        // Fetch competitor analysis directly from Supabase
-        try {
-            console.log(`[Refactor] Fetching competitor analysis from Supabase for client: ${analysisRunData.clientName}, product: ${analysisRunData.productFocus}`);
-            
-            const { data: allAnalysisData, error } = await supabaseAdmin
-                .from('competitor_analysis')
-                .select('analysis_data, client_name, product_focus, created_at')
-                .eq('client_name', analysisRunData.clientName.trim())
-                .eq('product_focus', (analysisRunData.productFocus || '').trim())
-                .order('created_at', { ascending: false });
-
-            if (error) {
-                console.error('[DB Query] Supabase error:', {
-                    message: error.message,
-                    code: error.code,
-                    details: error.details,
-                    hint: error.hint
-                });
-                throw error;
-            }
-
-            if (!allAnalysisData || allAnalysisData.length === 0) {
-                console.warn('[DB Query] No analysis data found for:', {
-                    client: analysisRunData.clientName,
-                    product: analysisRunData.productFocus
-                });
-                competitorAnalysisData = '## Market Research & Insights\nNo research data available.\n';
-            } else {
-                const latestAnalysis = allAnalysisData[0];
-                console.log('[DB Query] Found data:', {
-                    client_name: latestAnalysis.client_name,
-                    product_focus: latestAnalysis.product_focus,
-                    created_at: latestAnalysis.created_at,
-                    data_keys: latestAnalysis.analysis_data ? Object.keys(latestAnalysis.analysis_data) : []
-                });
+        // Only fetch competitor analysis if it's enabled
+        if (includeCompetitorAnalysis) {
+            try {
+                console.log(`[Refactor] Fetching competitor analysis from Supabase for client: ${analysisRunData.clientName}, product: ${analysisRunData.productFocus}`);
                 
-                // Include the entire analysis_data JSON in the prompt
-                competitorAnalysisData = `## Market Research & Insights\n${JSON.stringify(latestAnalysis.analysis_data, null, 2)}\n`;
+                const { data: allAnalysisData, error } = await supabaseAdmin
+                    .from('competitor_analysis')
+                    .select('analysis_data, client_name, product_focus, created_at')
+                    .eq('client_name', analysisRunData.clientName.trim())
+                    .eq('product_focus', (analysisRunData.productFocus || '').trim())
+                    .order('created_at', { ascending: false });
+
+                if (error) {
+                    console.error('[DB Query] Supabase error:', {
+                        message: error.message,
+                        code: error.code,
+                        details: error.details,
+                        hint: error.hint
+                    });
+                    throw error;
+                }
+
+                if (!allAnalysisData || allAnalysisData.length === 0) {
+                    console.warn('[DB Query] No analysis data found for:', {
+                        client: analysisRunData.clientName,
+                        product: analysisRunData.productFocus
+                    });
+                    competitorAnalysisData = '## Market Research & Insights\nNo research data available.\n';
+                } else {
+                    const latestAnalysis = allAnalysisData[0];
+                    console.log('[DB Query] Found data:', {
+                        client_name: latestAnalysis.client_name,
+                        product_focus: latestAnalysis.product_focus,
+                        created_at: latestAnalysis.created_at,
+                        data_keys: latestAnalysis.analysis_data ? Object.keys(latestAnalysis.analysis_data) : []
+                    });
+                    
+                    // Include the entire analysis_data JSON in the prompt
+                    competitorAnalysisData = `## Market Research & Insights\n${JSON.stringify(latestAnalysis.analysis_data, null, 2)}\n`;
+                }
+            } catch (error) {
+                console.error("[Refactor] Error fetching competitor analysis from Supabase:", error);
+                // Proceed without competitor analysis if fetch fails
             }
-        } catch (error) {
-            console.error("[Refactor] Error fetching competitor analysis from Supabase:", error);
-            // Proceed without competitor analysis if fetch fails
+        } else {
+            console.log('[Refactor] Skipping competitor analysis fetch as it is disabled');
         }
         
         // Then perform grounding search as before
@@ -345,16 +428,18 @@ export async function GET(request: NextRequest) {
     // --- End Grounding Search ---
 
     // --- Function to build the final user prompt (dynamically includes grounded info) ---
-    const buildFinalUserPrompt = (groundedInfo: string, competitorAnalysisText: string = '') => {
+    const buildFinalUserPrompt = (groundedInfo: string, competitorAnalysisText: string = '', includeCompetitorAnalysis: boolean = true) => {
         const groundedSection = groundedInfo ? `
 ---
 *(This section provides recent context about ${analysisRunData.clientName}. Consider these details alongside the core client information to ensure recommendations are timely and relevant. Use specific points from here where they offer a clear advantage or fresh angle.)*
 ` : '';
 
-        // Use provided competitorAnalysisText ONLY if valid, otherwise leave blank so frontend can prompt user to retry
-        const competitorSection = competitorAnalysisText && !competitorAnalysisText.toLowerCase().includes('error')
-          ? competitorAnalysisText
-          : '';
+        // Only include competitor analysis if the flag is true and the text is valid
+        const competitorSection = (includeCompetitorAnalysis && 
+                                 competitorAnalysisText && 
+                                 !competitorAnalysisText.toLowerCase().includes('error'))
+            ? competitorAnalysisText
+            : '';
 
 
         return `
@@ -485,7 +570,7 @@ Return ONLY the JSON object above, nothing else.
         console.log("STEP 1: Starting initial Gemini generation...");
         try {
         // --- Prepare Gemini Prompt (using common builder) ---
-        const finalGeminiPrompt = buildFinalUserPrompt(groundedClientInfoCommon, competitorAnalysisData);
+        const finalGeminiPrompt = buildFinalUserPrompt(groundedClientInfoCommon, competitorAnalysisData, includeCompetitorAnalysis);
 
         // --- Log Gemini Prompt ---
         console.log("--- START INITIAL GEMINI PROMPT ---");
@@ -920,7 +1005,7 @@ Do NOT include any text outside the JSON. No markdown formatting, no explanation
                             
                             // Set the model competition flag to true
                             finalResults['_metadata'] = {
-                                modelCompetition: false,
+                                modelCompetition: true,
                                 steps: ['gemini_initial', 'openai_improvement', 'gemini_final']
                             };
                             
@@ -971,7 +1056,7 @@ Do NOT include any text outside the JSON. No markdown formatting, no explanation
         console.log("Starting OpenAI generation...");
         try {
             // --- Prepare OpenAI Prompt (using common builder, no grounding needed here) ---
-            const finalOpenAIPrompt = buildFinalUserPrompt(groundedClientInfoCommon, competitorAnalysisData);
+            const finalOpenAIPrompt = buildFinalUserPrompt(groundedClientInfoCommon, competitorAnalysisData, includeCompetitorAnalysis);
 
             // --- Log OpenAI Prompt ---
             console.log("--- START FINAL OPENAI PROMPT ---");
@@ -1045,7 +1130,7 @@ Do NOT include any text outside the JSON. No markdown formatting, no explanation
         console.log("Starting Claude generation...");
         try {
             // --- Prepare Claude Prompt (using common builder, no grounding needed here) ---
-            const finalClaudePrompt = buildFinalUserPrompt(groundedClientInfoCommon, competitorAnalysisData);
+            const finalClaudePrompt = buildFinalUserPrompt(groundedClientInfoCommon, competitorAnalysisData, includeCompetitorAnalysis);
             
             // Use the predefined systemPrompt
             const systemPromptClaude = "You are an AI assistant tasked with generating creative marketing recommendations. Your response MUST be a single, valid JSON object and nothing else. Do not include any text before or after the JSON object. All text content within the JSON object MUST be in THAI language.";
@@ -1163,16 +1248,42 @@ type ModelErrorState = Record<string, string | null>;
 
 export async function POST(request: NextRequest) {
     try {
-        const body = await request.json();
-        const runId = body.runId;
-        const models = body.models || [];
-        const brief = body.brief;
-        const taskSection = body.taskSection;
-        // No longer using detailsSection from request body
-        const competitorAnalysis = body.competitorAnalysis || "";
+        // Parse query parameters
+        const { searchParams } = new URL(request.url);
+        const runId = searchParams.get('runId');
+        const models = searchParams.get('models')?.split(',') || [];
+        const brief = searchParams.get('brief') || '';
+        const taskSection = searchParams.get('taskSection') || '';
+        const includeCompetitorAnalysis = searchParams.get('includeCompetitorAnalysis') !== 'false';
 
-        console.log(`POST /api/generate-recommendations for runId: ${runId}, Models: ${models.join(', ')}`);
-        console.log("Competitor Analysis:", competitorAnalysis.substring(0, 100) + "...");
+        console.log(`GET /api/generate-recommendations for runId: ${runId}, Models: ${models.join(', ')}, Include Competitor Analysis: ${includeCompetitorAnalysis}`);
+        
+        let competitorAnalysis = "";
+        if (includeCompetitorAnalysis) {
+            const clientName = searchParams.get('clientName') || '';
+            const productFocus = searchParams.get('productFocus') || '';
+            
+            if (clientName && productFocus) {
+                try {
+                    const { data: allAnalysisData, error } = await supabaseAdmin
+                        .from('competitor_analysis')
+                        .select('analysis_data, client_name, product_focus, created_at')
+                        .eq('client_name', clientName.trim())
+                        .eq('product_focus', productFocus.trim())
+                        .order('created_at', { ascending: false })
+                        .limit(1);
+                    
+                    if (error) throw error;
+                    if (allAnalysisData && allAnalysisData.length > 0) {
+                        competitorAnalysis = JSON.stringify(allAnalysisData[0].analysis_data, null, 2);
+                        console.log("Fetched competitor analysis data");
+                    }
+                } catch (error) {
+                    console.error("Error fetching competitor analysis:", error);
+                    // Continue without competitor analysis if there's an error
+                }
+            }
+        }
 
         // Validate required parameters
         if (!runId) {
@@ -1214,11 +1325,11 @@ export async function POST(request: NextRequest) {
 
         // Define the function to build the final user prompt (similar to GET handler)
         const buildFinalUserPrompt = (groundedInfo: string, competitorAnalysisText: string = '') => {
-            // Fetch client info from runId
+            // Fetch client info from query params
             const clientInfo = {
-                clientName: body.clientName || "Client",
-                market: body.market || "Market",
-                productFocus: body.productFocus || "Products/Services"
+                clientName: searchParams.get('clientName') || "Client",
+                market: searchParams.get('market') || "Market",
+                productFocus: searchParams.get('productFocus') || "Products/Services"
             };
 
             const groundedSection = groundedInfo ? `
@@ -1267,9 +1378,10 @@ Critically, do not limit yourself exclusively to the techniques or command i jus
 ${userBriefSection}
 ${groundedSection}
 
-**Competitor Landscape Summary:**
+${includeCompetitorAnalysis ? `**Competitor Landscape Summary:**
 ${competitorAnalysisText}
 *(Analyze the competitor summary, recent client info, and optional book context...)*
+` : ''}
 
 **Task:**
 ${taskSectionContent} use ${groundedInfo} to generate recommendations ideas that respresent จุดเด่น, ผลิตภัณฑ์เด่น, โปรโมชั่น แคมเปญล่าสุด หรือ กิจกรรมล่าสุด หรือ ข้อมูลสำคัญต่างๆ 
@@ -1321,15 +1433,14 @@ Ensure your copy aligns with modern, high-quality advertising standards and is t
         };
 
         try {
-            // Use competitorAnalysis directly from the request body, no longer passing detailsSection
-            let finalPrompt = buildFinalUserPrompt('', competitorAnalysis);
-            console.log(`Final prompt (first 200 chars): ${finalPrompt.substring(0, 200)}...`);
-
-            // Return a placeholder response for now
-            return NextResponse.json({ 
-                results: {}, 
-                message: "Successfully updated to use buildFinalUserPrompt with competitorAnalysis"
-            });
+            // Build the final prompt with competitor analysis if enabled
+            const competitorAnalysisText = includeCompetitorAnalysis ? competitorAnalysis : '';
+            // let finalPrompt = buildFinalUserPrompt('', competitorAnalysisText, includeCompetitorAnalysis);
+            // console.log(`Final prompt (first 200 chars): ${finalPrompt.substring(0, 200)}...`);
+            console.log(`Competitor analysis included: ${includeCompetitorAnalysis}, Length: ${competitorAnalysisText.length}`);
+            
+            // Remove the placeholder response and continue with the actual implementation
+            // ... rest of the existing implementation ...
             
         } catch (error: any) {
             console.error('Error in POST /api/generate-recommendations:', error);
