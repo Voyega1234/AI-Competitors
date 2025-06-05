@@ -1,3 +1,11 @@
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+);
+
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -12,6 +20,258 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+
+// Import Recharts components
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+
+// Add the new component for Ad Pillars Section with Chart
+const AdPillarsSection = () => {
+  interface PillarData {
+  pillar: string;
+  count: number;
+  percentage: number;
+}
+
+const [pillars, setPillars] = useState<PillarData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [totalAds, setTotalAds] = useState(0);
+
+  // Helper function to parse PostgreSQL array string
+  const parsePostgresArray = (pgArray: string): string[] => {
+    // Handle empty or null input
+    if (!pgArray || pgArray === '{}') return [];
+    
+    // Remove outer curly braces
+    const inner = pgArray.slice(1, -1);
+    if (!inner) return [];
+    
+    // Split by comma but respect quoted strings
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < inner.length; i++) {
+      const char = inner[i];
+      
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    
+    // Add the last item
+    if (current) {
+      result.push(current.trim());
+    }
+    
+    return result;
+  };
+
+  // Helper function to clean and standardize pillar text
+  const cleanPillarText = (text: string): string => {
+    if (!text) return '';
+    // Trim whitespace and remove quotes
+    let cleaned = text.trim().replace(/^['"]|['"]$/g, '').trim();
+    // Handle special characters and formatting
+    cleaned = cleaned
+      .replace(/[\/]/g, ' / ') // Add spaces around slashes
+      .replace(/\s+/g, ' ')     // Normalize multiple spaces
+      .trim();
+    
+    // Capitalize first letter of each word
+    return cleaned
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
+
+  useEffect(() => {
+    const fetchPillars = async () => {
+      try {
+        // Get all ads with their creative_pillars
+        const { data: ads, error } = await supabase
+          .from('ads_details')
+          .select('creative_pillars')
+          .not('creative_pillars', 'is', null);
+
+        if (error) throw error;
+
+        const total = ads.length;
+        setTotalAds(total);
+
+        // Count pillar occurrences
+        const pillarCounts: Record<string, number> = {};
+        
+        ads.forEach(ad => {
+          if (ad.creative_pillars) {
+            try {
+              // Parse the PostgreSQL array format
+              const pillars = parsePostgresArray(ad.creative_pillars);
+              pillars.forEach(pillar => {
+                const cleaned = cleanPillarText(pillar);
+                if (cleaned) {
+                  pillarCounts[cleaned] = (pillarCounts[cleaned] || 0) + 1;
+                }
+              });
+            } catch (e) {
+              console.error('Error parsing pillars:', e);
+            }
+          }
+        });
+
+        // Convert to array, add percentage, and sort by count
+        const sortedPillars = Object.entries(pillarCounts)
+          .map(([pillar, count]) => ({
+            pillar,
+            count,
+            percentage: total > 0 ? Math.round((count / total) * 100) : 0
+          }))
+          .sort((a, b) => b.count - a.count);
+
+        setPillars(sortedPillars);
+      } catch (error) {
+        console.error('Error fetching ad pillars:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchPillars();
+  }, []); // Empty dependency array to run once on mount
+
+  // Custom tooltip for the chart
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white p-3 border rounded shadow-lg">
+          <p className="font-semibold">{label}</p>
+          <p className="text-sm">
+            <span className="text-muted-foreground">Ads:</span> {payload[0].value}
+          </p>
+          <p className="text-sm">
+            <span className="text-muted-foreground">Of total:</span> {payload[0].payload.percentage}%
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <span className="ml-2 text-muted-foreground">Loading ad pillars data...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <div>
+          <h3 className="text-lg font-semibold">Ad Creative Pillars</h3>
+          <p className="text-sm text-muted-foreground">
+            Distribution across {pillars.length} creative pillars in {totalAds} ads
+          </p>
+        </div>
+      </div>
+
+      {pillars.length > 0 ? (
+        <div className="mt-6">
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={pillars}
+                margin={{
+                  top: 5,
+                  right: 30,
+                  left: 20,
+                  bottom: 5,
+                }}
+                layout="vertical"
+              >
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <XAxis type="number" />
+                <YAxis 
+                  dataKey="pillar" 
+                  type="category" 
+                  width={150}
+                  tick={{ fontSize: 12 }}
+                  tickLine={false}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend />
+                <Bar 
+                  dataKey="count" 
+                  name="Number of Ads"
+                  fill="#8884d8"
+                  radius={[0, 4, 4, 0]}
+                  animationDuration={1500}
+                >
+                  {pillars.map((entry, index) => (
+                    <text
+                      key={`pillar-${index}`}
+                      x={entry.count + 10}
+                      y={index * 25 + 20}
+                      textAnchor="start"
+                      fill="#666"
+                      fontSize={12}
+                    >
+                      {entry.count} ({entry.percentage}%)
+                    </text>
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {pillars.slice(0, 6).map(({ pillar, count, percentage }) => (
+              <div key={pillar} className="p-3 border rounded-md bg-muted/5 hover:bg-muted/10 transition-colors">
+                <div className="flex justify-between items-start">
+                  <span className="font-medium text-sm">{pillar}</span>
+                  <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
+                    {percentage}% of ads
+                  </span>
+                </div>
+                <div className="mt-2 h-2 w-full bg-muted rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-primary rounded-full" 
+                    style={{ width: `${Math.min(percentage * 2, 100)}%` }}
+                  />
+                </div>
+                <div className="mt-1 flex justify-between text-xs text-muted-foreground">
+                  <span>{count} {count === 1 ? 'ad' : 'ads'}</span>
+                  <span>{percentage}% of total</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          {pillars.length > 6 && (
+            <div className="mt-4 text-center">
+              <p className="text-sm text-muted-foreground">
+                +{pillars.length - 6} more pillars not shown
+              </p>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="text-center py-8 border rounded bg-muted/10">
+          <p className="text-muted-foreground">No pillar data available</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Start adding creative pillars to your ads to see them here
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
 
 import { CreativeConcept, TopicIdeas, SelectedRecommendationForCreative } from "@/types/creative";
 import { useDropzone } from "react-dropzone";
@@ -2538,8 +2798,21 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                    </div>
                 )}
 
-                {/* --- Action Buttons --- */}
-                <div className="mt-6 flex flex-col items-center gap-4">
+                {/* --- Ad Pillars Analysis Section --- */}
+            <div className="mb-8">
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-lg">Ad Creative Analysis</CardTitle>
+                        <CardDescription>Current active creative pillars in your ads</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <AdPillarsSection />
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* --- Action Buttons --- */}
+            <div className="mt-6 flex flex-col items-center gap-4">
                     {/* Button 1: Generate Journey for the selected card */}
                      <Button
                         onClick={handleGenerateCustomerJourneys}
