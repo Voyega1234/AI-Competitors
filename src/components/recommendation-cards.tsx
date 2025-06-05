@@ -151,12 +151,31 @@ interface ModelErrorState {
 }
 
 // --- Types for Idea Evaluation ---
+// Template comments for feedback
+const FEEDBACK_TEMPLATES: { [key: string]: string[] } = {
+  good: [
+    "This is a great idea! It's creative and engaging.",
+    "Love how this aligns with our brand values.",
+    "Very innovative approach that stands out.",
+    "This would resonate well with our target audience.",
+    "Excellent concept with clear value proposition."
+  ],
+  bad: [
+    "This needs more details to be actionable.",
+    "The concept doesn't quite match our brand voice.",
+    "Could be more unique compared to competitors.",
+    "The idea needs stronger alignment with our goals.",
+    "This might not appeal to our target demographic."
+  ]
+} as const;
+
 interface IdeaFeedback {
-  id: string;
-  vote: "good" | "bad" | null;
-  comment: string;
-  idea?: Recommendation; // Store the full idea for saving to database
-}
+    id: string;
+    vote: "good" | "bad" | null;
+    comment: string;
+    idea?: Recommendation;
+    showTemplates?: boolean;
+  }
 
 interface IdeaFeedbackMap {
   [id: string]: IdeaFeedback;
@@ -1358,42 +1377,80 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
     // --- Idea Evaluation Functions ---
     
     // Handle voting on an idea (good or bad) with toggle functionality
-    const handleVoteIdea = (id: string, vote: "good" | "bad") => {
+    const handleFeedbackVote = (id: string, vote: 'good' | 'bad') => {
         setIdeaFeedback(prev => {
-            const existing = prev[id] || { id, vote: null, comment: '' };
-            // If user clicks the same vote again, toggle it off (cancel the vote)
-            const newVote = existing.vote === vote ? null : vote;
+            const currentVote = prev[id]?.vote;
+            const isSameVote = currentVote === vote;
             
-            // If vote is being canceled and there's no comment, remove the item completely
-            if (newVote === null && (!existing.comment || existing.comment.trim() === '')) {
+            // If clicking the same vote again, clear the feedback
+            if (isSameVote) {
                 const newFeedback = { ...prev };
                 delete newFeedback[id];
                 return newFeedback;
             }
             
-            // Find the idea to save its details (same as in handleFeedbackComment)
-            let idea: Recommendation | undefined = existing.idea;
-            if (!idea) {
-                for (const [model, recommendations] of Object.entries(resultsByModel)) {
-                    if (!Array.isArray(recommendations)) continue;
-                    
-                    const foundIdea = recommendations.find(rec => rec.tempId === id);
-                    if (foundIdea) {
-                        idea = foundIdea;
-                        break;
-                    }
+            // Find the idea to save its details
+            let idea: Recommendation | undefined = undefined;
+            for (const [model, recommendations] of Object.entries(resultsByModel)) {
+                if (!Array.isArray(recommendations)) continue;
+                
+                const foundIdea = recommendations.find(rec => rec.tempId === id);
+                if (foundIdea) {
+                    idea = foundIdea;
+                    break;
                 }
-                // If idea is still not found, it will remain undefined
             }
             
-            // Otherwise update the vote
+            // Create a new feedback object with all required properties
+            const newFeedback: IdeaFeedback = {
+                id,
+                vote,
+                comment: prev[id]?.comment || '',
+                idea,
+                showTemplates: true
+            };
+            
+            // Return the updated state
             return {
                 ...prev,
-                [id]: {
-                    ...existing,
-                    vote: newVote,
-                    idea // Include the full idea object
-                }
+                [id]: newFeedback
+            };
+        });
+    };
+    
+    // Apply a template comment
+    const applyTemplate = (id: string, template: string) => {
+        setIdeaFeedback(prev => {
+            const current = prev[id];
+            if (!current) return prev;
+            
+            const updatedFeedback: IdeaFeedback = {
+                ...current,
+                comment: template,
+                showTemplates: false
+            };
+            
+            return {
+                ...prev,
+                [id]: updatedFeedback
+            };
+        });
+    };
+    
+    // Toggle template visibility
+    const toggleTemplates = (id: string, show: boolean) => {
+        setIdeaFeedback(prev => {
+            const current = prev[id];
+            if (!current) return prev;
+            
+            const updatedFeedback: IdeaFeedback = {
+                ...current,
+                showTemplates: show
+            };
+            
+            return {
+                ...prev,
+                [id]: updatedFeedback
             };
         });
     };
@@ -2248,31 +2305,68 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                                         {/* Idea Evaluation UI */}
                                                         <div className="mt-3 pt-3 border-t border-dashed">
                                                             <p className="text-xs font-medium mb-2 text-gray-600">Rate this idea:</p>
-                                                            <div className="flex space-x-2 mb-3">
-                                                                <Button 
-                                                                    variant={ideaFeedback[rec.tempId!]?.vote === 'good' ? 'default' : 'outline'}
-                                                                    size="sm"
-                                                                    className={ideaFeedback[rec.tempId!]?.vote === 'good' ? 'bg-green-600 hover:bg-green-700' : ''}
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleVoteIdea(rec.tempId!, 'good');
-                                                                    }}
-                                                                >
-                                                                    <ThumbsUp className="h-4 w-4 mr-1" />
-                                                                    Good
-                                                                </Button>
-                                                                <Button 
-                                                                    variant={ideaFeedback[rec.tempId!]?.vote === 'bad' ? 'default' : 'outline'}
-                                                                    size="sm"
-                                                                    className={ideaFeedback[rec.tempId!]?.vote === 'bad' ? 'bg-red-600 hover:bg-red-700' : ''}
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleVoteIdea(rec.tempId!, 'bad');
-                                                                    }}
-                                                                >
-                                                                    <ThumbsDown className="h-4 w-4 mr-1" />
-                                                                    Bad
-                                                                </Button>
+                                                            <div className="space-y-2">
+                                                                <div className="flex space-x-2">
+                                                                    <Button 
+                                                                        variant={ideaFeedback[rec.tempId!]?.vote === 'good' ? 'default' : 'outline'}
+                                                                        size="sm"
+                                                                        className={ideaFeedback[rec.tempId!]?.vote === 'good' ? 'bg-green-600 hover:bg-green-700' : ''}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleFeedbackVote(rec.tempId!, 'good');
+                                                                        }}
+                                                                    >
+                                                                        <ThumbsUp className="h-4 w-4 mr-1" />
+                                                                        Good
+                                                                    </Button>
+                                                                    <Button 
+                                                                        variant={ideaFeedback[rec.tempId!]?.vote === 'bad' ? 'default' : 'outline'}
+                                                                        size="sm"
+                                                                        className={ideaFeedback[rec.tempId!]?.vote === 'bad' ? 'bg-red-600 hover:bg-red-700' : ''}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleFeedbackVote(rec.tempId!, 'bad');
+                                                                        }}
+                                                                    >
+                                                                        <ThumbsDown className="h-4 w-4 mr-1" />
+                                                                        Bad
+                                                                    </Button>
+                                                                </div>
+                                                                
+                                                                {/* Template suggestions */}
+                                                                {ideaFeedback[rec.tempId!]?.showTemplates && (
+                                                                    <div className="bg-muted/50 p-2 rounded-md border border-border">
+                                                                        <div className="text-xs text-muted-foreground mb-1">
+                                                                            Quick feedback:
+                                                                        </div>
+                                                                        <div className="space-y-1">
+                                                                            {FEEDBACK_TEMPLATES[ideaFeedback[rec.tempId!]?.vote === 'good' ? 'good' : 'bad']?.map((template: string, index: number) => (
+                                                                                <div 
+                                                                                    key={`${rec.tempId}-template-${index}`}
+                                                                                    className="text-xs p-1.5 hover:bg-muted rounded cursor-pointer"
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        applyTemplate(rec.tempId!, template);
+                                                                                    }}
+                                                                                >
+                                                                                    "{template}"
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                        <div className="flex justify-end mt-1">
+                                                                            <Button 
+                                                                                variant="ghost" 
+                                                                                className="h-6 text-xs"
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    toggleTemplates(rec.tempId!, false);
+                                                                                }}
+                                                                            >
+                                                                                <X className="h-3 w-3 mr-1" /> Close
+                                                                            </Button>
+                                                                        </div>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                             
                                                             {/* Feedback textarea */}
