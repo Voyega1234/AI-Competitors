@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import supabaseAdmin from '@/lib/supabaseClient'; // Import Supabase client
-import fs from 'fs/promises'; // Add fs import
-import path from 'path'; // Add path import
+import { createClient } from '@supabase/supabase-js';
+import fs from 'fs/promises';
+import path from 'path';
+
+// Initialize Supabase client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
 
 // Helper function to clean Gemini responses from markdown code blocks
 export function cleanGeminiResponse(text: string): string {
@@ -74,8 +79,66 @@ interface GeminiRecommendationOutput {
 // Define the path to the book summaries directory (should match the one in /api/book-summaries)
 const booksDirectory = path.join(process.cwd(), 'src', 'app', 'api', 'generate-recommendations', 'books_prompts');
 
+// Function to get ad pillars data from Supabase
+const getAdPillars = async (adAccountId?: string) => {
+  try {
+    let query = supabaseAdmin
+      .from('ads_details')
+      .select('creative_pillars')
+      .not('creative_pillars', 'is', null);
+    
+    // Add ad account filter if provided
+    if (adAccountId) {
+      query = query.eq('ad_account_id', adAccountId);
+    }
+    
+    const { data: ads, error } = await query;
+
+    if (error) throw error;
+    if (!ads || ads.length === 0) return [];
+
+    const pillarCounts: Record<string, number> = {};
+    
+    ads.forEach((ad: { creative_pillars: string }) => {
+      if (ad.creative_pillars) {
+        try {
+          // Parse the PostgreSQL array format
+          const pillars = ad.creative_pillars
+            .slice(1, -1) // Remove outer {}
+            .split(',')
+            .map((p: string) => {
+              // Clean up the pillar text
+              let pillar = p.trim();
+              if (pillar.startsWith('"') && pillar.endsWith('"')) {
+                pillar = pillar.slice(1, -1);
+              }
+              return pillar;
+            });
+          
+          // Count occurrences
+          pillars.forEach((pillar: string) => {
+            if (pillar) {
+              pillarCounts[pillar] = (pillarCounts[pillar] || 0) + 1;
+            }
+          });
+        } catch (e) {
+          console.error('Error parsing pillars:', e);
+        }
+      }
+    });
+
+    // Convert to array and sort by count
+    return Object.entries(pillarCounts)
+      .map(([pillar, count]) => ({ pillar, count: count as number }))
+      .sort((a, b) => b.count - a.count);
+  } catch (error) {
+    console.error('Error fetching ad pillars:', error);
+    return [];
+  }
+};
+
 // Function to build the final user prompt with all necessary parameters
-const buildFinalUserPrompt = (
+const buildFinalUserPrompt = async (
   clientName: string,
   market: string,
   productFocus: string | null,
@@ -84,7 +147,8 @@ const buildFinalUserPrompt = (
   bookSummaryContent: string,
   competitorAnalysisText: string,
   taskSectionParam: string | null,
-  detailsSectionParam: string | null
+  detailsSectionParam: string | null,
+  adAccountId?: string
 ) => {
   const groundedSection = groundedInfo ? `
 ---
@@ -96,6 +160,28 @@ const buildFinalUserPrompt = (
     ? `
 **Market Research & Insights (Google Search):**
 ${competitorAnalysisText}
+`
+    : '';
+
+  // Get ad pillars data and create analysis section
+  const adPillars = await getAdPillars(adAccountId);
+  const adPillarsSection = adPillars.length > 0
+    ? `
+**Current Ad Pillar Analysis:**
+Here are the creative pillars currently being used in our ads, along with their frequency:
+${adPillars.map(p => `- ${p.pillar}: ${p.count} ads`).join('\n')}
+
+**Creative Strategy Guidance:**
+1. Consider prioritizing ideas that utilize underutilized pillars (those with lower counts)
+2. For each recommendation, suggest which pillar(s) it aligns with from our existing set
+3. If introducing a new pillar, explain how it complements our current strategy
+4. Consider combining multiple pillars in innovative ways to create unique concepts
+
+**Pillar-Specific Considerations:**
+- For "Problem Solution" pillars: Focus on clear pain points and solutions
+- For "Feature Showcase" pillars: Highlight unique product features with strong visuals
+- For "Educational" pillars: Provide valuable, informative content
+- For "Testimonial/Social Proof" pillars: Incorporate authentic customer stories
 `
     : '';
 
@@ -119,7 +205,7 @@ ${competitorAnalysisText}
       *   **\`cta\`:** ข้อความเรียกร้องให้ดำเนินการ (Call To Action) ที่ชัดเจน **(ภาษาไทย)** (เช่น "เรียนรู้เพิ่มเติม", "ซื้อเลย", "ดูเดโม", "เข้าร่วม Waiting List", "ดาวน์โหลดคู่มือ").`;
 
   return `
-Analyze the following client information, recent grounded search results (if available), competitor summary, and optional book context to conceptualize groundbreaking creative recommendations and their initial execution details IN THAI.
+Analyze the following client information, recent grounded search results (if available), competitor summary, ad pillar analysis, and optional book context to conceptualize groundbreaking creative recommendations and their initial execution details IN THAI.
 ALL TEXTUAL OUTPUT IN THE FINAL JSON RESPONSE MUST BE IN THAI.
 Crucially, leverage your access to real-time information via search grounding (if applicable to the model/call) to ensure ideas are timely, relevant, and informed by the latest digital landscape.
 You have no limits to your creativity. You are free.
@@ -144,6 +230,8 @@ ${bookSummaryContent}
 ${taskSectionParam || defaultTaskSection}
 
 ${competitorSection}
+
+${adPillarsSection}
 
 **Creative Execution Details (Per Recommendation - Populate these fields IN THAI for the JSON):**
 ${detailsSectionParam || defaultDetailsSection}
@@ -216,6 +304,7 @@ interface AnalysisRun {
   clientName: string;
   market: string;
   productFocus: string | null;
+  ad_account_id?: string | null;
   // Add other fields from your AnalysisRun table
 }
 
@@ -371,8 +460,22 @@ export async function GET(request: NextRequest) {
                         data_keys: latestAnalysis.analysis_data ? Object.keys(latestAnalysis.analysis_data) : []
                     });
                     
-                    // Include the entire analysis_data JSON in the prompt
-                    competitorAnalysisData = `## Market Research & Insights\n${JSON.stringify(latestAnalysis.analysis_data, null, 2)}\n`;
+                    // Log the complete analysis_data structure for debugging
+                    console.log('Raw analysis_data structure:', JSON.stringify(latestAnalysis.analysis_data, null, 2));
+                    
+                    // Use the raw analysis_data as-is
+                    if (latestAnalysis.analysis_data) {
+                        // If it's already a string, use it directly
+                        if (typeof latestAnalysis.analysis_data === 'string') {
+                            competitorAnalysisData = `## Market Research & Insights\n${latestAnalysis.analysis_data}`;
+                        } 
+                        // If it's an object, stringify it with pretty print
+                        else if (typeof latestAnalysis.analysis_data === 'object') {
+                            competitorAnalysisData = `## Market Research & Insights\n${JSON.stringify(latestAnalysis.analysis_data, null, 2)}`;
+                        }
+                    } else {
+                        competitorAnalysisData = '## Market Research & Insights\nNo research data available.\n';
+                    }
                 }
             } catch (error) {
                 console.error("[Refactor] Error fetching competitor analysis from Supabase:", error);
@@ -427,8 +530,8 @@ export async function GET(request: NextRequest) {
     }
     // --- End Grounding Search ---
 
-    // --- Function to build the final user prompt (dynamically includes grounded info) ---
-    const buildFinalUserPrompt = (groundedInfo: string, competitorAnalysisText: string = '', includeCompetitorAnalysis: boolean = true) => {
+    // --- Function to build the final user prompt (dynamically includes grounded info and ad pillars) ---
+    const buildFinalUserPrompt = async (groundedInfo: string, competitorAnalysisText: string = '', includeCompetitorAnalysis: boolean = true) => {
         const groundedSection = groundedInfo ? `
 ---
 *(This section provides recent context about ${analysisRunData.clientName}. Consider these details alongside the core client information to ensure recommendations are timely and relevant. Use specific points from here where they offer a clear advantage or fresh angle.)*
@@ -438,8 +541,39 @@ export async function GET(request: NextRequest) {
         const competitorSection = (includeCompetitorAnalysis && 
                                  competitorAnalysisText && 
                                  !competitorAnalysisText.toLowerCase().includes('error'))
-            ? competitorAnalysisText
+            ? `
+**Market Research & Insights (Google Search):**
+${competitorAnalysisText}
+`
             : '';
+
+        // Get ad pillars data
+        let adPillarsSection = '';
+        try {
+            const adPillars = await getAdPillars();
+            if (adPillars.length > 0) {
+                adPillarsSection = `
+**Current Ad Pillar Analysis:**
+Here are the creative pillars currently being used in our ads, along with their frequency:
+${adPillars.map(p => `- ${p.pillar}: ${p.count} ads`).join('\n')}
+
+**Creative Strategy Guidance:**
+1. Consider prioritizing ideas that utilize underutilized pillars (those with lower counts)
+2. For each recommendation, suggest which pillar(s) it aligns with from our existing set
+3. If introducing a new pillar, explain how it complements our current strategy
+4. Consider combining multiple pillars in innovative ways to create unique concepts
+
+**Pillar-Specific Considerations:**
+- For "Problem Solution" pillars: Focus on clear pain points and solutions
+- For "Feature Showcase" pillars: Highlight unique product features with strong visuals
+- For "Educational" pillars: Provide valuable, informative content
+- For "Testimonial/Social Proof" pillars: Incorporate authentic customer stories
+`;
+            }
+        } catch (error) {
+            console.error('Error generating ad pillars section:', error);
+            adPillarsSection = '\n*Error loading ad pillar data. Proceeding without it.*';
+        }
 
 
         return `
@@ -478,7 +612,9 @@ ${taskSectionParam ? taskSectionParam.replace(/\{clientName\}/g, analysisRunData
 **Market Research & Insights (Google Search):**
 ${competitorSection}
 
- ** Your Ideas should be mix with News and Trending topics in Thailand in Market Research & Insights to make ideas fresh and relevant on time.
+${adPillarsSection}
+
+** Your Ideas should be mix with News and Trending topics in Thailand in Market Research & Insights to make ideas fresh and relevant on time.
   
 **Creative Execution Details (Per Recommendation - Populate these fields IN THAI for the JSON):**
 ${detailsSectionParam ? detailsSectionParam.replace(/\{productFocus\}/g, analysisRunData.productFocus || 'products/services') : `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** (เช่น "เคล็ดลับฮาวทู", "เบื้องหลังการทำงาน", "เรื่องราวความสำเร็จลูกค้า", "การหักล้างความเชื่อผิดๆ", "ไลฟ์สไตล์และการใช้งาน", "ปัญหาและการแก้ไข").
@@ -570,7 +706,29 @@ Return ONLY the JSON object above, nothing else.
         console.log("STEP 1: Starting initial Gemini generation...");
         try {
         // --- Prepare Gemini Prompt (using common builder) ---
-        const finalGeminiPrompt = buildFinalUserPrompt(groundedClientInfoCommon, competitorAnalysisData, includeCompetitorAnalysis);
+        console.log('Debug - buildFinalUserPrompt parameters:', {
+          clientName: analysisRunData.clientName,
+          market: analysisRunData.market,
+          productFocus: analysisRunData.productFocus,
+          userBrief: userBrief || '',
+          groundedInfo: groundedClientInfoCommon?.substring(0, 100) + '...', // Log first 100 chars
+          bookSummaryContent: bookSummaryContent?.substring(0, 100) + '...', // Log first 100 chars
+          competitorAnalysisText: includeCompetitorAnalysis ? (competitorAnalysisData?.substring(0, 100) + '...') : 'None',
+          taskSectionParam: taskSectionParam,
+          detailsSectionParam: detailsSectionParam,
+          adAccountId: analysisRunData.ad_account_id || 'None'
+        });
+
+        const finalGeminiPrompt = await buildFinalUserPrompt(
+          typeof groundedClientInfoCommon === 'string' ? groundedClientInfoCommon : '', // groundedInfo
+          (includeCompetitorAnalysis && competitorAnalysisData) ? competitorAnalysisData : '', // competitorAnalysisText
+          includeCompetitorAnalysis // includeCompetitorAnalysis
+        );
+        
+        console.log('Competitor analysis data being passed to prompt:', 
+          (includeCompetitorAnalysis && competitorAnalysisData) ? 'Data exists' : 'No data');
+        
+        console.log('Debug - buildFinalUserPrompt completed successfully');
 
         // --- Log Gemini Prompt ---
         console.log("--- START INITIAL GEMINI PROMPT ---");
@@ -1056,7 +1214,18 @@ Do NOT include any text outside the JSON. No markdown formatting, no explanation
         console.log("Starting OpenAI generation...");
         try {
             // --- Prepare OpenAI Prompt (using common builder, no grounding needed here) ---
-            const finalOpenAIPrompt = buildFinalUserPrompt(groundedClientInfoCommon, competitorAnalysisData, includeCompetitorAnalysis);
+            const finalOpenAIPrompt = await buildFinalUserPrompt(
+              analysisRunData.clientName || 'Unknown Client',  // clientName (string)
+              analysisRunData.market || 'Unknown Market',      // market (string)
+              analysisRunData.productFocus || null            // productFocus (string | null)
+            //   typeof userBrief === 'string' ? userBrief : '',  // userBrief (string)
+            //   typeof groundedClientInfoCommon === 'string' ? groundedClientInfoCommon : '', // groundedInfo (string)
+            //   typeof bookSummaryContent === 'string' ? bookSummaryContent : '', // bookSummaryContent (string)
+            //   (includeCompetitorAnalysis && typeof competitorAnalysisData === 'string') ? competitorAnalysisData : '', // competitorAnalysisText (string)
+            //   typeof taskSectionParam === 'string' ? taskSectionParam : null, // taskSectionParam (string | null)
+            //   typeof detailsSectionParam === 'string' ? detailsSectionParam : null, // detailsSectionParam (string | null)
+            //   typeof analysisRunData.ad_account_id === 'string' ? analysisRunData.ad_account_id : undefined // adAccountId (string | undefined)
+            );
 
             // --- Log OpenAI Prompt ---
             console.log("--- START FINAL OPENAI PROMPT ---");
@@ -1130,7 +1299,18 @@ Do NOT include any text outside the JSON. No markdown formatting, no explanation
         console.log("Starting Claude generation...");
         try {
             // --- Prepare Claude Prompt (using common builder, no grounding needed here) ---
-            const finalClaudePrompt = buildFinalUserPrompt(groundedClientInfoCommon, competitorAnalysisData, includeCompetitorAnalysis);
+            const finalClaudePrompt = await buildFinalUserPrompt(
+              analysisRunData.clientName || 'Unknown Client',  // clientName (string)
+              analysisRunData.market || 'Unknown Market',      // market (string)
+              analysisRunData.productFocus || null,            // productFocus (string | null)
+            //   typeof userBrief === 'string' ? userBrief : '',  // userBrief (string)
+            //   typeof groundedClientInfoCommon === 'string' ? groundedClientInfoCommon : '', // groundedInfo (string)
+            //   typeof bookSummaryContent === 'string' ? bookSummaryContent : '', // bookSummaryContent (string)
+            //   (includeCompetitorAnalysis && typeof competitorAnalysisData === 'string') ? competitorAnalysisData : '', // competitorAnalysisText (string)
+            //   typeof taskSectionParam === 'string' ? taskSectionParam : null, // taskSectionParam (string | null)
+            //   typeof detailsSectionParam === 'string' ? detailsSectionParam : null, // detailsSectionParam (string | null)
+            //   typeof analysisRunData.ad_account_id === 'string' ? analysisRunData.ad_account_id : undefined // adAccountId (string | undefined)
+            );
             
             // Use the predefined systemPrompt
             const systemPromptClaude = "You are an AI assistant tasked with generating creative marketing recommendations. Your response MUST be a single, valid JSON object and nothing else. Do not include any text before or after the JSON object. All text content within the JSON object MUST be in THAI language.";

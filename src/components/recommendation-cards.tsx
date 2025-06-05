@@ -6,6 +6,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 );
 
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -14,7 +15,6 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Bookmark, Share2, Loader2, AlertTriangle, BrainCircuit, X, Info, CheckSquare, UploadCloud, ExternalLink, Copy, Download, EyeOff, FileText, Image as LucideImage, Link, List, MoreHorizontal, Plus, Sparkles, UserPlus, ThumbsUp, ThumbsDown, MessageCircle, RefreshCw, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useState, useEffect } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -25,101 +25,138 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 // Add the new component for Ad Pillars Section with Chart
-const AdPillarsSection = () => {
-  interface PillarData {
+interface PillarData {
   pillar: string;
   count: number;
   percentage: number;
 }
 
-const [pillars, setPillars] = useState<PillarData[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+interface AdPillarsSectionProps {
+  clientName?: string | null;
+  productFocus?: string | null;
+}
+
+const AdPillarsSection = ({ clientName, productFocus }: AdPillarsSectionProps) => {
+  const [pillars, setPillars] = useState<PillarData[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [totalAds, setTotalAds] = useState(0);
-
-  // Helper function to parse PostgreSQL array string
-  const parsePostgresArray = (pgArray: string): string[] => {
-    // Handle empty or null input
-    if (!pgArray || pgArray === '{}') return [];
-    
-    // Remove outer curly braces
-    const inner = pgArray.slice(1, -1);
-    if (!inner) return [];
-    
-    // Split by comma but respect quoted strings
-    const result: string[] = [];
-    let current = '';
-    let inQuotes = false;
-    
-    for (let i = 0; i < inner.length; i++) {
-      const char = inner[i];
-      
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === ',' && !inQuotes) {
-        result.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-    
-    // Add the last item
-    if (current) {
-      result.push(current.trim());
-    }
-    
-    return result;
-  };
-
-  // Helper function to clean and standardize pillar text
-  const cleanPillarText = (text: string): string => {
-    if (!text) return '';
-    // Trim whitespace and remove quotes
-    let cleaned = text.trim().replace(/^['"]|['"]$/g, '').trim();
-    // Handle special characters and formatting
-    cleaned = cleaned
-      .replace(/[\/]/g, ' / ') // Add spaces around slashes
-      .replace(/\s+/g, ' ')     // Normalize multiple spaces
-      .trim();
-    
-    // Capitalize first letter of each word
-    return cleaned
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(' ');
-  };
+  const [hasFetched, setHasFetched] = useState(false);
 
   useEffect(() => {
     const fetchPillars = async () => {
+      // Only fetch if we have both client and product focus
+      if (!clientName || !productFocus) {
+        console.log('Missing client or product focus - client:', clientName, 'product:', productFocus);
+        setPillars([]);
+        setTotalAds(0);
+        setHasFetched(false);
+        return;
+      }
+
+      console.log('Fetching ad pillars for client:', clientName, 'product:', productFocus);
+      setIsLoading(true);
       try {
-        // Get all ads with their creative_pillars
+        // First, get the client data from AnalysisRun table
+        console.log('Fetching client data for:', clientName);
+        // Get the most recent analysis run for this client
+        const { data: clientResults, error: clientError } = await supabase
+          .from('AnalysisRun')
+          .select('clientName, ad_account_id, createdAt')
+          .eq('clientName', clientName)
+          .order('createdAt', { ascending: false })
+          .limit(1);
+          
+        const clientData = clientResults?.[0];
+
+        console.log('Client data response:', { clientData, clientError });
+
+        if (clientError || !clientData) {
+          const errorMsg = clientError ? clientError.message : 'Client not found in AnalysisRun';
+          console.error('Error fetching client data:', errorMsg);
+          throw new Error(`Client not found: ${errorMsg}`);
+        }
+
+        // If no ad_account_id is found, we'll use the client name as a fallback
+        const accountIdentifier = clientData.ad_account_id || clientName;
+        console.log('Fetching ads for account:', accountIdentifier);
+        
+        // Then fetch ads filtered by ad_account_id or client name
         const { data: ads, error } = await supabase
           .from('ads_details')
           .select('creative_pillars')
+          .or(`ad_account.eq.${accountIdentifier},ad_account.eq.${clientName}`)
           .not('creative_pillars', 'is', null);
 
-        if (error) throw error;
+        console.log('Ads response:', { ads, error });
 
+        if (error) {
+          console.error('Error fetching ads:', error);
+          throw error;
+        }
+
+        // Count total number of ads for percentage calculation
         const total = ads.length;
         setTotalAds(total);
+        setHasFetched(true);
 
         // Count pillar occurrences
         const pillarCounts: Record<string, number> = {};
         
         ads.forEach(ad => {
-          if (ad.creative_pillars) {
-            try {
-              // Parse the PostgreSQL array format
-              const pillars = parsePostgresArray(ad.creative_pillars);
-              pillars.forEach(pillar => {
-                const cleaned = cleanPillarText(pillar);
-                if (cleaned) {
-                  pillarCounts[cleaned] = (pillarCounts[cleaned] || 0) + 1;
+          if (!ad.creative_pillars) return;
+          
+          try {
+            // Handle different possible formats
+            let pillarsData = ad.creative_pillars;
+            
+            // If it's a string, try to parse it as JSON
+            if (typeof pillarsData === 'string') {
+              try {
+                // First try to parse as JSON array
+                const parsed = JSON.parse(pillarsData);
+                if (Array.isArray(parsed)) {
+                  pillarsData = parsed;
                 }
-              });
-            } catch (e) {
-              console.error('Error parsing pillars:', e);
+              } catch (e) {
+                // If not JSON, treat as comma-separated string
+                pillarsData = pillarsData.split(',').map((p: string) => p.trim());
+              }
             }
+            
+            // Ensure we have an array to work with
+            const pillarsArray = Array.isArray(pillarsData) 
+              ? pillarsData 
+              : [String(pillarsData)];
+            
+            // Process each pillar
+            pillarsArray.forEach(pillar => {
+              if (!pillar) return;
+              
+              // Clean up the pillar string
+              let cleanPillar = String(pillar)
+                .replace(/[\[\]"'{}]/g, '') // Remove all JSON/array characters
+                .trim();
+                
+              // If it still contains JSON-like structure, try to extract content
+              const jsonMatch = cleanPillar.match(/\{([^}]+)\}/);
+              if (jsonMatch && jsonMatch[1]) {
+                cleanPillar = jsonMatch[1];
+              }
+              
+              cleanPillar = cleanPillar.trim();
+              if (cleanPillar) {
+                // Group similar pillars (case insensitive)
+                const normalizedPillar = cleanPillar.toLowerCase();
+                const existingKey = Object.keys(pillarCounts).find(
+                  key => key.toLowerCase() === normalizedPillar
+                ) || cleanPillar;
+                
+                pillarCounts[existingKey] = (pillarCounts[existingKey] || 0) + 1;
+              }
+            });
+            
+          } catch (e) {
+            console.warn('Error processing creative_pillars:', e, 'Value:', ad.creative_pillars);
           }
         });
 
@@ -128,20 +165,22 @@ const [pillars, setPillars] = useState<PillarData[]>([]);
           .map(([pillar, count]) => ({
             pillar,
             count,
-            percentage: total > 0 ? Math.round((count / total) * 100) : 0
+            percentage: Math.round((count / total) * 100) || 0
           }))
           .sort((a, b) => b.count - a.count);
 
         setPillars(sortedPillars);
       } catch (error) {
         console.error('Error fetching ad pillars:', error);
+        setPillars([]);
+        setTotalAds(0);
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchPillars();
-  }, []); // Empty dependency array to run once on mount
+  }, [clientName, productFocus]); // Re-run when client or product focus changes
 
   // Custom tooltip for the chart
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -161,6 +200,14 @@ const [pillars, setPillars] = useState<PillarData[]>([]);
     return null;
   };
 
+  if (!clientName || !productFocus) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        <p>Select a client and product focus to view ad pillar analysis</p>
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -170,11 +217,22 @@ const [pillars, setPillars] = useState<PillarData[]>([]);
     );
   }
 
+  if (hasFetched && pillars.length === 0) {
+    return (
+      <div className="text-center py-8 border rounded bg-muted/10">
+        <p className="text-muted-foreground">No pillar data available for {clientName}</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          No creative pillars found for the selected client and product focus
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <div>
-          <h3 className="text-lg font-semibold">Ad Creative Pillars</h3>
+          <h3 className="text-lg font-semibold">Ad Creative Pillars for {productFocus}</h3>
           <p className="text-sm text-muted-foreground">
             Distribution across {pillars.length} creative pillars in {totalAds} ads
           </p>
@@ -2806,7 +2864,10 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                         <CardDescription>Current active creative pillars in your ads</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <AdPillarsSection />
+                        <AdPillarsSection 
+  clientName={selectedClientName}
+  productFocus={selectedProductFocus} 
+/>
                     </CardContent>
                 </Card>
             </div>
