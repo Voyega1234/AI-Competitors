@@ -21,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
+
 // Import Recharts components
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
@@ -356,6 +357,7 @@ interface GenerateImageResponse {
 }
 
 
+
 const DEFAULT_TASK_SECTION = `You are a senior prompt engineer and content strategist with deep expertise in digital content for the Thai market.
 
 Task:
@@ -640,7 +642,7 @@ export function RecommendationCards() {
     const [error, setError] = useState<ModelErrorState>({});
     const [selectedModel, setSelectedModel] = useState<string>("gemini");
     // Track models for current results
-
+    
     // --- State for Dialog (Recommendation Details Only) ---
     const [selectedRecommendation, setSelectedRecommendation] = useState<Recommendation | null>(null);
     // --- State for Image Generation in Dialog ---
@@ -648,7 +650,8 @@ export function RecommendationCards() {
     const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
     const [isImageLoading, setIsImageLoading] = useState<boolean>(false);
     const [imageError, setImageError] = useState<string | null>(null);
-
+    
+    const [sortMetric, setSortMetric] = useState<string>('ctr'); // Default to CTR
     // Define types for competitor analysis data
 interface CompetitorAnalysisData {
     analysis?: any;
@@ -1172,6 +1175,13 @@ interface CompetitorAnalysisData {
                 apiUrl += `&clientName=${encodeURIComponent(selectedClientName || '')}`;
                 apiUrl += `&productFocus=${encodeURIComponent(selectedProductFocus || '')}`;
                 apiUrl += `&market=Thailand`;
+
+                if (sortMetric) {
+                    apiUrl += `&sortMetric=${encodeURIComponent(sortMetric)}`;
+                    // Default to descending order for all metrics except CPC
+                    const order = sortMetric === 'cpc' ? 'asc' : 'desc';
+                    apiUrl += `&sortOrder=${order}`;
+                }
 
                 const response = await fetch(apiUrl);
                 const data = await response.json();
@@ -2122,7 +2132,43 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                             disabled={isAnyModelLoading || isMetaLoading}
                         />
                     </div>
+                    {/* --- Ad Pillars Analysis Section --- */}
+                    <div className="mb-8">
+                        <Card>
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-lg">Ad Creative Analysis</CardTitle>
+                                <CardDescription>Current active creative pillars in your ads</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <AdPillarsSection 
+                        clientName={selectedClientName}
+                        productFocus={selectedProductFocus} 
+                        />
+                            </CardContent>
+                        </Card>
+                    </div>
 
+                    {/* Add this where you want the metric selection to appear */}
+                    <div className="mb-4">
+                    <Label>Sort Ads By:</Label>
+                    <Select 
+                        value={sortMetric} 
+                        onValueChange={(value) => setSortMetric(value)}
+                    >
+                        <SelectTrigger className="w-[200px]">
+                        <SelectValue placeholder="Select metric" />
+                        </SelectTrigger>
+                        <SelectContent>
+                        <SelectItem value="ctr">CTR (High to Low)</SelectItem>
+                        <SelectItem value="cpc">CPC (Low to High)</SelectItem>
+                        <SelectItem value="roas">ROAS (High to Low)</SelectItem>
+                        <SelectItem value="clicks">Clicks (High to Low)</SelectItem>
+                        <SelectItem value="impressions">Impressions (High to Low)</SelectItem>
+                        <SelectItem value="spend">Spend (Low to High)</SelectItem>
+                        <SelectItem value="frequency">Frequency (Low to High)</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    </div>
                     {/* Editable Task Section */}
                     {/* <div className="grid gap-1.5 w-full">
                         <Label htmlFor="editable-task-section" className="text-sm font-medium">Editable Prompt: Task Section</Label>
@@ -2856,21 +2902,6 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                    </div>
                 )}
 
-                {/* --- Ad Pillars Analysis Section --- */}
-            <div className="mb-8">
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-lg">Ad Creative Analysis</CardTitle>
-                        <CardDescription>Current active creative pillars in your ads</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <AdPillarsSection 
-  clientName={selectedClientName}
-  productFocus={selectedProductFocus} 
-/>
-                    </CardContent>
-                </Card>
-            </div>
 
             {/* --- Action Buttons --- */}
             <div className="mt-6 flex flex-col items-center gap-4">
