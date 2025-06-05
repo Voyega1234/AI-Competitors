@@ -301,7 +301,8 @@ export function RecommendationCards() {
     const [resultsByModel, setResultsByModel] = useState<ModelResults>({});
     const [isLoading, setIsLoading] = useState<ModelLoadingState>({});
     const [error, setError] = useState<ModelErrorState>({});
-    const [modelsRequestedInLastRun, setModelsRequestedInLastRun] = useState<string[]>([]); // Track models for current results
+    const [selectedModel, setSelectedModel] = useState<string>("gemini");
+    // Track models for current results
 
     // --- State for Dialog (Recommendation Details Only) ---
     const [selectedRecommendation, setSelectedRecommendation] = useState<Recommendation | null>(null);
@@ -563,8 +564,9 @@ interface CompetitorAnalysisData {
         }
     };
     
-    // --- State for Model Selection ---
+    // --- State for Model Selection (Multi-Model Support) ---
     const [selectedModels, setSelectedModels] = useState<string[]>(['gemini']); // Default to Gemini
+    const [modelsRequestedInLastRun, setModelsRequestedInLastRun] = useState<string[]>([]); // Track which models were used in the last run
     
     // --- State for Competitor Analysis Toggle ---
     const [includeCompetitorAnalysis, setIncludeCompetitorAnalysis] = useState<boolean>(true);
@@ -785,23 +787,30 @@ interface CompetitorAnalysisData {
             return;
         }
 
+        // Track which models are being used in this run
+        setModelsRequestedInLastRun(selectedModels);
+        
         // Reset state for the selected models
         const initialLoadingState: ModelLoadingState = {};
         const initialErrorState: ModelErrorState = {};
+        
+        // Initialize loading states for both versions
         selectedModels.forEach(model => {
-            initialLoadingState[model] = true;
-            initialErrorState[model] = null;
+            initialLoadingState[`${model}`] = true; // Standard version
+            initialLoadingState[`${model}-with-competitors`] = true; // With competitors version
+            initialErrorState[`${model}`] = null;
+            initialErrorState[`${model}-with-competitors`] = null;
         });
+        
         setIsLoading(initialLoadingState);
         setError(initialErrorState);
         setResultsByModel({});
         setSelectedRecommendation(null);
-        setModelsRequestedInLastRun(selectedModels);
-        setSelectedCard(null); // Clear selection
+        setSelectedCard(null);
         setCustomerJourneys({});
         setIsGeneratingJourneys(false);
         setJourneyError(null);
-        setCreativeConcepts(null); // Clear concepts
+        setCreativeConcepts(null);
         setIsGeneratingConcepts(false);
         setConceptsError(null);
         
@@ -813,42 +822,77 @@ interface CompetitorAnalysisData {
 
         try {
             console.log(`Fetching recommendations for runId: ${selectedRunId}, Models: ${selectedModels.join(', ')}`);
-            let apiUrl = `/api/generate-recommendations?runId=${selectedRunId}`;
-            apiUrl += `&models=${encodeURIComponent(selectedModels.join(','))}`;
-            if (userBrief.trim()) {
-                apiUrl += `&brief=${encodeURIComponent(userBrief.trim())}`;
-            }
-            apiUrl += `&taskSection=${encodeURIComponent(editableTaskSection)}`;
-            apiUrl += `&includeCompetitorAnalysis=${includeCompetitorAnalysis}`;
-            apiUrl += `&clientName=${encodeURIComponent(selectedClientName || '')}`;
-            apiUrl += `&productFocus=${encodeURIComponent(selectedProductFocus || '')}`;
-            apiUrl += `&market=Thailand`;  // Default market
-            // No longer sending detailsSection to the API
+            
+            // Create a function to fetch recommendations with a given includeCompetitorAnalysis flag
+            const fetchRecommendations = async (withCompetitors: boolean) => {
+                let apiUrl = `/api/generate-recommendations?runId=${selectedRunId}`;
+                apiUrl += `&models=${encodeURIComponent(selectedModels.join(','))}`;
+                if (userBrief.trim()) {
+                    apiUrl += `&brief=${encodeURIComponent(userBrief.trim())}`;
+                }
+                apiUrl += `&taskSection=${encodeURIComponent(editableTaskSection)}`;
+                apiUrl += `&includeCompetitorAnalysis=${withCompetitors}`; // This parameter is still needed for the API
+                apiUrl += `&clientName=${encodeURIComponent(selectedClientName || '')}`;
+                apiUrl += `&productFocus=${encodeURIComponent(selectedProductFocus || '')}`;
+                apiUrl += `&market=Thailand`;
 
-            const response = await fetch(apiUrl);
-            const data = await response.json();
+                const response = await fetch(apiUrl);
+                const data = await response.json();
+                return { response, data };
+            };
 
-            if (!response.ok) {
-                const errorMsg = data.error || `API Error: ${response.status}`;
-                console.error("API Error:", errorMsg);
-                const newErrorState = { ...initialErrorState };
-                selectedModels.forEach(model => {
-                    newErrorState[model] = errorMsg;
-                });
-                setError(newErrorState);
-                setResultsByModel({});
-            } else {
-                const processedResults: ModelResults = {};
-                Object.entries(data.results || {}).forEach(([modelName, recommendations]) => {
+            // Run both versions in parallel
+            const [standardResults, withCompetitorsResults] = await Promise.all([
+                fetchRecommendations(false),
+                fetchRecommendations(true)
+            ]);
+
+            // Process standard results (without competitors)
+            const processedStandardResults: ModelResults = {};
+            if (standardResults.response.ok) {
+                Object.entries(standardResults.data.results || {}).forEach(([modelName, recommendations]) => {
                     if (Array.isArray(recommendations)) {
-                        processedResults[modelName] = recommendations.map((rec, index) => ({
+                        processedStandardResults[modelName] = recommendations.map((rec, index) => ({
                             ...rec,
                             tempId: `${modelName}-${selectedRunId}-${index}`
                         }));
                     }
                 });
-                setResultsByModel(processedResults);
-                setError(prevErrors => ({ ...prevErrors, ...(data.errors || {}) }));
+                setResultsByModel(processedStandardResults);
+            } else {
+                const errorMsg = standardResults.data.error || `API Error: ${standardResults.response.status}`;
+                console.error("API Error (standard):", errorMsg);
+                const newErrorState = { ...initialErrorState };
+                selectedModels.forEach(model => {
+                    newErrorState[model] = errorMsg;
+                });
+                setError(newErrorState);
+            }
+
+            // Process results with competitors
+            const processedCompetitorResults: ModelResults = {};
+            if (withCompetitorsResults.response.ok) {
+                Object.entries(withCompetitorsResults.data.results || {}).forEach(([modelName, recommendations]) => {
+                    if (Array.isArray(recommendations)) {
+                        const modelKey = `${modelName}-with-competitors`;
+                        processedCompetitorResults[modelKey] = recommendations.map((rec, index) => ({
+                            ...rec,
+                            tempId: `${modelKey}-${selectedRunId}-${index}`
+                        }));
+                    }
+                });
+                setResultsByModel(prev => ({
+                    ...prev,
+                    ...processedCompetitorResults
+                }));
+            } else {
+                const errorMsg = withCompetitorsResults.data.error || `API Error: ${withCompetitorsResults.response.status}`;
+                console.error("API Error (with competitors):", errorMsg);
+                const newErrorState = { ...initialErrorState };
+                selectedModels.forEach(model => {
+                    newErrorState[`${model}-with-competitors`] = errorMsg;
+                });
+                setError(prev => ({ ...prev, ...newErrorState }));
             }
 
         } catch (err: any) {
@@ -857,6 +901,7 @@ interface CompetitorAnalysisData {
             const newErrorState = { ...initialErrorState };
             selectedModels.forEach(model => {
                 newErrorState[model] = errorMsg;
+                newErrorState[`${model}-with-competitors`] = errorMsg;
             });
             setError(newErrorState);
             setResultsByModel({});
@@ -864,6 +909,7 @@ interface CompetitorAnalysisData {
             const finalLoadingState: ModelLoadingState = {};
             selectedModels.forEach(model => {
                 finalLoadingState[model] = false;
+                finalLoadingState[`${model}-with-competitors`] = false;
             });
             setIsLoading(finalLoadingState);
         }
@@ -1657,29 +1703,6 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                        </div>
                     </div>
 
-                    {/* Competitor Analysis Toggle */}
-                    <div className="flex items-center space-x-2 p-3 bg-muted/30 rounded-md">
-                        <Checkbox 
-                            id="include-competitor-analysis"
-                            checked={includeCompetitorAnalysis}
-                            onCheckedChange={(checked) => setIncludeCompetitorAnalysis(checked === true)}
-                            disabled={isAnyModelLoading || isMetaLoading}
-                        />
-                        <div className="grid gap-1.5 leading-none">
-                            <label
-                                htmlFor="include-competitor-analysis"
-                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                            >
-                                Include Competitor Analysis
-                            </label>
-                            <p className="text-xs text-muted-foreground">
-                                {includeCompetitorAnalysis 
-                                    ? "Competitor analysis will be included in recommendations"
-                                    : "Recommendations will be generated without Market Research & Competitor Analysis Data"}
-                            </p>
-                        </div>
-                    </div>
-
                     {/* User Brief Input with Template Selection */}
                     <div className="grid gap-1.5 w-full">
                         <div className="flex items-center justify-between">
@@ -2079,12 +2102,23 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                 </div>
 
                 {/* --- Display Area (Updated for Tabs) --- */}
-                {modelsRequestedInLastRun.length > 0 ? (
-                    <Tabs defaultValue={defaultTab} className="w-full">
+                {selectedModels.length > 0 ? (
+                    <Tabs defaultValue={selectedModels[0]} className="w-full">
                         <div className="flex justify-between items-center mb-4">
-                            <TabsList className="grid w-full grid-cols-3"> {/* Adjust grid-cols based on number of models */}
-                                {modelsRequestedInLastRun.map(modelName => (
-                                    <TabsTrigger key={modelName} value={modelName} className="capitalize">{modelName}</TabsTrigger>
+                            <TabsList className="grid w-full grid-cols-4">
+                                {selectedModels.flatMap(modelName => [
+                                    {
+                                        key: modelName,
+                                        value: modelName,
+                                        label: modelName === 'gemini' ? 'Gemini (Standard)' : modelName
+                                    },
+                                    {
+                                        key: `${modelName}-with-competitors`,
+                                        value: `${modelName}-with-competitors`,
+                                        label: modelName === 'gemini' ? 'Gemini (With Market Research)' : `${modelName} (With Research)`
+                                    }
+                                ]).map(({key, value, label}) => (
+                                    <TabsTrigger key={key} value={value} className="capitalize">{label}</TabsTrigger>
                                 ))}
                             </TabsList>
                             
@@ -2102,34 +2136,50 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                             )}
                         </div>
 
-                        {modelsRequestedInLastRun.map(modelName => (
+                        {selectedModels.flatMap(modelName => [
+                            {
+                                modelName,
+                                displayName: modelName === 'gemini' ? 'Gemini (Standard)' : modelName,
+                                hasCompetitors: false
+                            },
+                            {
+                                modelName: `${modelName}-with-competitors`,
+                                displayName: modelName === 'gemini' ? 'Gemini (With Market Research)' : `${modelName} (With Research)`,
+                                hasCompetitors: true
+                            }
+                        ]).map(({modelName, displayName, hasCompetitors}) => (
                             <TabsContent key={modelName} value={modelName} className="mt-4">
                                 {/* Loading State for this model */}
                                 {isLoading[modelName] && (
                                     <div className="flex flex-col items-center justify-center gap-4 p-8 border rounded-lg text-muted-foreground min-h-[200px]">
                                         <Loader2 className="h-8 w-8 animate-spin" />
-                                        <span className="capitalize">Generating recommendations with {modelName}...</span>
+                                        <span className="capitalize">Generating {displayName} recommendations...</span>
                                     </div>
                                 )}
 
                                 {/* Error State for this model */}
                                 {error[modelName] && !isLoading[modelName] && (
-    <div className="flex flex-col justify-center items-center p-10 border border-destructive bg-destructive/10 rounded-lg min-h-[200px] text-destructive">
-        <AlertTriangle className="h-8 w-8 mb-2" />
-        <p className="font-semibold mb-1 capitalize">Error Generating with {modelName}</p>
-        <p className="text-sm text-center">
-            {modelName === 'gemini' && error[modelName]?.includes('Failed to parse recommendations JSON from initial Gemini')
-                ? 'Something went wrong. Please retry to generate ideas.'
-                : error[modelName]}
-        </p>
-    </div>
-)}
+                                    <div className="flex flex-col justify-center items-center p-10 border border-destructive bg-destructive/10 rounded-lg min-h-[200px] text-destructive">
+                                        <AlertTriangle className="h-8 w-8 mb-2" />
+                                        <p className="font-semibold mb-1">Error Generating {displayName} Recommendations</p>
+                                        <p className="text-sm text-center">
+                                            {modelName.includes('gemini') && error[modelName]?.includes('Failed to parse recommendations JSON from initial Gemini')
+                                                ? 'Something went wrong. Please retry to generate ideas.'
+                                                : error[modelName]}
+                                        </p>
+                                    </div>
+                                )}
 
                                 {/* No Recommendations or Initial State for this model */}
                                 {!isLoading[modelName] && !error[modelName] && (!resultsByModel[modelName] || (resultsByModel[modelName]?.length ?? 0) === 0) && (
                                     <div className="flex flex-col items-center justify-center gap-4 p-8 border rounded-lg text-muted-foreground min-h-[200px]">
                                         <AlertTriangle className="h-8 w-8" />
-                                        <span className="capitalize">No recommendations generated by {modelName}.</span>
+                                        <span>No {displayName.toLowerCase()} recommendations generated yet.</span>
+                                        {hasCompetitors && (
+                                            <p className="text-sm text-center text-muted-foreground mt-2">
+                                                These recommendations will include market research and competitor analysis data.
+                                            </p>
+                                        )}
                                     </div>
                                 )}
 
@@ -2154,7 +2204,8 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                                         isSelected ? "border-2 border-primary shadow-md" : "border",
                                                         !isSelected && rec.impact === 'High' ? 'border-green-500' :
                                                         !isSelected && rec.impact === 'Medium' ? 'border-yellow-500' :
-                                                        ''
+                                                        '',
+                                                        hasCompetitors ? 'border-l-4 border-l-blue-500' : ''
                                                     )}
                                                 >
                                                     {isSelected && (
@@ -2163,6 +2214,21 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                                         </div>
                                                     )}
                                                     <CardHeader className="pb-2">
+                                                        <div className="flex justify-between items-start mb-1">
+                                                            <div>
+                                                                <Badge variant="outline" className={cn(
+                                                                    "text-xs mb-1",
+                                                                    hasCompetitors ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-muted'
+                                                                )}>
+                                                                    {displayName}
+                                                                </Badge>
+                                                            </div>
+                                                            {hasCompetitors && (
+                                                                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                                                                    Market Research
+                                                                </Badge>
+                                                            )}
+                                                        </div>
                                                         <CardTitle className="text-base leading-tight pr-8">
                                                             {rec.concept_idea || rec.title}
                                                         </CardTitle>
