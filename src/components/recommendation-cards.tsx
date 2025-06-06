@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Bookmark, Share2, Loader2, AlertTriangle, BrainCircuit, X, Info, CheckSquare, UploadCloud, ExternalLink, Copy, Download, EyeOff, FileText, Image as LucideImage, Link, List, MoreHorizontal, Plus, Sparkles, UserPlus, ThumbsUp, ThumbsDown, MessageCircle, RefreshCw, ChevronDown } from "lucide-react"
+import { Bookmark, Share2, Loader2, AlertTriangle, BrainCircuit, X, Info, CheckSquare, UploadCloud, ExternalLink, Copy, Download, EyeOff, FileText, Image as LucideImage, Link, List, MoreHorizontal, Plus, Sparkles, UserPlus, ThumbsUp, ThumbsDown, MessageCircle, RefreshCw, ChevronDown, Image as ImageIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
@@ -385,7 +385,7 @@ Surprise, educate, or inspire readers (“Oh wow!” moments).
 
 Avoid direct selling or promotional language—focus on value, insight, or inspiration.
 
-Leverage the information you have to spark new ideas. Turn existing data into creative and impactful concepts.
+Leverage the information you have to spark new ideas. Turn existing data into creative and impactful concepts or show ideas that base of proof or statistic
 
 Constraints:
 
@@ -661,7 +661,24 @@ interface CompetitorAnalysisData {
     [key: string]: any;
 }
 
-// --- State for Competitor Analysis ---
+    // --- Types ---
+    interface Ad {
+        id: string;
+        name: string;
+        thumbnail_url: string;
+        message: string;
+        ctr: number | null;
+        spend: number | null;
+        clicks: number | null;
+    }
+
+    // --- State for Top Ads ---
+    const [topAds, setTopAds] = useState<Ad[]>([]);
+    const [isTopAdsLoading, setIsTopAdsLoading] = useState<boolean>(false);
+    const [topAdsError, setTopAdsError] = useState<string | null>(null);
+    const [adAccountId, setAdAccountId] = useState<string | null>(null);
+
+    // --- State for Competitor Analysis ---
     const [competitorAnalysis, setCompetitorAnalysis] = useState<CompetitorAnalysisData | null>(null);
     const [isCompetitorAnalysisLoading, setIsCompetitorAnalysisLoading] = useState<boolean>(false);
     const [competitorAnalysisError, setCompetitorAnalysisError] = useState<string | null>(null);
@@ -669,6 +686,64 @@ interface CompetitorAnalysisData {
     const [news, setNews] = useState<Array<{title: string, summary: string, isExpanded: boolean}>>([]);
     const [isNewsLoading, setIsNewsLoading] = useState<boolean>(false);
     const [newsError, setNewsError] = useState<string | null>(null);
+
+    // --- Function to fetch top performing ads directly from Supabase ---
+    const fetchTopAds = async () => {
+        if (!selectedClientName || !selectedProductFocus || !sortMetric) return;
+        
+        setIsTopAdsLoading(true);
+        setTopAdsError(null);
+        
+        try {
+            // First, get the ad account ID based on client and product
+            const { data: clientData, error: clientError } = await supabase
+                .from('AnalysisRun')  // Changed from 'clients' to 'analysis_runs'
+                .select('ad_account_id')
+                .eq('clientName', selectedClientName)
+                .eq('productFocus', selectedProductFocus)
+                .order('createdAt', { ascending: false })  // Get the most recent run
+                .limit(1)
+                .single();
+            
+            if (clientError || !clientData?.ad_account_id) {
+                console.error('Error fetching ad account ID:', clientError || 'No ad account found');
+                throw new Error('Failed to find ad account for the selected client and product');
+            }
+            
+            // Now fetch the ads for this ad account
+            const { data: ads, error: adsError } = await supabase
+                .from('ads_details')
+                .select('id, name, thumbnail_url, message, ctr, spend, clicks')
+                .eq('ad_account', clientData.ad_account_id)
+                .order(sortMetric, { ascending: false })
+                .limit(10);
+            
+            if (adsError) throw adsError;
+            
+            // Process the ads to ensure proper types
+            const processedAds: Ad[] = (ads || []).map(ad => ({
+                id: ad.id,
+                name: ad.name || 'Untitled Ad',
+                thumbnail_url: ad.thumbnail_url || '',
+                message: ad.message || '',
+                ctr: ad.ctr ? (typeof ad.ctr === 'string' ? parseFloat(ad.ctr) : ad.ctr) : null,
+                spend: ad.spend ? (typeof ad.spend === 'string' ? parseFloat(ad.spend) : ad.spend) : null,
+                clicks: ad.clicks ? (typeof ad.clicks === 'string' ? parseInt(ad.clicks, 10) : ad.clicks) : null
+            }));
+            
+            setTopAds(processedAds);
+        } catch (error) {
+            console.error('Error fetching top ads:', error);
+            setTopAdsError('Failed to load top ads. Please try again.');
+        } finally {
+            setIsTopAdsLoading(false);
+        }
+    };
+    
+    // Fetch top ads when client, product, or sort metric changes
+    useEffect(() => {
+        fetchTopAds();
+    }, [selectedClientName, selectedProductFocus, sortMetric]);
 
     // --- Function to fetch related news ---
     const fetchNews = async () => {
@@ -2151,25 +2226,86 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                     </div>
 
                     {/* Add this where you want the metric selection to appear */}
-                    <div className="mb-4">
-                    <Label>Sort Ads By:</Label>
-                    <Select 
-                        value={sortMetric} 
-                        onValueChange={(value) => setSortMetric(value)}
-                    >
-                        <SelectTrigger className="w-[200px]">
-                        <SelectValue placeholder="Select metric" />
-                        </SelectTrigger>
-                        <SelectContent>
-                        <SelectItem value="ctr">CTR (High to Low)</SelectItem>
-                        <SelectItem value="cpc">CPC (Low to High)</SelectItem>
-                        <SelectItem value="roas">ROAS (High to Low)</SelectItem>
-                        <SelectItem value="clicks">Clicks (High to Low)</SelectItem>
-                        <SelectItem value="impressions">Impressions (High to Low)</SelectItem>
-                        <SelectItem value="spend">Spend (Low to High)</SelectItem>
-                        <SelectItem value="frequency">Frequency (Low to High)</SelectItem>
-                        </SelectContent>
-                    </Select>
+                    <div className="mb-6">
+                        <div className="mb-4">
+                            <Label>Sort Ads By:</Label>
+                            <Select 
+                                value={sortMetric} 
+                                onValueChange={(value) => setSortMetric(value)}
+                            >
+                                <SelectTrigger className="w-[200px]">
+                                    <SelectValue placeholder="Select metric" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="ctr">CTR (High to Low)</SelectItem>
+                                    <SelectItem value="cpc">CPC (Low to High)</SelectItem>
+                                    <SelectItem value="roas">ROAS (High to Low)</SelectItem>
+                                    <SelectItem value="clicks">Clicks (High to Low)</SelectItem>
+                                    <SelectItem value="impressions">Impressions (High to Low)</SelectItem>
+                                    <SelectItem value="spend">Spend (Low to High)</SelectItem>
+                                    <SelectItem value="frequency">Frequency (Low to High)</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {/* Top Ads Preview Section */}
+                        <div className="mt-6">
+                            <h3 className="text-lg font-semibold mb-3">Top 10 Performing Ads</h3>
+                            
+                            {isTopAdsLoading ? (
+                                <div className="flex items-center justify-center h-32">
+                                    <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                                    <span>Loading top ads...</span>
+                                </div>
+                            ) : topAdsError ? (
+                                <div className="text-red-500 p-4 bg-red-50 rounded-md">
+                                    {topAdsError}
+                                </div>
+                            ) : topAds.length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                                    {topAds.map((ad) => (
+                                        <div key={ad.id} className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                                            {ad.thumbnail_url ? (
+                                                <div className="relative aspect-video bg-gray-100">
+                                                    <img 
+                                                        src={ad.thumbnail_url} 
+                                                        alt={ad.name} 
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <div className="aspect-video bg-gray-100 flex items-center justify-center text-gray-400">
+                                                    <ImageIcon className="h-12 w-12" />
+                                                </div>
+                                            )}
+                                            <div className="p-3">
+                                                <h4 className="font-medium text-sm line-clamp-1">{ad.name}</h4>
+                                                {ad.message && (
+                                                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                                        {ad.message}
+                                                    </p>
+                                                )}
+                                                <div className="mt-2 flex justify-between items-center text-xs text-muted-foreground">
+                                                    <span className={sortMetric === 'ctr' ? 'font-semibold text-foreground' : ''}>
+                                                        CTR: {ad.ctr?.toFixed(2) ?? 'N/A'}%
+                                                    </span>
+                                                    <span className={sortMetric === 'spend' ? 'font-semibold text-foreground' : ''}>
+                                                        ฿{(ad.spend || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    </span>
+                                                    <span className={sortMetric === 'clicks' ? 'font-semibold text-foreground' : ''}>
+                                                        Clicks:{ad.clicks?.toLocaleString() ?? 'N/A'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-center py-8 text-muted-foreground">
+                                    No ads found. Try adjusting your filters.
+                                </div>
+                            )}
+                        </div>
                     </div>
                     {/* Editable Task Section */}
                     {/* <div className="grid gap-1.5 w-full">

@@ -82,7 +82,9 @@ const getTopAdsByMetric = async (metric: string, order: 'asc' | 'desc' = 'desc',
 
       return {
         id: ad.id,
-        image_description: ad.image_description,
+        name: ad.name || 'Untitled Ad',
+        thumbnail_url: ad.thumbnail_url || '',
+        message: ad.message || '',
         [metric]: numericValue
       };
     });
@@ -430,7 +432,7 @@ ${competitorAnalysisText}
         // Get ad pillars data
         let adPillarsSection = '';
         try {
-            const adPillars = await getAdPillars();
+            const adPillars = adAccountId ? await getAdPillars(adAccountId) : [];
             if (adPillars.length > 0) {
                 adPillarsSection = `
 **Current Ad Pillar Analysis:**
@@ -461,7 +463,7 @@ We should create New Ad ideas that not same like most Pillar we have
                     console.log(`[Top Ads] Successfully fetched ${topAds.length} ads`);
                     topAdsSection = `\n**Top Performing Ads (Sorted by ${sortMetric.toUpperCase()} ${sortOrder === 'desc' ? 'High to Low' : 'Low to High'}):**\n` +
                         topAds.map((ad, index) => 
-                            `Ad ${index + 1} (${sortMetric}: ${ad[sortMetric]}):\n${ad.image_description}`
+                            `Ad ${index + 1} (${sortMetric}: ${ad[sortMetric]}):\n${ad.name || 'No name available'}\n${ad.message || 'No description available'}`
                         ).join('\n\n---\n\n');
                 } else {
                     console.log('[Top Ads] No ads found for the given criteria');
