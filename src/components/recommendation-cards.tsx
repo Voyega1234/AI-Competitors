@@ -385,6 +385,8 @@ Surprise, educate, or inspire readers (“Oh wow!” moments).
 
 Avoid direct selling or promotional language—focus on value, insight, or inspiration.
 
+Leverage the information you have to spark new ideas. Turn existing data into creative and impactful concepts.
+
 Constraints:
 
 Exactly 20 ideas—no more, no less.

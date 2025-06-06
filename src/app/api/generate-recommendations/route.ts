@@ -508,14 +508,15 @@ ${taskSectionParam ? taskSectionParam.replace(/\{clientName\}/g, analysisRunData
   6. Ideas to include but not limited to: why the solutions from ${analysisRunData.clientName} are different than what is being offered in the market currently. Talk about the differentiation of the product if and when it makes the client's product or service more appealing. 
   7. Competitor Analysis is important please use it to make a strategic idea.`}
 
-**Market Research & Insights (Google Search):**
+This is All Knowledge We Have You can use for use fuel ideas that have proof will be impact ideas: [
+
 ${competitorSection}
 
 ${adPillarsSection}
 
 ${topAdsSection}
 
-** Your Ideas should be mix with News and Trending topics in Thailand in Market Research & Insights to make ideas fresh and relevant on time.
+]
   
 **Creative Execution Details (Per Recommendation - Populate these fields IN THAI for the JSON):**
 ${detailsSectionParam ? detailsSectionParam.replace(/\{productFocus\}/g, analysisRunData.productFocus || 'products/services') : `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** (เช่น "เคล็ดลับฮาวทู", "เบื้องหลังการทำงาน", "เรื่องราวความสำเร็จลูกค้า", "การหักล้างความเชื่อผิดๆ", "ไลฟ์สไตล์และการใช้งาน", "ปัญหาและการแก้ไข").
