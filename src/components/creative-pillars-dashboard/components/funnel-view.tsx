@@ -48,6 +48,11 @@ export function FunnelView({ clientName, productFocus }: FunnelViewProps) {
   const [adAccountLoading, setAdAccountLoading] = useState<boolean>(false)
   const [showLegacyView, setShowLegacyView] = useState<boolean>(false) // Toggle between ad sets and legacy view
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0) // Used to trigger data refresh
+  
+  // Function to refresh funnel data
+  const refreshFunnelView = () => {
+    setRefreshTrigger(prev => prev + 1);
+  }
 
   // Fetch ad account ID when client or product selection changes
   useEffect(() => {
@@ -116,7 +121,7 @@ export function FunnelView({ clientName, productFocus }: FunnelViewProps) {
     };
     
     fetchAdSetsWithAds();
-  }, [adAccountId]);
+  }, [adAccountId, refreshTrigger]);
   
   // Fetch creatives when client or product selection changes
   useEffect(() => {
@@ -316,7 +321,11 @@ export function FunnelView({ clientName, productFocus }: FunnelViewProps) {
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
               </div>
             ) : adAccountId ? (
-              <AdSetMappingTable adAccountId={adAccountId} />
+              <AdSetMappingTable 
+                adAccountId={adAccountId} 
+                onMappingSaved={refreshFunnelView} 
+                onClose={() => setAdSetMappingOpen(false)} 
+              />
             ) : (
               <div className="p-4 border rounded-md bg-amber-50 text-amber-800">
                 <p>No ad account found for the selected client and product. Please select a different client or product.</p>

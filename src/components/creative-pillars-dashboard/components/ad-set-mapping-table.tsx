@@ -4,11 +4,13 @@ import type React from "react"
 
 import { useState, useEffect } from 'react'
 import { Info, Save, RefreshCcw, Loader2, Sparkles, Check, ChevronsUpDown } from 'lucide-react'
+import { createClient } from '@supabase/supabase-js'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Switch } from '@/components/ui/switch'
+import { useToast } from '@/components/ui/use-toast'
 import {
   Tooltip,
   TooltipContent,
@@ -41,9 +43,11 @@ interface AdSet {
 interface AdSetMappingTableProps {
   adAccountId: string;
   onMappingSaved?: () => void;
+  onClose?: () => void;
 }
 
-export function AdSetMappingTable({ adAccountId, onMappingSaved }: AdSetMappingTableProps) {
+export function AdSetMappingTable({ adAccountId, onMappingSaved, onClose }: AdSetMappingTableProps) {
+  const { toast } = useToast()
   const [adSets, setAdSets] = useState<AdSet[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -51,74 +55,110 @@ export function AdSetMappingTable({ adAccountId, onMappingSaved }: AdSetMappingT
   const [autoSuggestEnabled, setAutoSuggestEnabled] = useState(true)
   const [savingMapping, setSavingMapping] = useState(false)
   const [suggestionsLoading, setSuggestionsLoading] = useState(false)
-  const [aiSuggestions, setAiSuggestions] = useState<{adSetName: string, suggestedStage: string, confidence: number, reasoning: string}[]>([])
-  const [funnelStages, setFunnelStages] = useState<string[]>(["Evaluation", "Consideration", "Conversion"])
+  const [saveSuccess, setSaveSuccess] = useState(false)
+  const [aiSuggestions, setAiSuggestions] = useState<{adSetName: string, suggestedStage: string | null, confidence: number, reasoning: string}[]>([])
+  const [funnelStages, setFunnelStages] = useState<string[]>([])
   const [loadingFunnelStages, setLoadingFunnelStages] = useState(false)
   
+  // Initialize Supabase client
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+  const supabase = createClient(supabaseUrl, supabaseKey)
+
   // Fetch ad sets and funnel stages when component mounts
   useEffect(() => {
     const fetchData = async () => {
+      if (!adAccountId) return
+      
+      setLoading(true)
+      setError(null)
+      
       try {
-        setLoading(true)
-        setLoadingFunnelStages(true)
+        // Fetch ad sets directly from Supabase with distinct values
+        const { data: adSetsData, error: adSetsError } = await supabase
+          .from('ads_details')
+          .select('ad_set, ad_set_id')
+          .eq('ad_account', adAccountId)
+          .order('ad_set', { ascending: true })
         
-        // Fetch ad sets
-        const adSetsResponse = await fetch(`/api/ad-sets?adAccountId=${adAccountId}`)
+        if (adSetsError) throw adSetsError
         
-        if (!adSetsResponse.ok) {
-          throw new Error(`Failed to fetch ad sets: ${adSetsResponse.statusText}`)
-        }
-        
-        const adSetsData = await adSetsResponse.json()
-        setAdSets(adSetsData.map((adSet: any) => ({
-          ...adSet,
-          mappedStage: undefined,
-          mappedStages: []
-        })))
-        
-        // Fetch existing mappings
-        try {
-          const mappingsResponse = await fetch(`/api/ad-set-mapping?adAccountId=${adAccountId}`)
-          
-          if (mappingsResponse.ok) {
-            const mappingsData = await mappingsResponse.json()
-            
-            if (mappingsData && mappingsData.length > 0) {
-              // Apply existing mappings to ad sets
-              setAdSets(prevAdSets => 
-                prevAdSets.map(adSet => {
-                  const mapping = mappingsData.find((m: any) => m.ad_set_id === adSet.ad_set_id)
-                  if (mapping) {
-                    return {
-                      ...adSet,
-                      mappedStage: mapping.stages && mapping.stages.length > 0 ? mapping.stages[0] : undefined,
-                      mappedStages: mapping.stages || []
-                    }
-                  }
-                  return adSet
-                })
-              )
+        if (adSetsData && Array.isArray(adSetsData)) {
+          // Filter out duplicate ad sets by ad_set_id
+          const uniqueAdSets = adSetsData.reduce((unique: any[], adSet: any) => {
+            const exists = unique.find(item => item.ad_set_id === adSet.ad_set_id);
+            if (!exists) {
+              unique.push(adSet);
             }
-          }
-        } catch (mappingErr) {
-          console.warn("Error fetching existing mappings:", mappingErr)
+            return unique;
+          }, []);
+          
+          console.log(`Filtered ${adSetsData.length} ad sets down to ${uniqueAdSets.length} unique ad sets`);
+          
+          setAdSets(uniqueAdSets.map(adSet => ({
+            ...adSet,
+            mappedStage: undefined,
+            mappedStages: []
+          })))
         }
         
-        // Fetch funnel stages from database
         try {
-          const funnelStagesResponse = await fetch(`/api/funnel-stages?adAccountId=${adAccountId}`)
+          // Fetch funnel stages directly from Supabase
+          const { data: funnelStagesData, error: funnelStagesError } = await supabase
+            .from('funnel_stages')
+            .select('stages')
+            .eq('ad_account_id', adAccountId)
           
-          if (funnelStagesResponse.ok) {
-            const funnelStagesData = await funnelStagesResponse.json()
-            if (funnelStagesData.stages && funnelStagesData.stages.length > 0) {
-              setFunnelStages(funnelStagesData.stages)
+          if (funnelStagesError) throw funnelStagesError
+          
+          if (funnelStagesData && funnelStagesData.length > 0) {
+            // Extract stage names and filter out any null/undefined values
+            const stages = funnelStagesData
+              .map(stage => stage.stages)
+              .filter(stage => stage !== null && stage !== undefined)
+              .map(stage => String(stage))
+            
+            if (stages.length > 0) {
+              console.log('Fetched funnel stages from Supabase:', stages)
+              setFunnelStages(stages)
+            } else {
+              // If no stages found in database, use default stages as fallback
+              console.log('No funnel stages found in database, using default stages')
+              setFunnelStages(["Evaluation", "Consideration", "Conversion"])
             }
           }
         } catch (funnelErr) {
           console.warn("Error fetching funnel stages, using defaults:", funnelErr)
-          // Keep default funnel stages if fetch fails
-        } finally {
-          setLoadingFunnelStages(false)
+        }
+        
+        // Fetch existing mappings
+        try {
+          const { data: mappingsData, error: mappingsError } = await supabase
+            .from('ad_set_funnel_mappings')
+            .select('ad_set_id, funnel_stage')
+            .eq('ad_account', adAccountId)
+          
+          if (mappingsError) throw mappingsError
+          
+          if (mappingsData && mappingsData.length > 0) {
+            // Apply existing mappings to ad sets
+            setAdSets(prevAdSets => 
+              prevAdSets.map(adSet => {
+                const mapping = mappingsData.find((m: any) => m.ad_set_id === adSet.ad_set_id)
+                if (mapping) {
+                  // In the ad_set_funnel_mappings table, funnel_stage is a single value, not an array
+                  return {
+                    ...adSet,
+                    mappedStage: mapping.funnel_stage || undefined,
+                    mappedStages: mapping.funnel_stage ? [mapping.funnel_stage] : []
+                  }
+                }
+                return adSet
+              })
+            )
+          }
+        } catch (mappingErr) {
+          console.warn("Error fetching existing mappings:", mappingErr)
         }
       } catch (err) {
         console.error("Error fetching ad sets:", err)
@@ -130,7 +170,7 @@ export function AdSetMappingTable({ adAccountId, onMappingSaved }: AdSetMappingT
     
     fetchData()
   }, [adAccountId])
-  
+
   // Fetch AI suggestions when ad sets are loaded and auto-suggest is enabled
   useEffect(() => {
     if (autoSuggestEnabled && adSets.length > 0) {
@@ -184,16 +224,16 @@ export function AdSetMappingTable({ adAccountId, onMappingSaved }: AdSetMappingT
     )
   }
 
-  // Get AI-powered suggestion for an ad set
+  // Get suggestion for an ad set based on the most common funnel_segment in its ads
   const autoSuggestStage = (adSetName: string): string | null => {
     // If suggestions are loading or not yet fetched, return null
     if (suggestionsLoading || (autoSuggestEnabled && aiSuggestions.length === 0)) {
       return null
     }
     
-    // Check if we have an AI suggestion for this ad set
+    // Check if we have a suggestion for this ad set
     const aiSuggestion = aiSuggestions.find(s => s.adSetName === adSetName)
-    if (aiSuggestion) {
+    if (aiSuggestion && aiSuggestion.suggestedStage) {
       return aiSuggestion.suggestedStage
     }
     
@@ -201,32 +241,86 @@ export function AdSetMappingTable({ adAccountId, onMappingSaved }: AdSetMappingT
     return null
   }
   
-  // Fetch AI-powered suggestions for all ad sets
+  // Fetch suggestions based on the most common funnel_segment in each ad set's ads
   const fetchAiSuggestions = async () => {
     if (adSets.length === 0) return
     
     try {
       setSuggestionsLoading(true)
       
-      const response = await fetch('/api/suggest-funnel-stage', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          adSets: adSets.map(a => a.ad_set),
-          adSetIds: adSets.map(a => a.ad_set_id),
-          adAccountId,
-          funnelStages
-        }),
-      })
+      // Get all ad sets with their ads from Supabase
+      const { data: adsData, error: adsError } = await supabase
+        .from('ads_details')
+        .select('ad_set_id, ad_set, funnel_segment')
+        .eq('ad_account', adAccountId)
+        .not('funnel_segment', 'is', null)
       
-      if (!response.ok) {
-        throw new Error(`Failed to fetch AI suggestions: ${response.statusText}`)
+      if (adsError) throw adsError
+      
+      if (!adsData || adsData.length === 0) {
+        console.log('No ads with funnel segments found')
+        return
       }
       
-      const data = await response.json()
-      setAiSuggestions(data.suggestions)
+      // Group ads by ad set and count funnel segments
+      const adSetFunnelSegments: Record<string, Record<string, number>> = {}
+      
+      // Initialize counters for each ad set
+      adsData.forEach((ad: any) => {
+        const adSetId = ad.ad_set_id
+        const funnelSegment = ad.funnel_segment
+        
+        if (!adSetId || !funnelSegment) return
+        
+        if (!adSetFunnelSegments[adSetId]) {
+          adSetFunnelSegments[adSetId] = {}
+        }
+        
+        if (!adSetFunnelSegments[adSetId][funnelSegment]) {
+          adSetFunnelSegments[adSetId][funnelSegment] = 0
+        }
+        
+        adSetFunnelSegments[adSetId][funnelSegment]++
+      })
+      
+      // Find the most common funnel segment for each ad set
+      const suggestions = adSets.map(adSet => {
+        const segmentCounts = adSetFunnelSegments[adSet.ad_set_id]
+        
+        if (!segmentCounts) {
+          return {
+            adSetName: adSet.ad_set,
+            suggestedStage: null,
+            confidence: 0,
+            reasoning: 'No funnel segments found for this ad set'
+          }
+        }
+        
+        // Find the segment with the highest count
+        let maxCount = 0
+        let mostCommonSegment = null
+        
+        Object.entries(segmentCounts).forEach(([segment, count]) => {
+          if (count > maxCount) {
+            maxCount = count
+            mostCommonSegment = segment
+          }
+        })
+        
+        // Calculate confidence as percentage of ads with this segment
+        const totalAds = Object.values(segmentCounts).reduce((sum, count) => sum + count, 0)
+        const confidence = totalAds > 0 ? (maxCount / totalAds) * 100 : 0
+        
+        return {
+          adSetName: adSet.ad_set,
+          suggestedStage: mostCommonSegment,
+          confidence: confidence,
+          reasoning: `${maxCount} out of ${totalAds} ads in this ad set have the funnel segment '${mostCommonSegment}'`
+        }
+      }).filter(suggestion => suggestion.suggestedStage !== null)
+      
+      console.log('Generated suggestions based on ad funnel segments:', suggestions)
+      setAiSuggestions(suggestions)
       
     } catch (err) {
       console.error('Error fetching AI suggestions:', err)
@@ -237,34 +331,91 @@ export function AdSetMappingTable({ adAccountId, onMappingSaved }: AdSetMappingT
 
   // Save the ad set mapping to the backend
   const saveAdSetMapping = async () => {
+    if (!adAccountId) return
+    
+    setSavingMapping(true)
+    
     try {
-      setSavingMapping(true);
+      // Format the data for Supabase
+      // For multi-stage mapping, we need to create multiple records (one for each stage)
+      type MappingRecord = {
+        ad_account: string;
+        ad_set_id: string;
+        ad_set_name: string;
+        funnel_stage: string;
+        created_at: string;
+        updated_at: string;
+      };
       
-      // Format the data for the API
-      const mappingData = adSets.map(adSet => ({
-        ad_set_id: adSet.ad_set_id,
-        ad_set: adSet.ad_set,
-        stages: multiStageEnabled ? adSet.mappedStages : adSet.mappedStage ? [adSet.mappedStage] : [],
-      }))
+      let mappingData: MappingRecord[] = [];
       
-      // Call the API to save the mapping
-      const response = await fetch('/api/ad-set-mapping', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ad_account_id: adAccountId,
-          mappings: mappingData
-        }),
-      })
-      
-      if (!response.ok) {
-        throw new Error(`Failed to save mapping: ${response.statusText}`)
+      if (multiStageEnabled) {
+        // For multi-stage, create one record per ad set per stage
+        adSets.forEach(adSet => {
+          if (adSet.mappedStages && adSet.mappedStages.length > 0) {
+            adSet.mappedStages.forEach(stage => {
+              mappingData.push({
+                ad_account: adAccountId,
+                ad_set_id: adSet.ad_set_id,
+                ad_set_name: adSet.ad_set, // Using ad_set_name from the schema
+                funnel_stage: stage,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              });
+            });
+          }
+        });
+      } else {
+        // For single-stage, create one record per ad set
+        mappingData = adSets
+          .filter(adSet => adSet.mappedStage) // Only include ad sets with a mapped stage
+          .map(adSet => ({
+            ad_account: adAccountId,
+            ad_set_id: adSet.ad_set_id,
+            ad_set_name: adSet.ad_set, // Using ad_set_name from the schema
+            funnel_stage: adSet.mappedStage as string, // Type assertion since we filtered out undefined values
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }));
       }
       
-      // Show success message
-      alert('Ad set mapping saved successfully!')
+      console.log('Saving ad set mappings to Supabase:', mappingData)
+      
+      // First delete existing mappings for this ad account
+      const { error: deleteError } = await supabase
+        .from('ad_set_funnel_mappings')
+        .delete()
+        .eq('ad_account', adAccountId)
+      
+      if (deleteError) {
+        console.error('Error deleting existing mappings:', deleteError)
+        throw new Error(`Failed to update mappings: ${deleteError.message}`)
+      }
+      
+      // Then insert new mappings
+      const { error: insertError } = await supabase
+        .from('ad_set_funnel_mappings')
+        .insert(mappingData)
+      
+      if (insertError) {
+        console.error('Error inserting mappings:', insertError)
+        throw new Error(`Failed to save mappings: ${insertError.message}`)
+      }
+      
+      console.log('Ad set mappings saved successfully to Supabase')
+      
+      // Show success toast notification
+      toast({
+        title: "Success",
+        description: "Ad set mappings saved successfully",
+        variant: "default",
+      })
+      
+      // Set success state and clear it after 3 seconds
+      setSaveSuccess(true)
+      setTimeout(() => {
+        setSaveSuccess(false)
+      }, 3000)
       
       // Notify parent component to refresh data
       if (onMappingSaved) {
@@ -273,7 +424,15 @@ export function AdSetMappingTable({ adAccountId, onMappingSaved }: AdSetMappingT
       
     } catch (err) {
       console.error('Error saving ad set mapping:', err)
-      alert(`Error saving mapping: ${err instanceof Error ? err.message : 'Unknown error'}`)
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error'
+      setError(errorMessage)
+      
+      // Show error toast notification
+      toast({
+        title: "Error",
+        description: `Failed to save mappings: ${errorMessage}`,
+        variant: "destructive",
+      })
     } finally {
       setSavingMapping(false)
     }
@@ -533,7 +692,38 @@ export function AdSetMappingTable({ adAccountId, onMappingSaved }: AdSetMappingT
         </div>
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex justify-end mt-4 items-center">
+        {saveSuccess && (
+          <div className="flex items-center mr-4">
+            <div className="flex items-center text-green-600 bg-green-50 px-3 py-1 rounded-md animate-in fade-in duration-300 mr-2">
+              <Check className="mr-1 h-4 w-4" />
+              <span className="text-sm font-medium">Saved successfully!</span>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="flex items-center" 
+              onClick={() => {
+                if (onMappingSaved) {
+                  onMappingSaved();
+                  toast({
+                    title: "Refreshed",
+                    description: "Funnel view has been refreshed with your changes",
+                    variant: "default",
+                  });
+                }
+                
+                // Close the dialog
+                if (onClose) {
+                  onClose();
+                }
+              }}
+            >
+              <RefreshCcw className="mr-1 h-4 w-4" />
+              Refresh Funnel View
+            </Button>
+          </div>
+        )}
         <Button onClick={saveAdSetMapping} disabled={savingMapping}>
           {savingMapping ? (
             <>

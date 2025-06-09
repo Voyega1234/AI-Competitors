@@ -42,13 +42,25 @@ export async function GET(request: NextRequest) {
       console.log('No ad set mappings found or table does not exist, continuing with empty mappings');
     }
 
-    // Define default funnel stages - we'll use these as our standard categories
-    const defaultFunnelStages = ["Evaluation", "Consideration", "Conversion"];
+    // Get funnel stages from the database
+    let funnelStages = [];
+    try {
+      const { data: funnelStagesData, error: funnelStagesError } = await supabase
+        .from('funnel_stages')
+        .select('stages')
+        .eq('ad_account_id', adAccountId);
+      
+      if (!funnelStagesError && funnelStagesData && funnelStagesData.length > 0) {
+        funnelStages = funnelStagesData.map(stage => stage.stages);
+      }
+    } catch (error) {
+      console.log('Error fetching funnel stages:', error);
+    }
 
     // Query the MCP database for ad sets and their ads with extended information
     const { data: adSets, error: adSetsError } = await supabase
       .from('ads_details')
-      .select('ad_set_id, ad_set, id, name, thumbnail_url, message, funnel_segment, ctr, cpc, impressions, reach, spend, frequency, roas, clicks, audience_custom_audiences, audience_age_min, audience_age_max, audience_countries, audience_interests, launch_date, objective')
+      .select('ad_set_id, ad_set, id, name, thumbnail_url, message, funnel_segment, ctr, cpc, impressions, reach, spend, frequency, roas, clicks, audience_age_min, audience_age_max, audience_countries, launch_date, objective')
       .eq('ad_account', adAccountId);
 
     if (adSetsError) {
@@ -68,23 +80,6 @@ export async function GET(request: NextRequest) {
       
       // Initialize ad set if not exists
       if (!adSetMap[adSetId]) {
-        // Parse audience custom audiences if available
-        let audiences = [];
-        try {
-          if (ad.audience_custom_audiences) {
-            const audienceData = JSON.parse(ad.audience_custom_audiences);
-            audiences = Object.values(audienceData).map((audience: any) => {
-              try {
-                const audienceObj = JSON.parse(audience);
-                return audienceObj.name;
-              } catch {
-                return audience;
-              }
-            });
-          }
-        } catch (e) {
-          console.log('Error parsing audience data:', e);
-        }
         
         adSetMap[adSetId] = {
           id: adSetId,
@@ -101,8 +96,7 @@ export async function GET(request: NextRequest) {
             frequency: 0,
             roas: null,
             totalAds: 0
-          },
-          audiences: audiences
+          }
         };
         adSetFunnelSegments[adSetId] = {};
       }
@@ -159,43 +153,7 @@ export async function GET(request: NextRequest) {
       // Only add the ad if it has an image URL and isn't already in the list
       if (ad.thumbnail_url && !adSetMap[adSetId].ads.some((existingAd: any) => existingAd.id === ad.id)) {
         // Handle custom audiences - don't try to parse as JSON if it's a string
-        let customAudiences = [];
-        if (ad.audience_custom_audiences) {
-          // Check if it's already an array
-          if (Array.isArray(ad.audience_custom_audiences)) {
-            customAudiences = ad.audience_custom_audiences;
-          } else if (typeof ad.audience_custom_audiences === 'string') {
-            // If it's a comma-separated string
-            if (ad.audience_custom_audiences.includes(',')) {
-              customAudiences = ad.audience_custom_audiences.split(',').map(a => a.trim());
-            } else {
-              // Just a single value
-              customAudiences = [ad.audience_custom_audiences];
-            }
-            
-            // Try to parse as JSON only if it looks like JSON
-            if (ad.audience_custom_audiences.startsWith('{') || ad.audience_custom_audiences.startsWith('[')) {
-              try {
-                const audienceData = JSON.parse(ad.audience_custom_audiences);
-                if (typeof audienceData === 'object') {
-                  customAudiences = Object.values(audienceData).map((audience: any) => {
-                    if (typeof audience === 'string' && (audience.startsWith('{') || audience.startsWith('['))) {
-                      try {
-                        const audienceObj = JSON.parse(audience);
-                        return audienceObj.name || audience;
-                      } catch {
-                        return audience;
-                      }
-                    }
-                    return audience;
-                  });
-                }
-              } catch (e) {
-                console.log('Could not parse audience_custom_audiences as JSON, using as string');
-              }
-            }
-          }
-        }
+        
         
         // Handle audience countries - don't try to parse as JSON if it's a string
         let countries = [];
@@ -215,7 +173,19 @@ export async function GET(request: NextRequest) {
             // Try to parse as JSON only if it looks like JSON
             if (ad.audience_countries.startsWith('{') || ad.audience_countries.startsWith('[')) {
               try {
-                countries = JSON.parse(ad.audience_countries);
+                // First, try to sanitize the JSON string if it has common issues
+                let sanitizedJson = ad.audience_countries;
+                
+                // Fix common JSON parsing issues
+                sanitizedJson = sanitizedJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":');
+                sanitizedJson = sanitizedJson.replace(/,\s*([\]}])/g, '$1');
+                
+                const parsedCountries = JSON.parse(sanitizedJson);
+                if (Array.isArray(parsedCountries)) {
+                  countries = parsedCountries;
+                } else if (typeof parsedCountries === 'object') {
+                  countries = Object.values(parsedCountries);
+                }
               } catch (e) {
                 console.log('Could not parse audience_countries as JSON, using as string');
               }
@@ -223,13 +193,15 @@ export async function GET(request: NextRequest) {
           }
         }
         
+        // We're not parsing audience_interests as requested
+        
         adSetMap[adSetId].ads.push({
           id: ad.id,
           name: ad.name,
           imageUrl: ad.thumbnail_url,
           body: ad.message,
           funnel_segment: ad.funnel_segment,
-          customAudiences: customAudiences,
+          // No custom audiences as requested
           demographics: {
             age_min: ad.audience_age_min,
             age_max: ad.audience_age_max,
@@ -297,7 +269,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Group ad sets by funnel stage
-    const funnelData = defaultFunnelStages.map(stage => {
+    const funnelData = funnelStages.map((stage: string) => {
       const adSetsInStage = result.filter((adSet: any) => 
         adSet.stages.includes(stage)
       );
@@ -307,6 +279,11 @@ export async function GET(request: NextRequest) {
         adSets: adSetsInStage
       };
     });
+    
+    // If no funnel stages were found, use empty array
+    if (funnelData.length === 0) {
+      console.log('No funnel stages found for this ad account');
+    }
 
     // Add "Uncategorized" stage for ad sets with Uncategorized mapping
     const uncategorizedAdSets = result.filter((adSet: any) => 
