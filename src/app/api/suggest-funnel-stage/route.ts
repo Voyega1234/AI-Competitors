@@ -1,21 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI, Type } from "@google/genai";
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Initialize Google Generative AI client
 const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
 const genAI = new GoogleGenAI({ apiKey: GOOGLE_API_KEY });
 
 /**
- * API route to suggest funnel stages for audience names using Gemini AI
+ * API route to suggest funnel stages for ad sets using Gemini AI
  */
 export async function POST(request: NextRequest) {
   try {
-    // Get the audience names and available funnel stages from the request body
-    const { audienceNames, funnelStages } = await request.json();
+    // Get the ad sets and available funnel stages from the request body
+    const { adSets, adSetIds, adAccountId, funnelStages } = await request.json();
 
-    if (!audienceNames || !Array.isArray(audienceNames) || audienceNames.length === 0) {
+    if (!adSets || !Array.isArray(adSets) || adSets.length === 0) {
       return NextResponse.json(
-        { error: 'Audience names array is required' },
+        { error: 'Ad sets array is required' },
         { status: 400 }
       );
     }
@@ -26,21 +32,117 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    // Create a prompt for Gemini
-    const prompt = `
-      You are an expert in digital marketing and audience segmentation.
+    
+    // Fetch additional context from the database
+    let adSetsWithContext = [];
+    let audienceData = [];
+    
+    try {
+      // Fetch audience data for this ad account
+      const { data: audiences, error: audienceError } = await supabase
+        .from('facebook_custom_audiences')
+        .select('*')
+        .eq('ad_account_id', adAccountId);
       
-      Given the following Facebook audience names, suggest the most appropriate funnel stage for each.
+      if (audienceError) {
+        console.error('Error fetching audiences:', audienceError);
+      } else if (audiences) {
+        audienceData = audiences;
+      }
+      
+      // Fetch ad details that include audience associations
+      for (const adSetId of adSetIds) {
+        const { data: adDetails, error: adError } = await supabase
+          .from('ads_details')
+          .select('*')
+          .eq('ad_set_id', adSetId)
+          .limit(1);
+          
+        if (!adError && adDetails && adDetails.length > 0) {
+          adSetsWithContext.push(adDetails[0]);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching additional context:', error);
+    }
+    
+    // Define types for our data structures
+    interface AudienceItem {
+      id: string;
+      name: string;
+    }
+    
+    interface AdDetail {
+      ad_set: string;
+      ad_set_id: string;
+      audience_custom_audiences?: string;
+    }
+    
+    interface Audience {
+      id: string;
+      name: string;
+    }
+    
+    // Create a mapping of ad set names to their associated audiences
+    const adSetToAudiences: Record<string, string[]> = {};
+    adSetsWithContext.forEach((adDetail: AdDetail) => {
+      try {
+        if (adDetail.audience_custom_audiences) {
+          // The audience_custom_audiences field might be in different formats
+          // Let's handle it more carefully
+          let audienceIds: string[] = [];
+          
+          try {
+            // First, try to parse it directly if it's already a valid JSON array
+            if (adDetail.audience_custom_audiences.startsWith('[') && adDetail.audience_custom_audiences.endsWith(']')) {
+              const parsed = JSON.parse(adDetail.audience_custom_audiences);
+              audienceIds = parsed.map((item: any) => item.id || item);
+            } else {
+              // If it's not a valid JSON array, try to extract IDs using regex
+              const idMatches = adDetail.audience_custom_audiences.match(/"id"\s*:\s*"([^"]+)"/g);
+              if (idMatches) {
+                audienceIds = idMatches.map(match => {
+                  const idMatch = match.match(/"id"\s*:\s*"([^"]+)"/);
+                  return idMatch ? idMatch[1] : '';
+                }).filter(id => id !== '');
+              }
+            }
+          } catch (parseError) {
+            console.error('Error parsing audience IDs:', parseError);
+          }
+          
+          if (audienceIds.length > 0) {
+            const associatedAudiences = audienceData
+              .filter((audience: Audience) => audienceIds.includes(audience.id))
+              .map((audience: Audience) => audience.name);
+              
+            adSetToAudiences[adDetail.ad_set] = associatedAudiences;
+          }
+        }
+      } catch (e) {
+        console.error('Error processing audience data for ad set:', adDetail.ad_set, e);
+      }
+    });
+    
+    // Create a prompt for Gemini with enhanced context
+    const prompt = `
+      You are an expert in digital marketing and ad campaign segmentation.
+      
+      Given the following Facebook ad set names, suggest the most appropriate funnel stage for each.
       The available funnel stages are: ${funnelStages.join(', ')}.
       
-      Audience names:
-      ${audienceNames.map(name => `- ${name}`).join('\n')}
+      Ad set information:
+      ${adSets.map((name, index) => {
+        const audiences = adSetToAudiences[name] || [];
+        return `- Ad Set Name: ${name}
+  ${audiences.length > 0 ? `  Associated Audiences: ${audiences.join(', ')}` : ''}`;
+      }).join('\n\n')}
       
-      For each audience name, determine the most appropriate funnel stage based on:
-      - Lookalike audiences are typically for top-of-funnel (awareness/evaluation)
-      - Engaged users or video viewers are typically mid-funnel (consideration)
-      - App users, purchasers, or high-intent audiences are typically bottom-funnel (conversion)
+      For each ad set, determine the most appropriate funnel stage based on:
+      - Ad sets with terms like "Lookalike", "LAL", "Interest", "Broad" are typically for top-of-funnel (awareness/evaluation)
+      - Ad sets with terms like "Engaged", "Video", "Viewers", "Retargeting" are typically mid-funnel (consideration)
+      - Ad sets with terms like "App", "Purchase", "Conversion", "Leads" are typically bottom-funnel (conversion)
+      - Consider the associated audiences when available - audiences with "Lookalike" are typically top-funnel, audiences with "Engaged" or "Video" are mid-funnel, and audiences with "App", "Purchase", or "Active" are bottom-funnel
       
       Return your suggestions in a structured format.
     `;
@@ -51,12 +153,12 @@ export async function POST(request: NextRequest) {
       items: {
         type: Type.OBJECT,
         properties: {
-          audienceName: { type: Type.STRING },
+          adSetName: { type: Type.STRING },
           suggestedStage: { type: Type.STRING },
           confidence: { type: Type.NUMBER },
           reasoning: { type: Type.STRING }
         },
-        propertyOrdering: ["audienceName", "suggestedStage", "confidence", "reasoning"]
+        propertyOrdering: ["adSetName", "suggestedStage", "confidence", "reasoning"]
       }
     };
 
@@ -90,7 +192,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json(suggestions);
+    return NextResponse.json({ suggestions });
 
   } catch (error) {
     console.error('Error suggesting funnel stages:', error);

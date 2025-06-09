@@ -29,6 +29,8 @@ interface AdSet {
     body?: string
   }[]
   stages: string[]
+  imageUrl?: string
+  body?: string
 }
 
 interface FunnelStage {
@@ -89,7 +91,7 @@ export function FunnelView({ clientName, productFocus }: FunnelViewProps) {
     fetchAdAccount();
   }, [clientName, productFocus]);
   
-  // Fetch ad sets with ads when ad account ID changes
+  // Fetch ad sets with ads when ad account ID changes or refresh is triggered
   useEffect(() => {
     const fetchAdSetsWithAds = async () => {
       if (!adAccountId) return;
@@ -98,7 +100,9 @@ export function FunnelView({ clientName, productFocus }: FunnelViewProps) {
       setError(null);
       
       try {
-        const response = await fetch(`/api/ad-sets-with-ads?adAccountId=${adAccountId}`);
+        // Add a cache-busting parameter when triggered by refresh
+        const cacheBuster = refreshTrigger > 0 ? `&_=${Date.now()}` : '';
+        const response = await fetch(`/api/ad-sets-with-ads?adAccountId=${adAccountId}${cacheBuster}`);
         
         if (!response.ok) {
           throw new Error(`Failed to fetch ad sets: ${response.statusText}`);
@@ -116,7 +120,7 @@ export function FunnelView({ clientName, productFocus }: FunnelViewProps) {
     };
     
     fetchAdSetsWithAds();
-  }, [adAccountId]);
+  }, [adAccountId, refreshTrigger]);
   
   // Fetch creatives when client or product selection changes
   useEffect(() => {
@@ -291,82 +295,150 @@ export function FunnelView({ clientName, productFocus }: FunnelViewProps) {
             </label>
           </div>
         </div>
-        <Button 
-          variant="outline" 
-          onClick={() => setAdSetMappingOpen(true)}
-          className="flex items-center gap-2"
-        >
-          <Users className="h-4 w-4" />
-          Ad Set Mapping
-        </Button>
       </div>
-      
-      {/* Ad Set Mapping Dialog */}
-      <Dialog open={adSetMappingOpen} onOpenChange={setAdSetMappingOpen}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>Ad Set Mapping</DialogTitle>
-            <DialogDescription>
-              Map your ad sets to funnel stages to better organize your ad campaigns.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="mt-4">
-            {adAccountLoading ? (
-              <div className="flex items-center justify-center h-40">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <Button 
+        variant="outline" 
+        onClick={openAdSetMapping}
+        className="flex items-center gap-2"
+      >
+        <Users className="h-4 w-4" />
+        Ad Set Mapping
+      </Button>
+    </div>
+    
+    {/* Ad Set Mapping Dialog */}
+    <Dialog open={adSetMappingOpen} onOpenChange={setAdSetMappingOpen}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Ad Set Funnel Stage Mapping</DialogTitle>
+          <DialogDescription>
+            Map your ad sets to funnel stages to improve funnel visualization
+          </DialogDescription>
+        </DialogHeader>
+        <AdSetMappingTable adAccountId={adAccountId} onMappingSaved={() => refreshData()} />
+      </DialogContent>
+    </Dialog>
+    
+    {/* Ad Sets with Thumbnails View */}
+    {!showLegacyView && (
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
+        {funnelData.map((funnelStage) => (
+          <Card key={funnelStage.stage} className="relative">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between w-full">
+                <span className="text-lg font-bold">{funnelStage.stage}</span>
+                <span className="text-sm text-muted-foreground">
+                  {funnelStage.adSets.length} Ad Sets
+                </span>
               </div>
-            ) : adAccountId ? (
-              <AdSetMappingTable adAccountId={adAccountId} />
-            ) : (
-              <div className="p-4 border rounded-md bg-amber-50 text-amber-800">
-                <p>No ad account found for the selected client and product. Please select a different client or product.</p>
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-      {/* Ad Sets with Thumbnails View */}
-      {!showLegacyView && (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-1 lg:grid-cols-3">
-          {funnelData.map((funnelStage, index) => {
-            // Use index to determine column color instead of hardcoding by name
-            const colorClasses = [
-              'bg-blue-50 border-blue-200',   // First column (index 0)
-              'bg-purple-50 border-purple-200', // Second column (index 1)
-              'bg-green-50 border-green-200',  // Third column (index 2)
-            ];
-            
-            // Get color class based on index, cycling through available colors
-            const colorClass = colorClasses[index % colorClasses.length];
-            
-            return (
-              <Card 
-                key={funnelStage.stage} 
-                className={`relative ${colorClass} border-2`}
-              >
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between w-full">
-                    <span className="text-lg font-bold">{funnelStage.stage}</span>
-                    <span className="text-sm text-muted-foreground">
-                      {funnelStage.adSets.length} Ad Sets
-                    </span>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-0">
+              {funnelStage.adSets.length > 0 ? (
+                funnelStage.adSets.map((adSet) => (
+                  <AdSetCard key={adSet.id} adSet={adSet} />
+                ))
+              ) : (
+                <div className="p-4 text-center text-sm text-muted-foreground bg-muted/30 rounded-md">
+                  No ad sets in this stage
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    )}
+
+    {/* Legacy Creatives View */}
+    {showLegacyView && (
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
+        {segmentItems.map(({ segment, creatives: segmentCreatives }) => {
+          if (!segment) return null;
+          
+          // Calculate coverage for this segment
+          const { used, missing } = getPillarCoverageFromData(segmentCreatives);
+          const totalPillars = used.length + missing.length;
+          const percentCovered = totalPillars === 0 ? 0 : used.length / totalPillars;
+          
+          // Determine coverage label and color
+          let coverageLabel = "Unknown";
+          let coverageColor = "bg-gray-600";
+          if (percentCovered >= 0.8) {
+            coverageLabel = "High Coverage";
+            coverageColor = "bg-green-600";
+          } else if (percentCovered >= 0.4) {
+            coverageLabel = "Medium Coverage";
+            coverageColor = "bg-yellow-600";
+          } else if (percentCovered > 0) {
+            coverageLabel = "Low Coverage";
+            coverageColor = "bg-red-600";
+          }
+          
+          // Calculate metrics
+          const topCtr = Math.max(...segmentCreatives.map(c => parseFloat(c.ctr || "0")));
+          const lastRefresh = segmentCreatives
+            .map(c => c.launch_date)
+            .sort()
+            .reverse()[0] || "N/A";
+
+          return (
+            <Card key={segment} className={`relative ${coverageColor} bg-opacity-10`}>
+              <CardHeader className="pb-2 flex flex-col items-start">
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-lg font-bold">{segment}</span>
+                  <span className="text-sm text-muted-foreground">
+                    {segmentCreatives.length} Ads
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  <div className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                    Top CTR: {topCtr.toFixed(2)}%
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-4 pt-0">
-                  {funnelStage.adSets.length > 0 ? (
-                    funnelStage.adSets.map((adSet) => (
-                      <AdSetCard key={adSet.id} adSet={adSet} />
-                    ))
-                  ) : (
-                    <div className="p-4 text-center text-sm text-muted-foreground bg-muted/30 rounded-md">
-                      No ad sets in this stage
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+                  <div className="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded">
+                    Last Refresh: {lastRefresh}
+                  </div>
+                  <div className={`text-xs ${coverageColor.replace('bg-', 'bg-opacity-20 text-')} px-2 py-0.5 rounded`}>
+                    {coverageLabel}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3 pt-0">
+                {segmentCreatives.map((creative) => (
+                  <CreativeCard key={creative.id} creative={creative} />
+                ))}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    )}
+    
+    {/* Ad Sets with Thumbnails View */}
+    {!showLegacyView && (
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
+        {funnelData.map((funnelStage) => (
+          <Card key={funnelStage.stage} className="relative">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between w-full">
+                <span className="text-lg font-bold">{funnelStage.stage}</span>
+                <span className="text-sm text-muted-foreground">
+                  {funnelStage.adSets.length} Ad Sets
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-0">
+              {funnelStage.adSets.length > 0 ? (
+                funnelStage.adSets.map((adSet) => (
+                  <AdSetCard key={adSet.id} adSet={adSet} />
+                ))
+              ) : (
+                <div className="p-4 text-center text-sm text-muted-foreground bg-muted/30 rounded-md">
+                  No ad sets in this stage
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
       )}
 
       {/* Legacy Creatives View */}
