@@ -6,12 +6,16 @@ import { Button } from '@/components/ui/button';
 import { NewAnalysisForm } from '@/components/new-analysis-form';
 import { CompetitorTable } from '@/components/competitor-table';
 import { RecommendationCards } from '@/components/recommendation-cards';
-import { Search, LayoutGrid, Lightbulb, Loader2, Home } from 'lucide-react'; // Import icons including Home
+import { Search, LayoutGrid, Lightbulb, Loader2, Home, Palette } from 'lucide-react'; // Import icons including Home and Palette
 import type { NewAnalysisFormData } from '@/components/new-analysis-form';
 import { Competitor } from '@/components/competitor-table'; // Assuming Competitor type is exported from here
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { FunnelView } from '@/components/creative-pillars-dashboard/components/funnel-view';
+import { MatrixView } from '@/components/creative-pillars-dashboard/components/matrix-view';
+import { DashboardHeader } from '@/components/creative-pillars-dashboard/components/dashboard-header';
 
 // Type for the active section
-type ResearchSection = 'new-analysis' | 'competitors' | 'recommendations';
+type ResearchSection = 'new-analysis' | 'competitors' | 'recommendations' | 'creative-pillars';
 
 export default function CompetitorResearchPage() {
   const [activeSection, setActiveSection] = useState<ResearchSection>('new-analysis');
@@ -20,6 +24,17 @@ export default function CompetitorResearchPage() {
   const [analysisCompetitors, setAnalysisCompetitors] = useState<Competitor[]>([]);
   const [isAnalysisLoading, setIsAnalysisLoading] = useState<boolean>(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  
+  // State for Creative Pillars Dashboard
+  const [campaignType, setCampaignType] = useState<"app" | "ecommerce">("app");
+  const [selectedClientName, setSelectedClientName] = useState<string | null>(null);
+  const [selectedProductFocus, setSelectedProductFocus] = useState<string | null>(null);
+
+  const handleClientProductChange = (clientName: string | null, productFocus: string | null) => {
+    console.log('CompetitorResearch: handleClientProductChange called with', { clientName, productFocus });
+    setSelectedClientName(clientName);
+    setSelectedProductFocus(productFocus);
+  };
 
   // Handler for when NewAnalysisForm submits
   const handleStartAnalysis = async (formData: NewAnalysisFormData) => {
@@ -80,6 +95,35 @@ export default function CompetitorResearchPage() {
           console.error('Error rendering RecommendationCards:', error);
           return <div className="p-8 text-center">Error loading recommendations. Please try again.</div>;
         }
+      case 'creative-pillars':
+        return (
+          <div className="p-4 space-y-4">
+            <DashboardHeader 
+              campaignType={campaignType}
+              onCampaignTypeChange={setCampaignType}
+              onClientProductChange={handleClientProductChange}
+            />
+            <Tabs defaultValue="funnel">
+              <div className="flex items-center justify-between">
+                <TabsList>
+                  <TabsTrigger value="funnel">Funnel View</TabsTrigger>
+                </TabsList>
+              </div>
+              <TabsContent value="funnel" className="space-y-4">
+                <FunnelView 
+                  clientName={selectedClientName} 
+                  productFocus={selectedProductFocus} 
+                />
+              </TabsContent>
+              <TabsContent value="matrix" className="space-y-4">
+                <MatrixView 
+                  clientName={selectedClientName}
+                  productFocus={selectedProductFocus}
+                />
+              </TabsContent>
+            </Tabs>
+          </div>
+        );
       default:
         return null;
     }
@@ -126,6 +170,15 @@ export default function CompetitorResearchPage() {
         >
           <Lightbulb className="h-4 w-4" />
           Recommendations
+        </Button>
+
+        <Button
+          variant={activeSection === 'creative-pillars' ? 'secondary' : 'ghost'}
+          className="justify-start gap-2"
+          onClick={() => setActiveSection('creative-pillars')}
+        >
+          <Palette className="h-4 w-4" />
+          Creative Pillars
         </Button>
       </div>
 

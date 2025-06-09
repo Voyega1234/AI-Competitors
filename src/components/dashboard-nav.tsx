@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { FileText, Home, Lightbulb, PieChart, Settings, Users } from "lucide-react"
+import { FileText, Home, Lightbulb, PieChart, Settings, Users, Palette } from "lucide-react"
 import { SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar"
 
 export function DashboardNav() {
@@ -28,6 +28,11 @@ export function DashboardNav() {
       href: "/dashboard/recommendations",
       icon: Lightbulb,
       title: "Recommendations",
+    },
+    {
+      href: "/dashboard/creative-pillars",
+      icon: Palette,
+      title: "Creative Pillars",
     },
     {
       href: "/dashboard/reports",
