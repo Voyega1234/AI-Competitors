@@ -2,8 +2,8 @@
 
 import type React from "react"
 
-import { useState } from "react"
-import { Check, ChevronsUpDown, Info, Save, Sparkles } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Check, ChevronsUpDown, Info, Loader2, RefreshCcw, Save, Sparkles } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -13,38 +13,127 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Switch } from "@/components/ui/switch"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import { appFunnelStages, ecommerceFunnelStages } from "@/data/funnel-stages"
-import { mockAudiences } from "@/data/audience-data"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
-export function AudienceMappingTable({ funnelType }: { funnelType: "app" | "ecommerce" }) {
-  const [audiences, setAudiences] = useState(mockAudiences)
+// Define the audience type based on the Facebook Custom Audience structure
+interface Audience {
+  id: string
+  name: string
+  subtype: string
+  approximate_count_lower_bound: number
+  approximate_count_upper_bound: number
+  lookalike_spec?: any
+  mappedStage?: string
+  mappedStages?: string[]
+}
+
+// Funnel stages will be fetched from the database based on ad account ID
+
+export function AudienceMappingTable({ adAccountId }: { adAccountId: string }) {
+  const [audiences, setAudiences] = useState<Audience[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [multiStageEnabled, setMultiStageEnabled] = useState(false)
   const [autoSuggestEnabled, setAutoSuggestEnabled] = useState(true)
-  const funnelStages = funnelType === "app" ? appFunnelStages : ecommerceFunnelStages
+  const [savingMapping, setSavingMapping] = useState(false)
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false)
+  const [aiSuggestions, setAiSuggestions] = useState<{audienceName: string, suggestedStage: string, confidence: number, reasoning: string}[]>([])
+  const [funnelStages, setFunnelStages] = useState<string[]>(["Evaluation", "Consideration", "Conversion"])
+  const [loadingFunnelStages, setLoadingFunnelStages] = useState(false)
+  
+  // Fetch audiences and funnel stages when component mounts
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true)
+        setLoadingFunnelStages(true)
+        
+        // Fetch audiences
+        const audiencesResponse = await fetch(`/api/facebook-audiences?adAccountId=${adAccountId}`)
+        
+        if (!audiencesResponse.ok) {
+          throw new Error(`Failed to fetch audiences: ${audiencesResponse.statusText}`)
+        }
+        
+        const audiencesData = await audiencesResponse.json()
+        setAudiences(audiencesData.map((audience: any) => ({
+          ...audience,
+          mappedStage: undefined,
+          mappedStages: []
+        })))
+        
+        // Fetch funnel stages from database
+        try {
+          const funnelStagesResponse = await fetch(`/api/funnel-stages?adAccountId=${adAccountId}`)
+          
+          if (funnelStagesResponse.ok) {
+            const funnelStagesData = await funnelStagesResponse.json()
+            if (funnelStagesData.stages && funnelStagesData.stages.length > 0) {
+              setFunnelStages(funnelStagesData.stages)
+            }
+          }
+        } catch (funnelErr) {
+          console.warn("Error fetching funnel stages, using defaults:", funnelErr)
+          // Keep default funnel stages if fetch fails
+        } finally {
+          setLoadingFunnelStages(false)
+        }
+      } catch (err) {
+        console.error("Error fetching audiences:", err)
+        setError(err instanceof Error ? err.message : "Failed to load audiences")
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    fetchData()
+  }, [adAccountId])
+  
+  // Fetch AI suggestions when audiences are loaded and auto-suggest is enabled
+  useEffect(() => {
+    if (autoSuggestEnabled && audiences.length > 0) {
+      fetchAiSuggestions()
+    }
+  }, [audiences, autoSuggestEnabled])
 
   const handleStageChange = (audienceId: string, stage: string) => {
     setAudiences(
       audiences.map((audience) => {
         if (audience.id === audienceId) {
-          // If multi-stage is enabled, toggle the stage in the array
+          // If multi-stage is enabled, we need to handle arrays
           if (multiStageEnabled) {
             const currentStages = audience.mappedStages || []
+            
+            // If stage already exists, remove it
             if (currentStages.includes(stage)) {
               return {
                 ...audience,
                 mappedStages: currentStages.filter((s) => s !== stage),
               }
-            } else {
+            } 
+            // Otherwise add it
+            else {
               return {
                 ...audience,
                 mappedStages: [...currentStages, stage],
               }
             }
-          } else {
-            // Single stage mapping
-            return {
-              ...audience,
-              mappedStage: stage,
+          } 
+          // For single stage, toggle it on/off
+          else {
+            // If the stage is already selected, clear it
+            if (audience.mappedStage === stage) {
+              return {
+                ...audience,
+                mappedStage: undefined,
+              }
+            } 
+            // Otherwise set it
+            else {
+              return {
+                ...audience,
+                mappedStage: stage,
+              }
             }
           }
         }
@@ -53,25 +142,124 @@ export function AudienceMappingTable({ funnelType }: { funnelType: "app" | "ecom
     )
   }
 
+  // Get AI-powered suggestion for an audience
   const autoSuggestStage = (audienceName: string): string | null => {
-    const nameLower = audienceName.toLowerCase()
-
-    // App funnel suggestions
-    if (nameLower.includes("cold") || nameLower.includes("lookalike")) return "Cold"
-    if (nameLower.includes("engaged") || nameLower.includes("video view")) return "Engaged"
-    if (nameLower.includes("clicked") || nameLower.includes("landing page")) return "Clicked Ad"
-    if (nameLower.includes("download") || nameLower.includes("install")) return "Downloaded App"
-    if (nameLower.includes("register") || nameLower.includes("signup")) return "Registered"
-    if (nameLower.includes("kyc") || nameLower.includes("verified")) return "Completed KYC"
-    if (nameLower.includes("transact") || nameLower.includes("purchase")) return "Transacted"
-
-    // Ecommerce funnel suggestions
-    if (nameLower.includes("cart")) return "Added to Cart"
-    if (nameLower.includes("checkout")) return "Initiated Checkout"
-    if (nameLower.includes("purchase") || nameLower.includes("buyer")) return "Purchased"
-    if (nameLower.includes("repeat") || nameLower.includes("loyal")) return "Repeat Buyers"
-
+    // If suggestions are loading or not yet fetched, return null
+    if (suggestionsLoading || (autoSuggestEnabled && aiSuggestions.length === 0)) {
+      return null
+    }
+    
+    // First check if we have an AI suggestion for this audience
+    const aiSuggestion = aiSuggestions.find(s => s.audienceName === audienceName)
+    if (aiSuggestion) {
+      return aiSuggestion.suggestedStage
+    }
+    
+    // Fall back to keyword-based suggestion if no AI suggestion is available
     return null
+  }
+  
+  // Fetch AI-powered suggestions for all audiences
+  const fetchAiSuggestions = async () => {
+    if (audiences.length === 0) return
+    
+    try {
+      setSuggestionsLoading(true)
+      
+      const response = await fetch('/api/suggest-funnel-stage', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          audienceNames: audiences.map(a => a.name),
+          funnelStages
+        }),
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch AI suggestions: ${response.statusText}`)
+      }
+      
+      const suggestions = await response.json()
+      setAiSuggestions(suggestions)
+      
+    } catch (err) {
+      console.error('Error fetching AI suggestions:', err)
+      // Fall back to keyword-based suggestions
+    } finally {
+      setSuggestionsLoading(false)
+    }
+  }
+  
+  // Save the audience mapping to the backend
+  const saveAudienceMapping = async () => {
+    try {
+      setSavingMapping(true)
+      
+      // Format the data for the API
+      const mappingData = audiences.map(audience => ({
+        audience_id: audience.id,
+        funnel_stages: multiStageEnabled ? audience.mappedStages : audience.mappedStage ? [audience.mappedStage] : [],
+        ad_account_id: adAccountId
+      }))
+      
+      // Call the API to save the mapping
+      const response = await fetch('/api/save-audience-mapping', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          mappings: mappingData
+        }),
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Failed to save mapping: ${response.statusText}`)
+      }
+      
+      // Show success message
+      alert('Audience mapping saved successfully!')
+      
+    } catch (err) {
+      console.error('Error saving audience mapping:', err)
+      alert(`Error saving mapping: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    } finally {
+      setSavingMapping(false)
+    }
+  }
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-40">
+        <div className="flex flex-col items-center gap-2">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Loading audiences...</p>
+        </div>
+      </div>
+    )
+  }
+  
+  // Show error state
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>
+          {error}
+        </AlertDescription>
+      </Alert>
+    )
+  }
+  
+  // Show empty state
+  if (audiences.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-40 border rounded-md bg-muted/20">
+        <p className="text-muted-foreground">No audiences found for this ad account.</p>
+      </div>
+    )
   }
 
   return (
@@ -100,53 +288,76 @@ export function AudienceMappingTable({ funnelType }: { funnelType: "app" | "ecom
           </TooltipProvider>
         </div>
         <div className="flex items-center space-x-2">
-          <Switch id="auto-suggest" checked={autoSuggestEnabled} onCheckedChange={setAutoSuggestEnabled} />
+          <Switch id="auto-suggest" checked={autoSuggestEnabled} onCheckedChange={(checked) => {
+            setAutoSuggestEnabled(checked);
+            if (checked && audiences.length > 0 && aiSuggestions.length === 0) {
+              fetchAiSuggestions();
+            }
+          }} />
           <label
             htmlFor="auto-suggest"
             className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
           >
-            Auto-suggest stages
+            AI-powered stage suggestions
           </label>
+          {suggestionsLoading && <Loader2 className="h-4 w-4 animate-spin ml-2 text-primary" />}
+          {autoSuggestEnabled && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="ml-2 h-7 text-xs" 
+              onClick={fetchAiSuggestions}
+              disabled={suggestionsLoading || audiences.length === 0}
+            >
+              <RefreshCcw className="h-3.5 w-3.5 mr-1" />
+              Refresh Suggestions
+            </Button>
+          )}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Info className="h-4 w-4 text-muted-foreground" />
               </TooltipTrigger>
               <TooltipContent>
-                <p className="max-w-xs">Automatically suggests funnel stages based on audience name keywords.</p>
+                <p className="max-w-xs">Uses Gemini AI to intelligently suggest funnel stages based on audience characteristics.</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
         </div>
       </div>
 
-      <div className="rounded-md border">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b bg-muted/50">
-              <th className="p-2 text-left font-medium">Audience Name</th>
-              <th className="p-2 text-left font-medium">Size</th>
-              <th className="p-2 text-left font-medium">Type</th>
-              <th className="p-2 text-left font-medium">Funnel Stage</th>
-              <th className="p-2 text-left font-medium">Auto-Suggested</th>
-            </tr>
-          </thead>
-          <tbody>
+      <div className="rounded-md border overflow-hidden">
+        <div className="max-h-[500px] overflow-y-auto">
+          <table className="w-full">
+            <thead className="sticky top-0 z-10 bg-background">
+              <tr className="border-b bg-muted/50">
+                <th className="p-2 text-left font-medium">Audience Name</th>
+                <th className="p-2 text-left font-medium">Size Range</th>
+                <th className="p-2 text-left font-medium">Type</th>
+                <th className="p-2 text-left font-medium">Funnel Stage</th>
+                <th className="p-2 text-left font-medium">Auto-Suggested</th>
+              </tr>
+            </thead>
+            <tbody>
             {audiences.map((audience) => {
               const suggestedStage = autoSuggestEnabled ? autoSuggestStage(audience.name) : null
 
               return (
                 <tr key={audience.id} className="border-b">
                   <td className="p-2">{audience.name}</td>
-                  <td className="p-2">{audience.size}</td>
+                  <td className="p-2">{audience.approximate_count_lower_bound.toLocaleString()} - {audience.approximate_count_upper_bound.toLocaleString()}</td>
                   <td className="p-2">
-                    <Badge variant={audience.type === "Custom" ? "default" : "secondary"}>{audience.type}</Badge>
-                    {audience.isAdvantage && (
+                    <Badge variant={audience.subtype === "CUSTOM" ? "default" : "secondary"}>
+                      {audience.subtype === "LOOKALIKE" ? "Lookalike" : 
+                       audience.subtype === "CUSTOM" ? "Custom" : 
+                       audience.subtype === "APP" ? "App" : audience.subtype}
+                    </Badge>
+                    {audience.lookalike_spec && Object.keys(audience.lookalike_spec).length > 0 && (
                       <Badge
                         variant="outline"
-                        className="ml-2 bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                        className="ml-2 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
                       >
-                        Advantage+
+                        {audience.lookalike_spec.ratio ? `${audience.lookalike_spec.ratio * 100}%` : "Lookalike"}
                       </Badge>
                     )}
                   </td>
@@ -165,7 +376,7 @@ export function AudienceMappingTable({ funnelType }: { funnelType: "app" | "ecom
                         <Popover>
                           <PopoverTrigger asChild>
                             <Button variant="outline" size="sm" className="h-7 w-7 p-0">
-                              <Plus className="h-3.5 w-3.5" />
+                              <span className="h-3.5 w-3.5">+</span>
                             </Button>
                           </PopoverTrigger>
                           <PopoverContent className="w-[200px] p-0" align="start">
@@ -198,26 +409,23 @@ export function AudienceMappingTable({ funnelType }: { funnelType: "app" | "ecom
                         <PopoverTrigger asChild>
                           <Button variant="outline" role="combobox" className="w-[200px] justify-between">
                             {audience.mappedStage || "Select stage"}
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                           </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-[200px] p-0">
+                        <PopoverContent className="w-[200px] p-0" align="start">
                           <Command>
-                            <CommandInput placeholder="Search stage..." />
+                            <CommandInput placeholder="Search stages..." />
                             <CommandList>
                               <CommandEmpty>No stage found.</CommandEmpty>
                               <CommandGroup>
                                 {funnelStages.map((stage) => (
                                   <CommandItem
                                     key={stage}
-                                    value={stage}
                                     onSelect={() => handleStageChange(audience.id, stage)}
+                                    className="flex items-center"
                                   >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        audience.mappedStage === stage ? "opacity-100" : "opacity-0",
-                                      )}
+                                    <Checkbox
+                                      checked={(audience.mappedStages || []).includes(stage)}
+                                      className="mr-2 h-4 w-4"
                                     />
                                     {stage}
                                   </CommandItem>
@@ -230,37 +438,83 @@ export function AudienceMappingTable({ funnelType }: { funnelType: "app" | "ecom
                     )}
                   </td>
                   <td className="p-2">
-                    {suggestedStage && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 text-xs"
-                        onClick={() =>
-                          multiStageEnabled
-                            ? handleStageChange(audience.id, suggestedStage)
-                            : setAudiences(
-                                audiences.map((a) =>
-                                  a.id === audience.id ? { ...a, mappedStage: suggestedStage } : a,
-                                ),
-                              )
-                        }
-                      >
-                        <Sparkles className="h-3.5 w-3.5 mr-1 text-amber-500" />
-                        {suggestedStage}
-                      </Button>
-                    )}
+                    {suggestionsLoading && autoSuggestEnabled ? (
+                      <div className="flex items-center space-x-2">
+                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                        <span className="text-xs text-muted-foreground">Loading suggestions...</span>
+                      </div>
+                    ) : suggestedStage ? (
+                      <div className="flex flex-col gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 text-xs"
+                          onClick={() => {
+                            if (multiStageEnabled) {
+                              handleStageChange(audience.id, suggestedStage)
+                            } else {
+                              // Toggle off if already selected
+                              const currentAudience = audiences.find(a => a.id === audience.id)
+                              if (currentAudience?.mappedStage === suggestedStage) {
+                                setAudiences(
+                                  audiences.map((a) =>
+                                    a.id === audience.id ? { ...a, mappedStage: undefined } : a,
+                                  ),
+                                )
+                              } else {
+                                setAudiences(
+                                  audiences.map((a) =>
+                                    a.id === audience.id ? { ...a, mappedStage: suggestedStage } : a,
+                                  ),
+                                )
+                              }
+                            }
+                          }}
+                        >
+                          <Sparkles className="h-3.5 w-3.5 mr-1 text-amber-500" />
+                          {suggestedStage}
+                        </Button>
+                        {aiSuggestions.find(s => s.audienceName === audience.name) && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="text-xs text-muted-foreground flex items-center">
+                                  <span className="inline-block w-1 h-1 rounded-full bg-primary mr-1"></span>
+                                  AI-powered
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="max-w-xs">
+                                  {aiSuggestions.find(s => s.audienceName === audience.name)?.reasoning || 'Suggested by Gemini AI'}
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                      </div>
+                    ) : null}
                   </td>
                 </tr>
               )
             })}
           </tbody>
         </table>
+        </div>
       </div>
 
       <div className="flex justify-end">
-        <Button>
-          <Save className="mr-2 h-4 w-4" />
-          Save Mapping
+        <Button onClick={saveAudienceMapping} disabled={savingMapping}>
+          {savingMapping ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            <>
+              <Save className="mr-2 h-4 w-4" />
+              Save Mapping
+            </>
+          )}
         </Button>
       </div>
     </div>

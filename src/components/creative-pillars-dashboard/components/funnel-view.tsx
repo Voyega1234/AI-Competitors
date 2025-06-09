@@ -1,13 +1,16 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { AlertCircle, Info } from "lucide-react"
+import { AlertCircle, Info, Users } from "lucide-react"
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { CreativeCard } from "./creative-card"
 import { fetchCreatives, Creative } from "../data/creative-data"
 import { CreativePillarsDisplay } from "./creative-pillars-display"
 import { MetricSelector } from "./metric-selector"
+import { AudienceMappingTable } from "./audience-mapping-table"
 import { getPillarCoverageFromData } from "../data/creative-pillars"
 
 interface FunnelViewProps {
@@ -21,7 +24,50 @@ export function FunnelView({ clientName, productFocus }: FunnelViewProps) {
   const [error, setError] = useState<Error | null>(null);
   const [priorityMetric, setPriorityMetric] = useState<string>("CTR");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [audienceMappingOpen, setAudienceMappingOpen] = useState<boolean>(false);
+  const [adAccountId, setAdAccountId] = useState<string>(""); // Will be fetched dynamically
+  const [adAccountLoading, setAdAccountLoading] = useState<boolean>(false);
 
+  // Fetch ad account ID when client or product selection changes
+  useEffect(() => {
+    const fetchAdAccount = async () => {
+      if (!clientName || !productFocus) {
+        setAdAccountId("");
+        return;
+      }
+
+      setAdAccountLoading(true);
+      
+      try {
+        const url = `/api/ad-account?clientName=${encodeURIComponent(clientName)}&productFocus=${encodeURIComponent(productFocus)}`;
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch ad account: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.ad_account_id) {
+          setAdAccountId(data.ad_account_id);
+          console.log(`Ad account ID set to: ${data.ad_account_id}`);
+        } else {
+          // Fallback to default if no ad account found
+          setAdAccountId("act_909760306304891");
+          console.warn("No ad account ID found, using default");
+        }
+      } catch (err) {
+        console.error('Error fetching ad account ID:', err);
+        // Fallback to default if error
+        setAdAccountId("act_909760306304891");
+      } finally {
+        setAdAccountLoading(false);
+      }
+    };
+
+    fetchAdAccount();
+  }, [clientName, productFocus]);
+  
   // Fetch creatives when client or product selection changes
   useEffect(() => {
     const fetchData = async () => {
@@ -175,12 +221,47 @@ export function FunnelView({ clientName, productFocus }: FunnelViewProps) {
 
   return (
     <div className="space-y-4">
-      <MetricSelector
-        selectedMetric={priorityMetric}
-        onMetricChange={setPriorityMetric}
-        sortOrder={sortOrder}
-        onSortOrderChange={setSortOrder}
-      />
+      <div className="flex justify-between items-center">
+        <MetricSelector
+          selectedMetric={priorityMetric}
+          onMetricChange={setPriorityMetric}
+          sortOrder={sortOrder}
+          onSortOrderChange={setSortOrder}
+        />
+        <Button 
+          variant="outline" 
+          onClick={() => setAudienceMappingOpen(true)}
+          className="flex items-center gap-2"
+        >
+          <Users className="h-4 w-4" />
+          Audience Mapping
+        </Button>
+      </div>
+      
+      {/* Audience Mapping Dialog */}
+      <Dialog open={audienceMappingOpen} onOpenChange={setAudienceMappingOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Audience Mapping</DialogTitle>
+            <DialogDescription>
+              Map your custom audiences to funnel stages to better organize your ad campaigns.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-4">
+            {adAccountLoading ? (
+              <div className="flex items-center justify-center h-40">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : adAccountId ? (
+              <AudienceMappingTable adAccountId={adAccountId} />
+            ) : (
+              <div className="p-4 border rounded-md bg-amber-50 text-amber-800">
+                <p>No ad account found for the selected client and product. Please select a different client or product.</p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
         {segmentItems.map(({ segment, creatives: segmentCreatives }) => {
           if (!segment) return null;
