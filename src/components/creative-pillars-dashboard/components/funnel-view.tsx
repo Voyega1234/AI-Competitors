@@ -2,6 +2,16 @@
 
 import { useState, useEffect } from "react"
 import { AlertCircle, Info, Users } from "lucide-react"
+import { createClient } from '@supabase/supabase-js'
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+);
+
+// Import Recharts components
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts'
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -35,6 +45,312 @@ interface FunnelStage {
   stage: string
   adSets: AdSet[]
 }
+
+// Define the interface for pillar data
+interface PillarData {
+  pillar: string;
+  count: number;
+  percentage: number;
+}
+
+// AdCreativeAnalysis component
+const AdCreativeAnalysis = ({ clientName, productFocus }: { clientName: string | null, productFocus: string | null }) => {
+  const [pillars, setPillars] = useState<PillarData[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [totalAds, setTotalAds] = useState(0);
+  const [hasFetched, setHasFetched] = useState(false);
+
+  useEffect(() => {
+    const fetchPillars = async () => {
+      // Only fetch if we have both client and product focus
+      if (!clientName || !productFocus) {
+        console.log('Missing client or product focus - client:', clientName, 'product:', productFocus);
+        setPillars([]);
+        setTotalAds(0);
+        setHasFetched(false);
+        return;
+      }
+
+      console.log('Fetching ad pillars for client:', clientName, 'product:', productFocus);
+      setIsLoading(true);
+      try {
+        // First, get the client data from AnalysisRun table
+        console.log('Fetching client data for:', clientName);
+        // Get the most recent analysis run for this client
+        const { data: clientResults, error: clientError } = await supabase
+          .from('AnalysisRun')
+          .select('clientName, ad_account_id, createdAt')
+          .eq('clientName', clientName)
+          .order('createdAt', { ascending: false })
+          .limit(1);
+          
+        const clientData = clientResults?.[0];
+
+        console.log('Client data response:', { clientData, clientError });
+
+        if (clientError || !clientData) {
+          const errorMsg = clientError ? clientError.message : 'Client not found in AnalysisRun';
+          console.error('Error fetching client data:', errorMsg);
+          throw new Error(`Client not found: ${errorMsg}`);
+        }
+
+        // If no ad_account_id is found, we'll use the client name as a fallback
+        const accountIdentifier = clientData.ad_account_id || clientName;
+        console.log('Fetching ads for account:', accountIdentifier);
+        
+        // Then fetch ads filtered by ad_account_id or client name
+        const { data: ads, error } = await supabase
+          .from('ads_details')
+          .select('creative_pillars')
+          .or(`ad_account.eq.${accountIdentifier},ad_account.eq.${clientName}`)
+          .not('creative_pillars', 'is', null);
+
+        console.log('Ads response:', { ads, error });
+
+        if (error) {
+          console.error('Error fetching ads:', error);
+          throw error;
+        }
+
+        // Count total number of ads for percentage calculation
+        const total = ads.length;
+        setTotalAds(total);
+        setHasFetched(true);
+
+        // Count pillar occurrences
+        const pillarCounts: Record<string, number> = {};
+        
+        ads.forEach(ad => {
+          if (!ad.creative_pillars) return;
+          
+          try {
+            // Handle different possible formats
+            let pillarsData = ad.creative_pillars;
+            
+            // If it's a string, try to parse it as JSON
+            if (typeof pillarsData === 'string') {
+              try {
+                // First try to parse as JSON array
+                const parsed = JSON.parse(pillarsData);
+                if (Array.isArray(parsed)) {
+                  pillarsData = parsed;
+                }
+              } catch (e) {
+                // If not JSON, treat as comma-separated string
+                pillarsData = pillarsData.split(',').map((p: string) => p.trim());
+              }
+            }
+            
+            // Ensure we have an array to work with
+            const pillarsArray = Array.isArray(pillarsData) 
+              ? pillarsData 
+              : [String(pillarsData)];
+            
+            // Process each pillar
+            pillarsArray.forEach(pillar => {
+              if (!pillar) return;
+              
+              // Clean up the pillar string
+              let cleanPillar = String(pillar)
+                .replace(/[\[\]"'{}]/g, '') // Remove all JSON/array characters
+                .trim();
+                
+              // If it still contains JSON-like structure, try to extract content
+              const jsonMatch = cleanPillar.match(/\{([^}]+)\}/);
+              if (jsonMatch && jsonMatch[1]) {
+                cleanPillar = jsonMatch[1];
+              }
+              
+              cleanPillar = cleanPillar.trim();
+              if (cleanPillar) {
+                // Group similar pillars (case insensitive)
+                const normalizedPillar = cleanPillar.toLowerCase();
+                const existingKey = Object.keys(pillarCounts).find(
+                  key => key.toLowerCase() === normalizedPillar
+                ) || cleanPillar;
+                
+                pillarCounts[existingKey] = (pillarCounts[existingKey] || 0) + 1;
+              }
+            });
+            
+          } catch (e) {
+            console.warn('Error processing creative_pillars:', e, 'Value:', ad.creative_pillars);
+          }
+        });
+
+        // Convert to array, add percentage, and sort by count
+        const sortedPillars = Object.entries(pillarCounts)
+          .map(([pillar, count]) => ({
+            pillar,
+            count,
+            percentage: Math.round((count / total) * 100) || 0
+          }))
+          .sort((a, b) => b.count - a.count);
+
+        setPillars(sortedPillars);
+      } catch (error) {
+        console.error('Error fetching ad pillars:', error);
+        setPillars([]);
+        setTotalAds(0);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchPillars();
+  }, [clientName, productFocus]); // Re-run when client or product focus changes
+
+  // Custom tooltip for the chart
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white p-3 border rounded shadow-lg">
+          <p className="font-semibold">{label}</p>
+          <p className="text-sm">
+            <span className="text-muted-foreground">Ads:</span> {payload[0].value}
+          </p>
+          <p className="text-sm">
+            <span className="text-muted-foreground">Of total:</span> {payload[0].payload.percentage}%
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  if (!clientName || !productFocus) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        <p>Select a client and product focus to view ad pillar analysis</p>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <span className="ml-2 text-muted-foreground">Loading ad pillars data...</span>
+      </div>
+    );
+  }
+
+  if (hasFetched && pillars.length === 0) {
+    return (
+      <div className="text-center py-8 border rounded bg-muted/10">
+        <p className="text-muted-foreground">No pillar data available for {clientName}</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          No creative pillars found for the selected client and product focus
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <Card className="mb-6">
+      <CardHeader className="pb-2">
+        <div className="flex justify-between items-center">
+          <div>
+            <h3 className="text-lg font-semibold">Ad Creative Pillars for {productFocus}</h3>
+            <p className="text-sm text-muted-foreground">
+              Distribution across {pillars.length} creative pillars in {totalAds} ads
+            </p>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {pillars.length > 0 ? (
+          <div className="mt-2">
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={pillars}
+                  margin={{
+                    top: 5,
+                    right: 30,
+                    left: 20,
+                    bottom: 5,
+                  }}
+                  layout="vertical"
+                >
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                  <XAxis type="number" />
+                  <YAxis 
+                    dataKey="pillar" 
+                    type="category" 
+                    width={150}
+                    tick={{ fontSize: 12 }}
+                    tickLine={false}
+                  />
+                  <RechartsTooltip content={<CustomTooltip />} />
+                  <Legend />
+                  <Bar 
+                    dataKey="count" 
+                    name="Number of Ads"
+                    fill="#8884d8"
+                    radius={[0, 4, 4, 0]}
+                    animationDuration={1500}
+                  >
+                    {pillars.map((entry, index) => (
+                      <text
+                        key={`pillar-${index}`}
+                        x={entry.count + 10}
+                        y={index * 25 + 20}
+                        textAnchor="start"
+                        fill="#666"
+                        fontSize={12}
+                      >
+                        {entry.count} ({entry.percentage}%)
+                      </text>
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {pillars.slice(0, 6).map(({ pillar, count, percentage }) => (
+                <div key={pillar} className="p-3 border rounded-md bg-muted/5 hover:bg-muted/10 transition-colors">
+                  <div className="flex justify-between items-start">
+                    <span className="font-medium text-sm">{pillar}</span>
+                    <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
+                      {percentage}% of ads
+                    </span>
+                  </div>
+                  <div className="mt-2 h-2 w-full bg-muted rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-primary rounded-full" 
+                      style={{ width: `${Math.min(percentage * 2, 100)}%` }}
+                    />
+                  </div>
+                  <div className="mt-1 flex justify-between text-xs text-muted-foreground">
+                    <span>{count} {count === 1 ? 'ad' : 'ads'}</span>
+                    <span>{percentage}% of total</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            {pillars.length > 6 && (
+              <div className="mt-4 text-center">
+                <p className="text-sm text-muted-foreground">
+                  +{pillars.length - 6} more pillars not shown
+                </p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-center py-8 border rounded bg-muted/10">
+            <p className="text-muted-foreground">No pillar data available</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Start adding creative pillars to your ads to see them here
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
 
 export function FunnelView({ clientName, productFocus }: FunnelViewProps) {
   const [creatives, setCreatives] = useState<Creative[]>([])
@@ -473,6 +789,11 @@ export function FunnelView({ clientName, productFocus }: FunnelViewProps) {
           })}
         </div>
       )}
+      
+      {/* Ad Creative Analysis Section */}
+      <div className="mt-8">
+        <AdCreativeAnalysis clientName={clientName} productFocus={productFocus} />
+      </div>
     </div>
   );
 }

@@ -2210,7 +2210,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                         />
                     </div>
                     {/* --- Ad Pillars Analysis Section --- */}
-                    <div className="mb-8">
+                    {/* <div className="mb-8">
                         <Card>
                             <CardHeader className="pb-2">
                                 <CardTitle className="text-lg">Ad Creative Analysis</CardTitle>
@@ -2223,7 +2223,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                         />
                             </CardContent>
                         </Card>
-                    </div>
+                    </div> */}
 
                     {/* Add this where you want the metric selection to appear */}
                     <div className="mb-6">
