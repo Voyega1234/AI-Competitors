@@ -123,7 +123,7 @@ export function DashboardHeader({
         <div className="flex items-center gap-2">
           <h1 className="text-lg font-semibold">Creative Coverage</h1>
           <Separator orientation="vertical" className="h-6" />
-          <Select value={campaignType} onValueChange={(value) => onCampaignTypeChange(value as "app" | "ecommerce")}>
+          {/* <Select value={campaignType} onValueChange={(value) => onCampaignTypeChange(value as "app" | "ecommerce")}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Campaign Type" />
             </SelectTrigger>
@@ -131,7 +131,7 @@ export function DashboardHeader({
               <SelectItem value="app">App Campaigns</SelectItem>
               <SelectItem value="ecommerce">Ecommerce Campaigns</SelectItem>
             </SelectContent>
-          </Select>
+          </Select> */}
         </div>
         
         {/* Client and Product Focus Selection */}
@@ -197,7 +197,7 @@ export function DashboardHeader({
           </div>
         </div>
         
-        <div className="ml-auto flex items-center gap-2">
+        {/* <div className="ml-auto flex items-center gap-2">
           <DatePickerWithRange />
           <Button variant="outline" size="icon" disabled={isLoading}>
             <Filter className="h-4 w-4" />
@@ -221,7 +221,7 @@ export function DashboardHeader({
               <DropdownMenuItem onClick={() => setTheme("system")}>System</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
+        </div> */}
       </div>
     </header>
   )
