@@ -28,6 +28,9 @@ const formSchema = z.object({
   productFocus: z.string().min(1, {
     message: "Product/Service focus is required.",
   }),
+  ad_account_id: z.string().regex(/^act_[0-9]+$/, {
+    message: "Ad account ID must be in the format act_12345678",
+  }),
   additionalInfo: z.string().optional(),
   userCompetitors: z.string().optional(),
 })
@@ -49,6 +52,7 @@ export function NewAnalysisForm({ onSubmitAnalysis, isLoading }: NewAnalysisForm
       websiteUrl: "",
       market: "thailand",
       productFocus: "",
+      ad_account_id: "",
       additionalInfo: "",
       userCompetitors: "",
     },
@@ -139,6 +143,20 @@ export function NewAnalysisForm({ onSubmitAnalysis, isLoading }: NewAnalysisForm
                     <Input placeholder="e.g., Gold Investment, Food Delivery, Robo-advisor" {...field} />
                   </FormControl>
                   <FormDescription>Specify the main product/service for competitor comparison.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="ad_account_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Ad Account ID</FormLabel>
+                  <FormControl>
+                    <Input placeholder="act_123456789" {...field} />
+                  </FormControl>
+                  <FormDescription>Enter the Facebook Ad Account ID in the format act_12345678.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { AlertCircle, Info, Users } from "lucide-react"
+import { AlertCircle, Info, Users, X, Check, Loader2 } from "lucide-react"
 import { createClient } from '@supabase/supabase-js'
 
 // Initialize Supabase client
@@ -13,8 +13,10 @@ const supabase = createClient(
 // Import Recharts components
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts'
 
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { toast } from "@/components/ui/use-toast"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { CreativeCard } from "./creative-card"
 import { fetchCreatives, Creative } from "../data/creative-data"
@@ -365,6 +367,13 @@ export function FunnelView({ clientName, productFocus }: FunnelViewProps) {
   const [showLegacyView, setShowLegacyView] = useState<boolean>(false) // Toggle between ad sets and legacy view
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0) // Used to trigger data refresh
   
+  // State for funnel stage form
+  const [funnelStages, setFunnelStages] = useState<string[]>(["Awareness", "Consideration", "Conversion"])
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
+  const [submitSuccess, setSubmitSuccess] = useState<boolean>(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [newStage, setNewStage] = useState<string>("")
+  
   // Function to refresh funnel data
   const refreshFunnelView = () => {
     setRefreshTrigger(prev => prev + 1);
@@ -512,23 +521,187 @@ export function FunnelView({ clientName, productFocus }: FunnelViewProps) {
     );
   }
 
-  // Show empty state when no creatives are found
+  // Functions for funnel stage form
+  const addFunnelStage = () => {
+    if (newStage.trim() && !funnelStages.includes(newStage.trim())) {
+      setFunnelStages([...funnelStages, newStage.trim()]);
+      setNewStage("");
+    }
+  };
+
+  const removeFunnelStage = (index: number) => {
+    setFunnelStages(funnelStages.filter((_, i) => i !== index));
+  };
+
+  const submitFunnelStages = async () => {
+    if (!clientName || !productFocus || funnelStages.length === 0) {
+      setSubmitError("Client name, product focus, and at least one funnel stage are required");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+    
+    try {
+      // Prepare the payload - exact format required by the webhook
+      const payload = {
+        client_name: clientName,
+        product_focus: productFocus,
+        stage_funnel: funnelStages
+      };
+
+      // Send the POST request to the external webhook
+      const response = await fetch('https://convertcake-cvc.app.n8n.cloud/webhook-test/1a215ec3-1e1c-4f2b-8eca-573ec171880b', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error: ${response.status}`);
+      }
+
+      // Handle success
+      setSubmitSuccess(true);
+      toast({
+        title: "Success",
+        description: "Funnel stages submitted successfully",
+        variant: "default",
+      });
+
+      // Reset after 3 seconds
+      setTimeout(() => {
+        setSubmitSuccess(false);
+      }, 3000);
+    } catch (error) {
+      console.error('Error submitting funnel stages:', error);
+      setSubmitError(error instanceof Error ? error.message : 'An unknown error occurred');
+      toast({
+        title: "Error",
+        description: "Failed to submit funnel stages",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Show empty state when no creatives are found with form to input funnel stages
   if (creatives.length === 0) {
     return (
-      <div className="bg-amber-50 p-4 rounded-md">
-        <div className="flex">
-          <div className="flex-shrink-0">
-            <Info className="h-5 w-5 text-amber-400" />
-          </div>
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-amber-800">No creatives found</h3>
-            <div className="mt-2 text-sm text-amber-700">
-              <p>No creatives were found for the selected client and product focus.</p>
-              <p className="mt-1">Client: {clientName} • Product: {productFocus}</p>
+      <Card className="border-amber-200">
+        <CardHeader>
+          <div className="flex items-start">
+            <div className="mr-2">
+              <Info className="h-5 w-5 text-amber-500" />
+            </div>
+            <div>
+              <CardTitle className="text-lg font-medium text-amber-800">No creatives found</CardTitle>
+              <CardDescription className="text-amber-700">
+                No creatives were found for the selected client and product focus.<br />
+                Client: <span className="font-medium">{clientName}</span> • Product: <span className="font-medium">{productFocus}</span>
+              </CardDescription>
             </div>
           </div>
-        </div>
-      </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-sm font-medium mb-2">Define Funnel Stages</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Add the funnel stages you want to use for this client and product.
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              {funnelStages.map((stage, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <Input 
+                    value={stage} 
+                    onChange={(e) => {
+                      const newStages = [...funnelStages];
+                      newStages[index] = e.target.value;
+                      setFunnelStages(newStages);
+                    }}
+                    className="flex-1"
+                  />
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={() => removeFunnelStage(index)}
+                    disabled={funnelStages.length <= 1}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Input 
+                placeholder="Add new funnel stage..." 
+                value={newStage} 
+                onChange={(e) => setNewStage(e.target.value)}
+                className="flex-1"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addFunnelStage();
+                  }
+                }}
+              />
+              <Button 
+                variant="outline" 
+                onClick={addFunnelStage}
+                disabled={!newStage.trim() || funnelStages.includes(newStage.trim())}
+              >
+                Add Stage
+              </Button>
+            </div>
+            
+            {submitError && (
+              <div className="bg-destructive/10 text-destructive p-3 rounded-md text-sm">
+                {submitError}
+              </div>
+            )}
+            
+            <div className="pt-4">
+              <Button 
+                onClick={submitFunnelStages} 
+                disabled={isSubmitting || funnelStages.length === 0}
+                className="w-full"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Submitting...
+                  </>
+                ) : submitSuccess ? (
+                  <>
+                    <Check className="mr-2 h-4 w-4" />
+                    Submitted Successfully
+                  </>
+                ) : (
+                  'Submit Funnel Stages'
+                )}
+              </Button>
+            </div>
+            
+            <div className="pt-2 text-xs text-muted-foreground">
+              <p>This will send the following data to the webhook:</p>
+              <pre className="mt-1 p-2 bg-muted rounded-md overflow-x-auto">
+                {JSON.stringify({
+                  client_name: clientName,
+                  product_focus: productFocus,
+                  stage_funnel: funnelStages
+                }, null, 2)}
+              </pre>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 

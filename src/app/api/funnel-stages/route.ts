@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { v4 as uuidv4 } from 'uuid';
+
+// Define the payload interface for funnel stages
+interface FunnelStagesPayload {
+  client_name: string;
+  product_focus: string;
+  stage_funnel: string[];
+  ad_account_id?: string;
+}
 
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -56,9 +65,89 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('Error in /api/funnel-stages:', error);
+    console.error('Error in /api/funnel-stages GET:', error);
     return new NextResponse(
       JSON.stringify({ error: error.message || 'Internal server error' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    // Parse the request body
+    const payload: FunnelStagesPayload = await request.json();
+    
+    // Validate the payload
+    if (!payload.client_name || !payload.product_focus || !Array.isArray(payload.stage_funnel) || payload.stage_funnel.length === 0) {
+      return new NextResponse(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Invalid payload. Required fields: client_name, product_focus, and non-empty stage_funnel array' 
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('Received funnel stages submission:', payload);
+    
+    // Create a record in the funnel_configurations table
+    const funnelConfigId = uuidv4();
+    const { error: insertError } = await supabase
+      .from('funnel_configurations')
+      .insert({
+        id: funnelConfigId,
+        client_name: payload.client_name,
+        product_focus: payload.product_focus,
+        ad_account_id: payload.ad_account_id || null,
+        created_at: new Date().toISOString()
+      });
+    
+    if (insertError) {
+      console.error('Error inserting funnel configuration:', insertError);
+      return new NextResponse(
+        JSON.stringify({ success: false, error: 'Failed to save funnel configuration' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    // Insert each funnel stage with reference to the configuration
+    const stageInserts = payload.stage_funnel.map((stageName, index) => ({
+      id: uuidv4(),
+      funnel_config_id: funnelConfigId,
+      name: stageName,
+      position: index,
+      created_at: new Date().toISOString()
+    }));
+    
+    const { error: stagesError } = await supabase
+      .from('funnel_stages')
+      .insert(stageInserts);
+    
+    if (stagesError) {
+      console.error('Error inserting funnel stages:', stagesError);
+      return new NextResponse(
+        JSON.stringify({ success: false, error: 'Failed to save funnel stages' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    // Return success response
+    return NextResponse.json({
+      success: true,
+      message: 'Funnel stages saved successfully',
+      data: {
+        funnel_config_id: funnelConfigId,
+        client_name: payload.client_name,
+        product_focus: payload.product_focus,
+        stages: payload.stage_funnel
+      }
+    });
+    
+  } catch (error: any) {
+    console.error('Error in /api/funnel-stages POST:', error);
+    return new NextResponse(
+      JSON.stringify({ success: false, error: error.message || 'Internal server error' }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }

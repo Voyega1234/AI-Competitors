@@ -131,7 +131,7 @@ export async function POST(request: Request) {
 
     // Parse request body
     const body = await request.json();
-    const { clientName, facebookUrl: clientFacebookUrl, websiteUrl: clientWebsiteUrl, market, productFocus, additionalInfo, userCompetitors } = body;
+    const { clientName, facebookUrl: clientFacebookUrl, websiteUrl: clientWebsiteUrl, market, productFocus, additionalInfo, userCompetitors, ad_account_id } = body;
     
     const analysisInput = {
       clientName,
@@ -377,6 +377,7 @@ ${detailedResearchPrompt}`;
                 market: analysisInput.market,
                 productFocus: analysisInput.productFocus,
                 additionalInfo: analysisInput.additionalInfo,
+                ad_account_id: ad_account_id, // Add ad_account_id from form data
                 timestamp: analysisInput.timestamp,
                 updatedAt: analysisInput.timestamp
             })
