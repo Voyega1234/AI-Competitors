@@ -1211,12 +1211,14 @@ interface CompetitorAnalysisData {
         const initialLoadingState: ModelLoadingState = {};
         const initialErrorState: ModelErrorState = {};
         
-        // Initialize loading states for both versions
+        // Initialize loading states for all three versions
         selectedModels.forEach(model => {
             initialLoadingState[`${model}`] = true; // Standard version
             initialLoadingState[`${model}-with-competitors`] = true; // With competitors version
+            initialLoadingState[`${model}-with-ads-details`] = true; // With ads details version
             initialErrorState[`${model}`] = null;
             initialErrorState[`${model}-with-competitors`] = null;
+            initialErrorState[`${model}-with-ads-details`] = null;
         });
         
         setIsLoading(initialLoadingState);
@@ -1240,8 +1242,8 @@ interface CompetitorAnalysisData {
         try {
             console.log(`Fetching recommendations for runId: ${selectedRunId}, Models: ${selectedModels.join(', ')}`);
             
-            // Create a function to fetch recommendations with a given includeCompetitorAnalysis flag
-            const fetchRecommendations = async (withCompetitors: boolean) => {
+            // Create a function to fetch recommendations with given parameters
+            const fetchRecommendations = async (withCompetitors: boolean, includeAdPillars: boolean = false, includeTopAds: boolean = false) => {
                 let apiUrl = `/api/generate-recommendations?runId=${selectedRunId}`;
                 apiUrl += `&models=${encodeURIComponent(selectedModels.join(','))}`;
                 if (userBrief.trim()) {
@@ -1249,6 +1251,12 @@ interface CompetitorAnalysisData {
                 }
                 apiUrl += `&taskSection=${encodeURIComponent(editableTaskSection)}`;
                 apiUrl += `&includeCompetitorAnalysis=${withCompetitors}`; // This parameter is still needed for the API
+                if (includeAdPillars) {
+                    apiUrl += `&includeAdPillars=true`;
+                }
+                if (includeTopAds) {
+                    apiUrl += `&includeTopAds=true`;
+                }
                 apiUrl += `&clientName=${encodeURIComponent(selectedClientName || '')}`;
                 apiUrl += `&productFocus=${encodeURIComponent(selectedProductFocus || '')}`;
                 apiUrl += `&market=Thailand`;
@@ -1265,10 +1273,11 @@ interface CompetitorAnalysisData {
                 return { response, data };
             };
 
-            // Run both versions in parallel
-            const [standardResults, withCompetitorsResults] = await Promise.all([
+            // Run all three versions in parallel
+            const [standardResults, withCompetitorsResults, withAdsDetailsResults] = await Promise.all([
                 fetchRecommendations(false),
-                fetchRecommendations(true)
+                fetchRecommendations(true),
+                fetchRecommendations(true, true, true) // With competitors, ad pillars, and top ads
             ]);
 
             // Process standard results (without competitors)
@@ -1318,6 +1327,32 @@ interface CompetitorAnalysisData {
                 });
                 setError(prev => ({ ...prev, ...newErrorState }));
             }
+            
+            // Process results with ads details
+            const processedAdsDetailsResults: ModelResults = {};
+            if (withAdsDetailsResults.response.ok) {
+                Object.entries(withAdsDetailsResults.data.results || {}).forEach(([modelName, recommendations]) => {
+                    if (Array.isArray(recommendations)) {
+                        const modelKey = `${modelName}-with-ads-details`;
+                        processedAdsDetailsResults[modelKey] = recommendations.map((rec, index) => ({
+                            ...rec,
+                            tempId: `${modelKey}-${selectedRunId}-${index}`
+                        }));
+                    }
+                });
+                setResultsByModel(prev => ({
+                    ...prev,
+                    ...processedAdsDetailsResults
+                }));
+            } else {
+                const errorMsg = withAdsDetailsResults.data.error || `API Error: ${withAdsDetailsResults.response.status}`;
+                console.error("API Error (with ads details):", errorMsg);
+                const newErrorState = { ...initialErrorState };
+                selectedModels.forEach(model => {
+                    newErrorState[`${model}-with-ads-details`] = errorMsg;
+                });
+                setError(prev => ({ ...prev, ...newErrorState }));
+            }
 
         } catch (err: any) {
             console.error("Failed to fetch recommendations:", err);
@@ -1326,6 +1361,7 @@ interface CompetitorAnalysisData {
             selectedModels.forEach(model => {
                 newErrorState[model] = errorMsg;
                 newErrorState[`${model}-with-competitors`] = errorMsg;
+                newErrorState[`${model}-with-ads-details`] = errorMsg;
             });
             setError(newErrorState);
             setResultsByModel({});
@@ -1334,6 +1370,7 @@ interface CompetitorAnalysisData {
             selectedModels.forEach(model => {
                 finalLoadingState[model] = false;
                 finalLoadingState[`${model}-with-competitors`] = false;
+                finalLoadingState[`${model}-with-ads-details`] = false;
             });
             setIsLoading(finalLoadingState);
         }
@@ -2225,88 +2262,6 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                         </Card>
                     </div> */}
 
-                    {/* Add this where you want the metric selection to appear */}
-                    <div className="mb-6">
-                        <div className="mb-4">
-                            <Label>Sort Ads By:</Label>
-                            <Select 
-                                value={sortMetric} 
-                                onValueChange={(value) => setSortMetric(value)}
-                            >
-                                <SelectTrigger className="w-[200px]">
-                                    <SelectValue placeholder="Select metric" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="ctr">CTR (High to Low)</SelectItem>
-                                    <SelectItem value="cpc">CPC (Low to High)</SelectItem>
-                                    <SelectItem value="roas">ROAS (High to Low)</SelectItem>
-                                    <SelectItem value="clicks">Clicks (High to Low)</SelectItem>
-                                    <SelectItem value="impressions">Impressions (High to Low)</SelectItem>
-                                    <SelectItem value="spend">Spend (Low to High)</SelectItem>
-                                    <SelectItem value="frequency">Frequency (Low to High)</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        {/* Top Ads Preview Section */}
-                        <div className="mt-6">
-                            <h3 className="text-lg font-semibold mb-3">Top 10 Performing Ads</h3>
-                            
-                            {isTopAdsLoading ? (
-                                <div className="flex items-center justify-center h-32">
-                                    <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                                    <span>Loading top ads...</span>
-                                </div>
-                            ) : topAdsError ? (
-                                <div className="text-red-500 p-4 bg-red-50 rounded-md">
-                                    {topAdsError}
-                                </div>
-                            ) : topAds.length > 0 ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                                    {topAds.map((ad) => (
-                                        <div key={ad.id} className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-                                            {ad.thumbnail_url ? (
-                                                <div className="relative aspect-video bg-gray-100">
-                                                    <img 
-                                                        src={ad.thumbnail_url} 
-                                                        alt={ad.name} 
-                                                        className="w-full h-full object-cover"
-                                                    />
-                                                </div>
-                                            ) : (
-                                                <div className="aspect-video bg-gray-100 flex items-center justify-center text-gray-400">
-                                                    <ImageIcon className="h-12 w-12" />
-                                                </div>
-                                            )}
-                                            <div className="p-3">
-                                                <h4 className="font-medium text-sm line-clamp-1">{ad.name}</h4>
-                                                {ad.message && (
-                                                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                                                        {ad.message}
-                                                    </p>
-                                                )}
-                                                <div className="mt-2 flex justify-between items-center text-xs text-muted-foreground">
-                                                    <span className={sortMetric === 'ctr' ? 'font-semibold text-foreground' : ''}>
-                                                        CTR: {ad.ctr?.toFixed(2) ?? 'N/A'}%
-                                                    </span>
-                                                    <span className={sortMetric === 'spend' ? 'font-semibold text-foreground' : ''}>
-                                                        ฿{(ad.spend || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                    </span>
-                                                    <span className={sortMetric === 'clicks' ? 'font-semibold text-foreground' : ''}>
-                                                        Clicks:{ad.clicks?.toLocaleString() ?? 'N/A'}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="text-center py-8 text-muted-foreground">
-                                    No ads found. Try adjusting your filters.
-                                </div>
-                            )}
-                        </div>
-                    </div>
                     {/* Editable Task Section */}
                     {/* <div className="grid gap-1.5 w-full">
                         <Label htmlFor="editable-task-section" className="text-sm font-medium">Editable Prompt: Task Section</Label>
@@ -2659,24 +2614,121 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                         </div>
                     )}
                 </div>
+                
 
+                    {/* Add this where you want the metric selection to appear */}
+                    <div className="mb-6">
+                        <div className="mb-4">
+                            <Label>Sort Ads By:</Label>
+                            <Select 
+                                value={sortMetric} 
+                                onValueChange={(value) => setSortMetric(value)}
+                            >
+                                <SelectTrigger className="w-[200px]">
+                                    <SelectValue placeholder="Select metric" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="ctr">CTR (High to Low)</SelectItem>
+                                    <SelectItem value="cpc">CPC (Low to High)</SelectItem>
+                                    <SelectItem value="roas">ROAS (High to Low)</SelectItem>
+                                    <SelectItem value="clicks">Clicks (High to Low)</SelectItem>
+                                    <SelectItem value="impressions">Impressions (High to Low)</SelectItem>
+                                    <SelectItem value="spend">Spend (Low to High)</SelectItem>
+                                    <SelectItem value="frequency">Frequency (Low to High)</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {/* Top Ads Preview Section */}
+                        <div className="mt-6">
+                            <h3 className="text-lg font-semibold mb-3">Top 10 Performing Ads</h3>
+                            
+                            {isTopAdsLoading ? (
+                                <div className="flex items-center justify-center h-32">
+                                    <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                                    <span>Loading top ads...</span>
+                                </div>
+                            ) : topAdsError ? (
+                                <div className="text-red-500 p-4 bg-red-50 rounded-md">
+                                    {topAdsError}
+                                </div>
+                            ) : topAds.length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                                    {topAds.map((ad) => (
+                                        <div key={ad.id} className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                                            {ad.thumbnail_url ? (
+                                                <div className="relative aspect-video bg-gray-100">
+                                                    <img 
+                                                        src={ad.thumbnail_url} 
+                                                        alt={ad.name} 
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <div className="aspect-video bg-gray-100 flex items-center justify-center text-gray-400">
+                                                    <ImageIcon className="h-12 w-12" />
+                                                </div>
+                                            )}
+                                            <div className="p-3">
+                                                <h4 className="font-medium text-sm line-clamp-1">{ad.name}</h4>
+                                                {ad.message && (
+                                                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                                        {ad.message}
+                                                    </p>
+                                                )}
+                                                <div className="mt-2 flex justify-between items-center text-xs text-muted-foreground">
+                                                    <span className={sortMetric === 'ctr' ? 'font-semibold text-foreground' : ''}>
+                                                        CTR: {ad.ctr?.toFixed(2) ?? 'N/A'}%
+                                                    </span>
+                                                    <span className={sortMetric === 'spend' ? 'font-semibold text-foreground' : ''}>
+                                                        ฿{(ad.spend || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    </span>
+                                                    <span className={sortMetric === 'clicks' ? 'font-semibold text-foreground' : ''}>
+                                                        Clicks:{ad.clicks?.toLocaleString() ?? 'N/A'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-center py-8 text-muted-foreground">
+                                    No ads found. Try adjusting your filters.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    
                 {/* --- Display Area (Updated for Tabs) --- */}
                 {selectedModels.length > 0 ? (
                     <Tabs defaultValue={selectedModels[0]} className="w-full">
                         <div className="flex justify-between items-center mb-4">
-                            <TabsList className="grid w-full grid-cols-4">
-                                {selectedModels.flatMap(modelName => [
-                                    {
-                                        key: modelName,
-                                        value: modelName,
-                                        label: modelName === 'gemini' ? 'Gemini (Standard)' : modelName
-                                    },
-                                    {
-                                        key: `${modelName}-with-competitors`,
-                                        value: `${modelName}-with-competitors`,
-                                        label: modelName === 'gemini' ? 'Gemini (With Market Research)' : `${modelName} (With Research)`
+                            <TabsList className="grid w-full" style={{ gridTemplateColumns: '1fr 1.4fr 1.6fr' }}>
+                                {selectedModels.flatMap(modelName => {
+                                    const tabs = [
+                                        {
+                                            key: modelName,
+                                            value: modelName,
+                                            label: modelName === 'gemini' ? 'Gemini (Standard)' : modelName
+                                        },
+                                        {
+                                            key: `${modelName}-with-competitors`,
+                                            value: `${modelName}-with-competitors`,
+                                            label: modelName === 'gemini' ? 'Gemini (With Market Research)' : `${modelName} (With Research)`
+                                        }
+                                    ];
+                                    
+                                    // Add the new tab for Gemini with ads details
+                                    if (modelName === 'gemini') {
+                                        tabs.push({
+                                            key: `${modelName}-with-ads-details`,
+                                            value: `${modelName}-with-ads-details`,
+                                            label: 'Gemini (With Market Research & Ads Details)'
+                                        });
                                     }
-                                ]).map(({key, value, label}) => (
+                                    
+                                    return tabs;
+                                }).map(({key, value, label}) => (
                                     <TabsTrigger key={key} value={value} className="capitalize">{label}</TabsTrigger>
                                 ))}
                             </TabsList>
@@ -2695,18 +2747,37 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                             )}
                         </div>
 
-                        {selectedModels.flatMap(modelName => [
-                            {
-                                modelName,
-                                displayName: modelName === 'gemini' ? 'Gemini (Standard)' : modelName,
-                                hasCompetitors: false
-                            },
-                            {
-                                modelName: `${modelName}-with-competitors`,
-                                displayName: modelName === 'gemini' ? 'Gemini (With Market Research)' : `${modelName} (With Research)`,
-                                hasCompetitors: true
+                        {selectedModels.flatMap(modelName => {
+                            const tabs = [
+                                {
+                                    modelName,
+                                    displayName: modelName === 'gemini' ? 'Gemini (Standard)' : modelName,
+                                    hasCompetitors: false,
+                                    hasAdPillars: false,
+                                    hasTopAds: false
+                                },
+                                {
+                                    modelName: `${modelName}-with-competitors`,
+                                    displayName: modelName === 'gemini' ? 'Gemini (With Market Research)' : `${modelName} (With Research)`,
+                                    hasCompetitors: true,
+                                    hasAdPillars: false,
+                                    hasTopAds: false
+                                }
+                            ];
+                            
+                            // Add the new tab for Gemini with ads details
+                            if (modelName === 'gemini') {
+                                tabs.push({
+                                    modelName: `${modelName}-with-ads-details`,
+                                    displayName: 'Gemini (With Market Research & Ads Details)',
+                                    hasCompetitors: true,
+                                    hasAdPillars: true,
+                                    hasTopAds: true
+                                });
                             }
-                        ]).map(({modelName, displayName, hasCompetitors}) => (
+                            
+                            return tabs;
+                        }).map(({modelName, displayName, hasCompetitors, hasAdPillars, hasTopAds}) => (
                             <TabsContent key={modelName} value={modelName} className="mt-4">
                                 {/* Loading State for this model */}
                                 {isLoading[modelName] && (
@@ -2734,9 +2805,14 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                     <div className="flex flex-col items-center justify-center gap-4 p-8 border rounded-lg text-muted-foreground min-h-[200px]">
                                         <AlertTriangle className="h-8 w-8" />
                                         <span>No {displayName.toLowerCase()} recommendations generated yet.</span>
-                                        {hasCompetitors && (
+                                        {hasCompetitors && !hasAdPillars && !hasTopAds && (
                                             <p className="text-sm text-center text-muted-foreground mt-2">
                                                 These recommendations will include market research and competitor analysis data.
+                                            </p>
+                                        )}
+                                        {hasCompetitors && hasAdPillars && hasTopAds && (
+                                            <p className="text-sm text-center text-muted-foreground mt-2">
+                                                These recommendations will include market research, competitor analysis, ad pillars, and top ads data.
                                             </p>
                                         )}
                                     </div>

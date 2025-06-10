@@ -171,6 +171,8 @@ export async function GET(request: NextRequest) {
   // const bookFilenamesParam = searchParams.get('bookFilenames'); // REMOVED - Now reading all books
   const modelsParam = searchParams.get('models'); // NEW: Read models parameter
   const includeCompetitorAnalysis = searchParams.get('includeCompetitorAnalysis') !== 'false';
+  const includeAdPillars = searchParams.get('includeAdPillars') !== 'false';
+  const includeTopAds = searchParams.get('includeTopAds') !== 'false';
   const sortMetric = searchParams.get('sortMetric');
   const sortOrder = (searchParams.get('sortOrder') as 'asc' | 'desc') || 'desc';
   const topAdsLimit = 10; // Default limit
@@ -412,8 +414,8 @@ export async function GET(request: NextRequest) {
     }
     // --- End Grounding Search ---
 
-    // --- Function to build the final user prompt (dynamically includes grounded info and ad pillars) ---
-    const buildFinalUserPrompt = async (groundedInfo: string, competitorAnalysisText: string = '', includeCompetitorAnalysis: boolean = true) => {
+    // --- Function to build the final user prompt (dynamically includes grounded info, competitor analysis, ad pillars, and top ads) ---
+    const buildFinalUserPrompt = async (groundedInfo: string, competitorAnalysisText: string = '', includeCompetitorAnalysis: boolean = true, includeAdPillars: boolean = false, includeTopAds: boolean = false) => {
         const groundedSection = groundedInfo ? `
 ---
 *(This section provides recent context about ${analysisRunData.clientName}. Consider these details alongside the core client information to ensure recommendations are timely and relevant. Use specific points from here where they offer a clear advantage or fresh angle.)*
@@ -493,6 +495,12 @@ ${userBrief ? `
 ${userBrief}
 ` : ''}
 ${groundedSection}
+
+${competitorSection}
+
+${includeAdPillars && adPillarsSection ? adPillarsSection : ''}
+
+${includeTopAds && topAdsSection ? topAdsSection : ''}
 
 ${bookSummaryContent ? `
 **Optional Book Summary Contexts:**
@@ -626,7 +634,9 @@ Return ONLY the JSON object above, nothing else.
         const finalGeminiPrompt = await buildFinalUserPrompt(
           typeof groundedClientInfoCommon === 'string' ? groundedClientInfoCommon : '', // groundedInfo
           (includeCompetitorAnalysis && competitorAnalysisData) ? competitorAnalysisData : '', // competitorAnalysisText
-          includeCompetitorAnalysis // includeCompetitorAnalysis
+          includeCompetitorAnalysis, // includeCompetitorAnalysis
+          includeAdPillars, // includeAdPillars
+          includeTopAds // includeTopAds
         );
         
         console.log('Competitor analysis data being passed to prompt:', 
@@ -1078,33 +1088,40 @@ export async function POST(request: NextRequest) {
         const brief = searchParams.get('brief') || '';
         const taskSection = searchParams.get('taskSection') || '';
         const includeCompetitorAnalysis = searchParams.get('includeCompetitorAnalysis') !== 'false';
-
+        const includeAdPillars = searchParams.get('includeAdPillars') !== 'false';
+        const includeTopAds = searchParams.get('includeTopAds') !== 'false';
+        const clientName = searchParams.get('clientName');
+        const productFocus = searchParams.get('productFocus');
+        const market = searchParams.get('market');
+        const sortMetric = searchParams.get('sortMetric');
+        const sortOrder = (searchParams.get('sortOrder') as 'asc' | 'desc') || 'desc';
+        
         console.log(`GET /api/generate-recommendations for runId: ${runId}, Models: ${models.join(', ')}, Include Competitor Analysis: ${includeCompetitorAnalysis}`);
         
         let competitorAnalysis = "";
         if (includeCompetitorAnalysis) {
-            const clientName = searchParams.get('clientName') || '';
-            const productFocus = searchParams.get('productFocus') || '';
-            
-            if (clientName && productFocus) {
-                try {
-                    const { data: allAnalysisData, error } = await supabaseAdmin
-                        .from('competitor_analysis')
-                        .select('analysis_data, client_name, product_focus, created_at')
-                        .eq('client_name', clientName.trim())
-                        .eq('product_focus', productFocus.trim())
-                        .order('created_at', { ascending: false })
-                        .limit(1);
-                    
-                    if (error) throw error;
-                    if (allAnalysisData && allAnalysisData.length > 0) {
-                        competitorAnalysis = JSON.stringify(allAnalysisData[0].analysis_data, null, 2);
-                        console.log("Fetched competitor analysis data");
-                    }
-                } catch (error) {
-                    console.error("Error fetching competitor analysis:", error);
-                    // Continue without competitor analysis if there's an error
+            try {
+                if (!clientName || !productFocus) {
+                    console.log("Missing clientName or productFocus for competitor analysis");
+                    return;
                 }
+                
+                const { data: allAnalysisData, error } = await supabaseAdmin
+                    .from('competitor_analysis')
+                    .select('analysis_data, client_name, product_focus, created_at')
+                    .eq('client_name', clientName.trim())
+                    .eq('product_focus', productFocus.trim())
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+                
+                if (error) throw error;
+                if (allAnalysisData && allAnalysisData.length > 0) {
+                    competitorAnalysis = JSON.stringify(allAnalysisData[0].analysis_data, null, 2);
+                    console.log("Fetched competitor analysis data");
+                }
+            } catch (error) {
+                console.error("Error fetching competitor analysis:", error);
+                // Continue without competitor analysis if there's an error
             }
         }
 
@@ -1147,7 +1164,7 @@ export async function POST(request: NextRequest) {
         let groundedClientInfo = ''; // Initialize groundedClientInfo variable
 
         // Define the function to build the final user prompt (similar to GET handler)
-        const buildFinalUserPrompt = (groundedInfo: string, competitorAnalysisText: string = '') => {
+        const buildFinalUserPrompt = (groundedInfo: string, competitorAnalysisText: string = '', includeCompetitorAnalysis: boolean = true, includeAdPillars: boolean = false, includeTopAds: boolean = false) => {
             // Fetch client info from query params
             const clientInfo = {
                 clientName: searchParams.get('clientName') || "Client",
