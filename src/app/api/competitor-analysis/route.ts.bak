@@ -269,17 +269,12 @@ Return ONLY the following JSON structure with no markdown formatting, no code bl
         
         // Try to parse JSON
         try {
-            // Get market trends with grounding search in parallel
-            const marketTrends = await fetchMarketTrendsWithGrounding(clientName, competitors);
-            // Combine the results
+            // No longer fetching market trends - only using competitor analysis
+            const parsedResults = JSON.parse(cleanedText);
             const combinedResults = {
-                ...JSON.parse(cleanedText),
-                research: marketTrends.research || [],
-                // Forward grounding metadata from marketTrends if present
-                groundingMetadata: marketTrends.groundingMetadata || marketTrends.geminiRaw?.candidates?.[0]?.groundingMetadata,
-                geminiRaw: marketTrends.geminiRaw,
-                // Also include the full market_trends and news_insights for reference if needed
-                news_insights: marketTrends.news_insights,
+                ...parsedResults,
+                groundingMetadata: geminiResult.groundingChunks ? { groundingChunks: geminiResult.groundingChunks } : undefined,
+                geminiRaw: rawGemini
             };
             return combinedResults;
         } catch (e) {
@@ -490,6 +485,7 @@ IMPORTANT: Your response must be valid, parseable JSON. Do not include any text 
                     // Combine the results
                     const combinedResults = {
                         ...analysis,
+                        research: marketTrends.research || []
                     };
                     
                     return NextResponse.json(combinedResults);
@@ -635,6 +631,7 @@ IMPORTANT: Your response must be valid, parseable JSON. Do not include any text 
                     // Combine the results
                     const combinedResults = {
                         ...analysis,
+                        research: marketTrends.research || []
                     };
                     
                     return NextResponse.json(combinedResults);
@@ -744,6 +741,7 @@ IMPORTANT: Your response must be valid, parseable JSON. Do not include any text 
                     // Combine the results
                     const combinedResults = {
                         ...analysis,
+                        research: marketTrends.research || []
                     };
                     
                     return NextResponse.json(combinedResults);

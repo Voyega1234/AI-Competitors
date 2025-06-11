@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       // Include the idea details if they exist
       idea_title: feedbackItem.idea?.title || null,
       idea_description: feedbackItem.idea?.description || null,
-      competitive_gap: feedbackItem.idea?.competitiveGap || null
+      concept_ideas: feedbackItem.idea?.conceptIdeas || null
     }));
 
     // Insert feedback into the database

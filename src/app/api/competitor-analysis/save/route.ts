@@ -13,7 +13,6 @@ interface AnalysisData {
     // Exclude these fields from analysis
     [key: string]: any;
   };
-  market_trends?: {research: string[]};
   news_insights?: {research: string[]};
   [key: string]: any;
 }
@@ -27,7 +26,7 @@ export async function POST(request: Request) {
 
   try {
     // Extract and filter the data we want to keep
-    const { news, analysis, market_trends, news_insights, ...rest } = analysisData as AnalysisData;
+    const { news, analysis, news_insights, ...rest } = analysisData as AnalysisData;
     
     // Filter out unwanted fields from analysis
     const filteredAnalysis = analysis ? {
@@ -49,7 +48,6 @@ export async function POST(request: Request) {
     const filteredData: AnalysisData = {
       ...(news && { news }),
       ...(filteredAnalysis && { analysis: filteredAnalysis }),
-      ...(market_trends && { market_trends }),
       ...(news_insights && { news_insights })
     };
     

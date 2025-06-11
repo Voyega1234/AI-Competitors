@@ -359,47 +359,35 @@ interface GenerateImageResponse {
 
 
 const DEFAULT_TASK_SECTION = `You are a senior prompt engineer and content strategist with deep expertise in digital content for the Thai market.
-
 Task:
 Analyze the {clientname} brand info below. Use it as inspiration to create 20 unique, powerful “Core Content Concepts” (ideas) for the {clientname} Thailand Facebook page.
-
 Objectives:
-
 Grab the attention of Thai audiences (scroll-stopping ideas).
-
 Boost Facebook engagement (likes, comments, shares, saves).
-
 Spark interest in {clientname} and its services—making readers curious or motivated to learn more.
-
-Reflect {clientname} unique story, expertise, and point of view that competitors cannot copy.
+Reflect {clientname}'s unique story, expertise, and point of view that competitors cannot copy.
 
 How to Think:
-
-Tap into real Thai pain points, dreams, and challenges around saving, investing, and managing money.
-
+Tap into real Thai pain points, dreams, and challenges around the product/service of this client.
 Draw from brand stories, behind-the-scenes insights, customer experiences, unique data, and {clientname} special strengths.
-
 Turn technical/complex info into friendly, relatable stories or knowledge.
-
 Surprise, educate, or inspire readers (“Oh wow!” moments).
-
+Adapt Related Trend or News to spark new ideas.
 Avoid direct selling or promotional language—focus on value, insight, or inspiration.
-
-Leverage the information you have to spark new ideas. Turn existing data into creative and impactful concepts or show ideas that base of proof or statistic
+Leverage the information you have to spark new ideas. Turn existing data into creative and impactful concepts or show ideas that base of proof or statistic.
+Beyond strictly leveraging provided data, encourage ideas that spring from {clientname}'s inherent brand story, unique operational methodologies, deep-seated expertise, and distinctive industry perspective.
+The goal is to generate content that could only originate from {clientname}, showcasing its unique approach, methods, or underlying values.
 
 Constraints:
-
 Exactly 20 ideas—no more, no less.
-
-Each idea = 1–3 sentences in Thai, describing the core concept (no titles, no call to action).
-
+Each idea = 2–4 sentences in Thai, describing the core concept (no titles, no call to action).
 Each idea must be distinctly different (no duplicates, no slight rewordings).`;
 
 const DEFAULT_DETAILS_SECTION = `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** ที่เน้นการนำเสนอจุดแข็งที่คู่แข่งไม่มี เช่น "ข้อมูลเชิงลึกของเราเท่านั้น", "ความแตกต่างจากคู่แข่ง", "ผลลัพธ์จริงของลูกค้า", "เทคโนโลยีเฉพาะที่ไม่มีใครใช้", "ค่าธรรมเนียมแบบใหม่", "มาตรฐานที่ยืนยันได้".
 
 b.  **\`product_focus\`:** ระบุ {productFocus} หรือฟีเจอร์, ตัวเลข, หรือข้อเสนอที่แบรนด์คุณมีคนเดียว เช่น "ค่าธรรมเนียม 0.2%", "ไม่มีขั้นต่ำ", "พอร์ตทองคำพร้อมปรับตามเศรษฐกิจ" **(ภาษาไทย)**.
 
-c.  **\`concept_idea\`:** สรุปแนวคิดสร้างสรรค์หลัก (1-2 ประโยค) ที่เน้น *มุมมองใหม่* หรือ *การหักล้างความเชื่อเดิม* ด้วยหลักฐาน เช่น สถิติ, ความสำเร็จของลูกค้า, หรือเทคโนโลยีที่พิสูจน์แล้ว **(ภาษาไทย)**.
+c.  **\`concept_idea\`:** สสรุปแนวคิดไอเดียหลัก (2-3 ประโยค) สำหรับการนำเสนอไอเดียนี้ **(ภาษาไทย)** โดยอ้างอิงรายละเอียดหรือสถิติหรือหลักฐานให้ครบถ้วน
 
 d.  **\`copywriting\`:** สร้างสรรค์องค์ประกอบข้อความโฆษณา **(ภาษาไทย)** ที่จับใจ และ "เล่าเรื่องให้เห็นภาพ" โดยไม่ใช่แค่บอกข้อดี:
     *   **\`headline\`:** พาดหัวที่น่าสนใจ สร้าง curiosity หรือ shock ด้วยข้อมูลจริงหรือ insight.
@@ -1251,12 +1239,8 @@ interface CompetitorAnalysisData {
                 }
                 apiUrl += `&taskSection=${encodeURIComponent(editableTaskSection)}`;
                 apiUrl += `&includeCompetitorAnalysis=${withCompetitors}`; // This parameter is still needed for the API
-                if (includeAdPillars) {
-                    apiUrl += `&includeAdPillars=true`;
-                }
-                if (includeTopAds) {
-                    apiUrl += `&includeTopAds=true`;
-                }
+                apiUrl += `&includeAdPillars=${includeAdPillars}`; // Always send the parameter with explicit true/false
+                apiUrl += `&includeTopAds=${includeTopAds}`; // Always send the parameter with explicit true/false
                 apiUrl += `&clientName=${encodeURIComponent(selectedClientName || '')}`;
                 apiUrl += `&productFocus=${encodeURIComponent(selectedProductFocus || '')}`;
                 apiUrl += `&market=Thailand`;

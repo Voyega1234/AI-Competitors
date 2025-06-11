@@ -60,7 +60,7 @@ const getTopAdsByMetric = async (metric: string, order: 'asc' | 'desc' = 'desc',
     let query = supabaseAdmin
       .from('ads_details')
       .select('*')
-      .not('image_description', 'is', null);
+      ;
     
     // Add ad account filter if provided
     if (adAccountId) {
@@ -170,9 +170,9 @@ export async function GET(request: NextRequest) {
   const detailsSectionParam = searchParams.get('detailsSection');
   // const bookFilenamesParam = searchParams.get('bookFilenames'); // REMOVED - Now reading all books
   const modelsParam = searchParams.get('models'); // NEW: Read models parameter
-  const includeCompetitorAnalysis = searchParams.get('includeCompetitorAnalysis') !== 'false';
-  const includeAdPillars = searchParams.get('includeAdPillars') !== 'false';
-  const includeTopAds = searchParams.get('includeTopAds') !== 'false';
+  const includeCompetitorAnalysis = searchParams.get('includeCompetitorAnalysis') === 'true';
+  const includeAdPillars = searchParams.get('includeAdPillars') === 'true';
+  const includeTopAds = searchParams.get('includeTopAds') === 'true';
   const sortMetric = searchParams.get('sortMetric');
   const sortOrder = (searchParams.get('sortOrder') as 'asc' | 'desc') || 'desc';
   const topAdsLimit = 10; // Default limit
@@ -433,27 +433,33 @@ ${competitorAnalysisText}
 
         // Get ad pillars data
         let adPillarsSection = '';
-        try {
-            const adPillars = adAccountId ? await getAdPillars(adAccountId) : [];
-            if (adPillars.length > 0) {
-                adPillarsSection = `
+        if (includeAdPillars) {
+            try {
+                console.log('[Ad Pillars] Fetching ad pillars data because includeAdPillars=true');
+                const adPillars = adAccountId ? await getAdPillars(adAccountId) : [];
+                if (adPillars.length > 0) {
+                    adPillarsSection = `
 **Current Ad Pillar Analysis:**
 Here are the creative pillars currently being used in our ads, along with their frequency:
+if user have 5 funnels, but 3 of them doesnt have any ads, it might make sense to develop some ads for those funnels so that their prospect customers see some good ads
+dont limit yourself to think of ad ideas for the funnel that doesnt have ads in them
 ${adPillars.map(p => `- ${p.pillar}: ${p.count} ads`).join('\n')}
 
-We should create New Ad ideas that not same like most Pillar we have 
 `;
+                }
+            } catch (error) {
+                console.error('Error generating ad pillars section:', error);
+                adPillarsSection = '\n*Error loading ad pillar data. Proceeding without it.*';
             }
-        } catch (error) {
-            console.error('Error generating ad pillars section:', error);
-            adPillarsSection = '\n*Error loading ad pillar data. Proceeding without it.*';
+        } else {
+            console.log('[Ad Pillars] Skipping ad pillars data because includeAdPillars=false');
         }
 
         // Get top performing ads if sortMetric is provided
         let topAdsSection = '';
-        if (sortMetric && adAccountId) {
+        if (includeTopAds && sortMetric && adAccountId) {
             try {
-                console.log(`[Top Ads] Fetching top ${topAdsLimit} ads sorted by ${sortMetric} ${sortOrder} for ad account: ${adAccountId}`);
+                console.log(`[Top Ads] Fetching top ${topAdsLimit} ads sorted by ${sortMetric} ${sortOrder} for ad account: ${adAccountId} because includeTopAds=true`);
                 const topAds = await getTopAdsByMetric(
                     sortMetric, 
                     sortOrder, 
@@ -474,17 +480,24 @@ We should create New Ad ideas that not same like most Pillar we have
                 console.error('[Top Ads] Error fetching top ads:', error);
                 topAdsSection = '\n*Error loading top performing ads data. Proceeding without it.*';
             }
-        } else if (sortMetric) {
-            console.log('[Top Ads] Skipping top ads - missing ad account ID');
+        } else {
+            if (!includeTopAds) {
+                console.log('[Top Ads] Skipping top ads because includeTopAds=false');
+            } else if (!sortMetric) {
+                console.log('[Top Ads] Skipping top ads - missing sort metric');
+            } else if (!adAccountId) {
+                console.log('[Top Ads] Skipping top ads - missing ad account ID');
+            }
         }
 
 
+        // Special prompt enhancement for ads details version - ONLY for the third tab
+        // This will only be included when BOTH includeAdPillars AND includeTopAds are true
+        // This ensures it only appears in the "Gemini (With Market Research & Ads Details)" version
+        const adsDetailsPrompt = (includeAdPillars && includeTopAds) ? 
+            `\n\n**SPECIAL INSTRUCTION FOR ADS DETAILS VERSION:**\n.Use the same ad pillars as your top-performing ads to focus on topics that drive higher engagement. \n` : '';
+        
         return `
-
-Analyze the following client information, recent grounded search results (if available), competitor summary, and optional book context to conceptualize groundbreaking creative recommendations and their initial execution details IN THAI.
-ALL TEXTUAL OUTPUT IN THE FINAL JSON RESPONSE MUST BE IN THAI.
-Crucially, leverage your access to real-time information via search grounding (if applicable to the model/call) to ensure ideas are timely, relevant, and informed by the latest digital landscape.
-You have no limits to your creativity. You are free.
 
 **Client Information:**
 *   Name: ${analysisRunData.clientName}
@@ -494,13 +507,6 @@ ${userBrief ? `
 **Additional User Brief/Context:**
 ${userBrief}
 ` : ''}
-${groundedSection}
-
-${competitorSection}
-
-${includeAdPillars && adPillarsSection ? adPillarsSection : ''}
-
-${includeTopAds && topAdsSection ? topAdsSection : ''}
 
 ${bookSummaryContent ? `
 **Optional Book Summary Contexts:**
@@ -518,20 +524,23 @@ ${taskSectionParam ? taskSectionParam.replace(/\{clientName\}/g, analysisRunData
   6. Ideas to include but not limited to: why the solutions from ${analysisRunData.clientName} are different than what is being offered in the market currently. Talk about the differentiation of the product if and when it makes the client's product or service more appealing. 
   7. Competitor Analysis is important please use it to make a strategic idea.`}
 
-This is All Knowledge We Have You can use for use fuel ideas that have proof will be impact ideas: [
+${includeAdPillars && includeTopAds ? adsDetailsPrompt : ''}
+
+This is All Knowledge We Have You can use for use fuel ideas that have proof will be impact ideas don't just use data about ${analysisRunData.clientName}  
+you can adapt or create related ideas that reference from trend for engagement but you feel free to use : [
 
 ${competitorSection}
 
-${adPillarsSection}
+${includeAdPillars && adPillarsSection ? adPillarsSection : ''}
 
-${topAdsSection}
+${includeTopAds && topAdsSection ? topAdsSection : ''}
 
 ]
   
 **Creative Execution Details (Per Recommendation - Populate these fields IN THAI for the JSON):**
 ${detailsSectionParam ? detailsSectionParam.replace(/\{productFocus\}/g, analysisRunData.productFocus || 'products/services') : `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** (เช่น "เคล็ดลับฮาวทู", "เบื้องหลังการทำงาน", "เรื่องราวความสำเร็จลูกค้า", "การหักล้างความเชื่อผิดๆ", "ไลฟ์สไตล์และการใช้งาน", "ปัญหาและการแก้ไข").
                                 b.  **\`product_focus\`:** ระบุ ${analysisRunData.productFocus || 'ผลิตภัณฑ์/บริการ'} ที่ต้องการเน้น **(ภาษาไทย)**.
-                                c.  **\`concept_idea\`:** สรุปแนวคิดสร้างสรรค์หลัก (1-2 ประโยค) สำหรับการนำเสนอไอเดียนี้ **(ภาษาไทย)**.
+                                c.  **\`concept_idea\`:** สรุปแนวคิดไอเดียหลัก (2-3 ประโยค) สำหรับการนำเสนอไอเดียนี้ **(ภาษาไทย)** โดยอ้างอิงรายละเอียดหรือสถิติหรือหลักฐานให้ครบถ้วน.
                                 d.  **\`copywriting\`:** สร้างสรรค์องค์ประกอบข้อความโฆษณาเบื้องต้น **(ภาษาไทย)**:
                                     *   **\`headline\`:** พาดหัวที่ดึงดูดความสนใจ **(ภาษาไทย)**.
                                     *   **\`sub_headline_1\`:** พาดหัวรองที่ขยายความหรือเน้นประโยชน์ **(ภาษาไทย)**.
