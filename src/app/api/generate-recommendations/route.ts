@@ -414,8 +414,25 @@ export async function GET(request: NextRequest) {
     }
     // --- End Grounding Search ---
 
-    // --- Function to build the final user prompt (dynamically includes grounded info, competitor analysis, ad pillars, and top ads) ---
-    const buildFinalUserPrompt = async (groundedInfo: string, competitorAnalysisText: string = '', includeCompetitorAnalysis: boolean = true, includeAdPillars: boolean = false, includeTopAds: boolean = false) => {
+    // --- Function to get feedback from Supabase ---
+    const getFeedback = async (clientName: string) => {
+        try {
+            const { data, error } = await supabaseAdmin
+                .from('idea_feedback')
+                .select('concept_ideas, comment, client_name, vote, idea_title, idea_description')
+                .eq('client_name', clientName)
+                .eq('vote', 'good');
+            
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error('Error fetching feedback:', error);
+            return null;
+        }
+    };
+
+    // --- Function to build the final user prompt (dynamically includes grounded info, competitor analysis, ad pillars, top ads, and feedback) ---
+    const buildFinalUserPrompt = async (groundedInfo: string, competitorAnalysisText: string = '', includeCompetitorAnalysis: boolean = true, includeAdPillars: boolean = false, includeTopAds: boolean = false, includeFeedback: boolean = true) => {
         const groundedSection = groundedInfo ? `
 ---
 *(This section provides recent context about ${analysisRunData.clientName}. Consider these details alongside the core client information to ensure recommendations are timely and relevant. Use specific points from here where they offer a clear advantage or fresh angle.)*
@@ -535,6 +552,24 @@ ${includeAdPillars && adPillarsSection ? adPillarsSection : ''}
 
 ${includeTopAds && topAdsSection ? topAdsSection : ''}
 
+${includeFeedback ? await (async () => {
+    try {
+        const feedback = await getFeedback(analysisRunData.clientName);
+        if (feedback && feedback.length > 0) {
+            return `
+**Previous Successful Concepts:**
+Here are concepts that were previously well-received by the client. Use these as inspiration but don't copy them directly:
+${feedback.map((item: any) => 
+                `- ${item.concept_ideas}${item.comment ? `\n  (Feedback: ${item.comment})` : ''}`
+            ).join('\n\n')}\n`;
+        }
+        return '';
+    } catch (error) {
+        console.error('Error loading feedback:', error);
+        return '';
+    }
+})() : ''}
+
 ]
   
 **Creative Execution Details (Per Recommendation - Populate these fields IN THAI for the JSON):**
@@ -645,7 +680,8 @@ Return ONLY the JSON object above, nothing else.
           (includeCompetitorAnalysis && competitorAnalysisData) ? competitorAnalysisData : '', // competitorAnalysisText
           includeCompetitorAnalysis, // includeCompetitorAnalysis
           includeAdPillars, // includeAdPillars
-          includeTopAds // includeTopAds
+          includeTopAds, // includeTopAds
+          true // includeFeedback
         );
         
         console.log('Competitor analysis data being passed to prompt:', 

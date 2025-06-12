@@ -387,7 +387,7 @@ const DEFAULT_DETAILS_SECTION = `a.  **\`content_pillar\`:** กำหนดธ�
 
 b.  **\`product_focus\`:** ระบุ {productFocus} หรือฟีเจอร์, ตัวเลข, หรือข้อเสนอที่แบรนด์คุณมีคนเดียว เช่น "ค่าธรรมเนียม 0.2%", "ไม่มีขั้นต่ำ", "พอร์ตทองคำพร้อมปรับตามเศรษฐกิจ" **(ภาษาไทย)**.
 
-c.  **\`concept_idea\`:** สสรุปแนวคิดไอเดียหลัก (2-3 ประโยค) สำหรับการนำเสนอไอเดียนี้ **(ภาษาไทย)** โดยอ้างอิงรายละเอียดหรือสถิติหรือหลักฐานให้ครบถ้วน
+c.  **\`concept_idea\`:** สรุปแนวคิดไอเดียหลัก (2-3 ประโยค) สำหรับการนำเสนอไอเดียนี้ **(ภาษาไทย)** โดยอ้างอิงรายละเอียดหรือสถิติหรือหลักฐานให้ครบถ้วน
 
 d.  **\`copywriting\`:** สร้างสรรค์องค์ประกอบข้อความโฆษณา **(ภาษาไทย)** ที่จับใจ และ "เล่าเรื่องให้เห็นภาพ" โดยไม่ใช่แค่บอกข้อดี:
     *   **\`headline\`:** พาดหัวที่น่าสนใจ สร้าง curiosity หรือ shock ด้วยข้อมูลจริงหรือ insight.
@@ -1231,7 +1231,7 @@ interface CompetitorAnalysisData {
             console.log(`Fetching recommendations for runId: ${selectedRunId}, Models: ${selectedModels.join(', ')}`);
             
             // Create a function to fetch recommendations with given parameters
-            const fetchRecommendations = async (withCompetitors: boolean, includeAdPillars: boolean = false, includeTopAds: boolean = false) => {
+            const fetchRecommendations = async (withCompetitors: boolean, includeAdPillars: boolean = false, includeTopAds: boolean = false, includeFeedback: boolean = true) => {
                 let apiUrl = `/api/generate-recommendations?runId=${selectedRunId}`;
                 apiUrl += `&models=${encodeURIComponent(selectedModels.join(','))}`;
                 if (userBrief.trim()) {
@@ -1241,6 +1241,7 @@ interface CompetitorAnalysisData {
                 apiUrl += `&includeCompetitorAnalysis=${withCompetitors}`; // This parameter is still needed for the API
                 apiUrl += `&includeAdPillars=${includeAdPillars}`; // Always send the parameter with explicit true/false
                 apiUrl += `&includeTopAds=${includeTopAds}`; // Always send the parameter with explicit true/false
+                apiUrl += `&includeFeedback=${includeFeedback}`; // Include feedback parameter
                 apiUrl += `&clientName=${encodeURIComponent(selectedClientName || '')}`;
                 apiUrl += `&productFocus=${encodeURIComponent(selectedProductFocus || '')}`;
                 apiUrl += `&market=Thailand`;
@@ -1259,9 +1260,9 @@ interface CompetitorAnalysisData {
 
             // Run all three versions in parallel
             const [standardResults, withCompetitorsResults, withAdsDetailsResults] = await Promise.all([
-                fetchRecommendations(false),
-                fetchRecommendations(true),
-                fetchRecommendations(true, true, true) // With competitors, ad pillars, and top ads
+                fetchRecommendations(false, false, false, true), // Standard version with feedback
+                fetchRecommendations(true, false, false, true), // With competitors and feedback
+                fetchRecommendations(true, true, true, true) // With competitors, ad pillars, top ads, and feedback
             ]);
 
             // Process standard results (without competitors)
