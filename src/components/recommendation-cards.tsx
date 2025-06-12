@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Bookmark, Share2, Loader2, AlertTriangle, BrainCircuit, X, Info, CheckSquare, UploadCloud, ExternalLink, Copy, Download, EyeOff, FileText, Image as LucideImage, Link, List, MoreHorizontal, Plus, Sparkles, UserPlus, ThumbsUp, ThumbsDown, MessageCircle, RefreshCw, ChevronDown, Image as ImageIcon } from "lucide-react"
+import { Bookmark, Share2, Loader2, AlertTriangle, BrainCircuit, X, Info, CheckSquare, UploadCloud, ExternalLink, Copy, Download, EyeOff, FileText, Image as LucideImage, Link, List, MoreHorizontal, Plus, Sparkles, UserPlus, ThumbsUp, ThumbsDown, MessageCircle, RefreshCw, ChevronDown, Image as ImageIcon, Save } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
@@ -1816,6 +1816,11 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                 return newFeedback;
             }
             
+            // Auto-focus the comment field when voting
+            setTimeout(() => {
+                setEditingFeedbackId(id);
+            }, 100);
+            
             // Find the idea to save its details
             let idea: Recommendation | undefined = undefined;
             for (const [model, recommendations] of Object.entries(resultsByModel)) {
@@ -1919,9 +1924,24 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
     
     // Save all feedback to the database
     const saveFeedbackToDatabase = async () => {
-        // Only save if there's feedback to save
-        if (Object.keys(ideaFeedback).length === 0) {
-            alert('No feedback to save');
+        // Filter out feedback entries that don't have votes
+        const feedbackWithVotes = Object.entries(ideaFeedback)
+            .filter(([_, feedback]) => feedback.vote)
+            .reduce((acc, [id, feedback]) => {
+                acc[id] = feedback;
+                return acc;
+            }, {} as Record<string, IdeaFeedback>);
+        
+        // Only save if there's feedback with votes to save
+        if (Object.keys(feedbackWithVotes).length === 0) {
+            alert('No voted feedback to save');
+            return;
+        }
+        
+        // Validate that all feedback entries have comments
+        const emptyComments = Object.entries(feedbackWithVotes).filter(([_, feedback]) => !feedback.comment?.trim());
+        if (emptyComments.length > 0) {
+            alert(`Please provide comments for all feedback before saving. ${emptyComments.length} item(s) are missing comments.`);
             return;
         }
         
@@ -1953,13 +1973,21 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                 }
             }
             
+            // Filter out feedback entries that don't have votes
+            const feedbackWithVotes = Object.entries(enhancedFeedback)
+                .filter(([_, feedback]) => feedback.vote)
+                .reduce((acc, [id, feedback]) => {
+                    acc[id] = feedback;
+                    return acc;
+                }, {} as Record<string, IdeaFeedback>);
+            
             // Prepare the data to save
             const feedbackData = {
                 clientName: selectedClientName,
                 productFocus: selectedProductFocus,
                 runId: selectedRunId,
                 timestamp: new Date().toISOString(),
-                feedback: enhancedFeedback // Use enhanced feedback with all idea data
+                feedback: feedbackWithVotes // Only save feedback with votes
             };
             
             // First, save to the database via API call
@@ -2718,8 +2746,8 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                 ))}
                             </TabsList>
                             
-                            {/* Save All Feedback Button - Only visible when feedback exists */}
-                            {Object.keys(ideaFeedback).length > 0 && (
+                            {/* Save All Feedback Button - Only visible when feedback with votes exists */}
+                            {Object.keys(ideaFeedback).filter(id => ideaFeedback[id].vote).length > 0 && (
                                 <Button
                                     variant="outline"
                                     size="sm"
@@ -2727,7 +2755,7 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                     className="flex items-center ml-4 bg-blue-50 hover:bg-blue-100 border-blue-200"
                                 >
                                     <Download className="h-4 w-4 mr-1" />
-                                    Save Feedback ({Object.keys(ideaFeedback).length})
+                                    Save Feedback ({Object.keys(ideaFeedback).filter(id => ideaFeedback[id].vote).length})
                                 </Button>
                             )}
                         </div>
@@ -2952,11 +2980,12 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                                                                     <Button
                                                                                         variant="outline"
                                                                                         size="sm"
+                                                                                        className="text-xs h-7 mt-1"
                                                                                         onClick={saveFeedbackToDatabase}
-                                                                                        className="flex items-center bg-blue-50 hover:bg-blue-100 border-blue-200"
+                                                                                        disabled={!ideaFeedback[rec.tempId!]?.comment?.trim()}
                                                                                     >
-                                                                                        <Download className="h-4 w-4 mr-1" />
-                                                                                        Save All Feedback
+                                                                                        <Save className="h-3 w-3 mr-1" />
+                                                                                        Save
                                                                                     </Button>
                                                                                 )}
                                                                                 <Button

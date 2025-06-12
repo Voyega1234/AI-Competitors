@@ -329,6 +329,16 @@ export default function FeedbackManager() {
     e.preventDefault();
     if (!editingFeedback) return;
 
+    // Always require a comment regardless of vote
+    if (!editingFeedback.comment?.trim()) {
+      toast({
+        title: 'Comment Required',
+        description: 'Please provide feedback in the comment field before saving.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('idea_feedback')
@@ -646,24 +656,37 @@ export default function FeedbackManager() {
                 </div>
                 <div className="grid grid-cols-4 items-start gap-4">
                   <label htmlFor="comment" className="text-right pt-2">
-                    Comment
+                    Comment <span className="text-red-500">*</span>
                   </label>
-                  <Textarea
-                    id="comment"
-                    value={editingFeedback.comment || ''}
-                    onChange={(e) =>
-                      setEditingFeedback({ ...editingFeedback, comment: e.target.value })
-                    }
-                    className="col-span-3"
-                    rows={2}
-                  />
+                  <div className="col-span-3">
+                    <Textarea
+                      id="comment"
+                      value={editingFeedback.comment || ''}
+                      onChange={(e) =>
+                        setEditingFeedback({ ...editingFeedback, comment: e.target.value })
+                      }
+                      className={`w-full ${!editingFeedback.comment?.trim() ? 'border-red-500 ring-red-500' : ''}`}
+                      placeholder="Required field"
+                      rows={2}
+                      required
+                    />
+                    {!editingFeedback.comment?.trim() && (
+                      <p className="text-sm text-red-500 mt-1">Comment is required</p>
+                    )}
+                  </div>
                 </div>
               </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setEditingFeedback(null)}>
                   Cancel
                 </Button>
-                <Button type="submit">Save changes</Button>
+                <Button 
+                  type="submit" 
+                  disabled={!editingFeedback.comment?.trim()}
+                  className={!editingFeedback.comment?.trim() ? 'opacity-50 cursor-not-allowed' : ''}
+                >
+                  Save changes
+                </Button>
               </DialogFooter>
             </form>
           </DialogContent>
