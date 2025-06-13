@@ -575,7 +575,7 @@ ${feedback.map((item: any) =>
 **Creative Execution Details (Per Recommendation - Populate these fields IN THAI for the JSON):**
 ${detailsSectionParam ? detailsSectionParam.replace(/\{productFocus\}/g, analysisRunData.productFocus || 'products/services') : `a.  **\`content_pillar\`:** กำหนดธีมเนื้อหาหลักหรือหมวดหมู่ **(ภาษาไทย)** (เช่น "เคล็ดลับฮาวทู", "เบื้องหลังการทำงาน", "เรื่องราวความสำเร็จลูกค้า", "การหักล้างความเชื่อผิดๆ", "ไลฟ์สไตล์และการใช้งาน", "ปัญหาและการแก้ไข").
                                 b.  **\`product_focus\`:** ระบุ ${analysisRunData.productFocus || 'ผลิตภัณฑ์/บริการ'} ที่ต้องการเน้น **(ภาษาไทย)**.
-                                c.  **\`concept_idea\`:** สรุปแนวคิดไอเดียหลัก (1-2 ประโยค) สำหรับการนำเสนอไอเดียนี้ **(ภาษาไทย)** โดยอ้างอิงรายละเอียดหรือสถิติหรือหลักฐานให้ครบถ้วน.
+                                c.  **\`concept_idea\`:** สรุปแนวคิดไอเดียหลัก (1-2 ประโยค) สำหรับการนำเสนอไอเดียนี้ **(ภาษาไทย)** โดยระบุเป็นรายละเอียดที่เข้าใจง่ายและดีที่สุด
                                 d.  **\`copywriting\`:** สร้างสรรค์องค์ประกอบข้อความโฆษณาเบื้องต้น **(ภาษาไทย)**:
                                     *   **\`headline\`:** พาดหัวที่ดึงดูดความสนใจ **(ภาษาไทย)**.
                                     *   **\`sub_headline_1\`:** พาดหัวรองที่ขยายความหรือเน้นประโยชน์ **(ภาษาไทย)**.
@@ -696,7 +696,7 @@ Return ONLY the JSON object above, nothing else.
 
         // --- Call Gemini API ---
         console.log("Sending initial request to Gemini API...");
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-05-06:generateContent?key=${GEMINI_API_KEY}`;
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-06-05:generateContent?key=${GEMINI_API_KEY}`;
         const geminiPayload = {
             contents: [{ parts: [{ text: finalGeminiPrompt }] }],
             generationConfig: { 
