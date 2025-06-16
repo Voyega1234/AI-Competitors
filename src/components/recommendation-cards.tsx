@@ -631,6 +631,8 @@ export function RecommendationCards() {
     const [isLoading, setIsLoading] = useState<ModelLoadingState>({});
     const [error, setError] = useState<ModelErrorState>({});
     const [selectedModel, setSelectedModel] = useState<string>("gemini");
+    // State for auto-generating journeys
+    const [isAutoGeneratingJourneys, setIsAutoGeneratingJourneys] = useState<boolean>(false);
     // Track models for current results
     
     // --- State for Dialog (Recommendation Details Only) ---
@@ -1433,6 +1435,62 @@ interface CompetitorAnalysisData {
             bubblePoints: []
         }));
     };
+
+    // --- Auto-generate customer journeys when recommendations are loaded ---
+    useEffect(() => {
+        // Check if we have recommendations, client name, and product focus
+        const allRecommendations = Object.values(resultsByModel).flat();
+        const hasRecommendations = allRecommendations.length > 0;
+        
+        if (hasRecommendations && selectedClientName && !isAutoGeneratingJourneys && !isGeneratingJourneys) {
+            // Filter recommendations that don't have journeys yet
+            const recommendationsWithoutJourneys = allRecommendations.filter(
+                rec => rec.tempId && !customerJourneys[rec.tempId]
+            );
+            
+            if (recommendationsWithoutJourneys.length > 0) {
+                console.log(`[ui] Auto-generating journeys for ${recommendationsWithoutJourneys.length} recommendations`);
+                setIsAutoGeneratingJourneys(true);
+                
+                // Prepare recommendations for the API
+                const recommendationsForApi = recommendationsWithoutJourneys.map(rec => ({
+                    title: rec.title,
+                    concept: rec.concept_idea,
+                    description: rec.description,
+                    tempId: rec.tempId as string,
+                }));
+                
+                // Call the API
+                fetch('/api/generate-customer-journey', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        selectedRecommendations: recommendationsForApi,
+                        clientName: selectedClientName,
+                        productFocus: selectedProductFocus === 'placeholder-for-empty' ? null : selectedProductFocus,
+                    })
+                })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.customerJourneys) {
+                        // Update the journey map with the results
+                        setCustomerJourneys(prev => ({
+                            ...prev,
+                            ...result.customerJourneys
+                        }));
+                        console.log(`[ui] Successfully auto-generated ${Object.keys(result.customerJourneys).length} customer journeys`);
+                    }
+                })
+                .catch(err => {
+                    console.error("[ui] Error auto-generating customer journeys:", err);
+                    // We don't set journeyError here to avoid showing error messages for auto-generation
+                })
+                .finally(() => {
+                    setIsAutoGeneratingJourneys(false);
+                });
+            }
+        }
+    }, [resultsByModel, selectedClientName, selectedProductFocus, customerJourneys, isGeneratingJourneys, isAutoGeneratingJourneys]);
 
     // --- UPDATED Handler for the first button -> Generate Journey for the single selected card ---
     const handleGenerateCustomerJourneys = async () => {
