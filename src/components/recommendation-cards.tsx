@@ -632,6 +632,8 @@ export function RecommendationCards() {
     const [error, setError] = useState<ModelErrorState>({});
     const [selectedModel, setSelectedModel] = useState<string>("gemini");
     // State for auto-generating journeys
+    const [isEditingResearch, setIsEditingResearch] = useState(false);
+    const [editableResearch, setEditableResearch] = useState<string[]>([]);
     const [isAutoGeneratingJourneys, setIsAutoGeneratingJourneys] = useState<boolean>(false);
     // Track models for current results
     
@@ -1049,6 +1051,12 @@ interface CompetitorAnalysisData {
             // console.log('Dialog should be showing data for:', selectedRecommendation.title);
         }
     }, [selectedRecommendation]);
+
+    useEffect(() => {
+        if (competitorAnalysis?.analysis?.research) {
+          setEditableResearch([...competitorAnalysis.analysis.research]);
+        }
+      }, [competitorAnalysis]);
 
     // --- Fetch Client Names on Mount ---
     useEffect(() => {
@@ -2541,80 +2549,104 @@ ${customPrompt ? `\nAdditional Instructions:\n${customPrompt}` : ''}
                                         
                                         {/* Research Section (Google Grounding Search) */}
                                         <div className="p-4 border rounded-lg bg-indigo-50 shadow-sm col-span-2">
-                                            <h3 className="text-lg font-semibold text-indigo-700 mb-3 flex items-center">
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4m9 0h-4m4 0a2 2 0 012 2v14a2 2 0 01-2 2h-4m0-18v18m0 0H9" />
-                                                </svg>
-                                                Research & Market Insights
-                                                <span className="ml-2 text-xs bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded-full">Google Search</span>
+                                        <div className="flex justify-between items-center mb-3">
+                                            <h3 className="text-lg font-semibold text-indigo-700 flex items-center">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4m9 0h-4m4 0a2 2 0 012 2v14a2 2 0 01-2 2h-4m0-18v18m0 0H9" />
+                                            </svg>
+                                            Research & Market Insights
+                                            <span className="ml-2 text-xs bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded-full">Google Search</span>
                                             </h3>
-                                            <ul className="list-disc pl-5 space-y-2 text-sm">
-                                                {competitorAnalysis && competitorAnalysis.analysis && Array.isArray(competitorAnalysis.analysis.research) && competitorAnalysis.analysis.research.length > 0 ? 
-                                                    competitorAnalysis.analysis.research.map((item: string, i: number) => (
-                                                        <li key={i} className="text-gray-700">{item}</li>
-                                                    )) : 
-                                                    <li className="text-gray-500">No research data available</li>
-                                                }
-                                            </ul>
-                                        </div>
-                                        
-                                        {/* Related News Highlights Section */}
-                                        <div className="p-4 border rounded-lg bg-amber-50 shadow-sm col-span-2">
-                                            <div className="flex justify-between items-center mb-3">
-                                                <h3 className="text-lg font-semibold text-amber-800 flex items-center">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
-                                                    </svg>
-                                                    Related News Highlights
-                                                </h3>
+                                            {isEditingResearch ? (
+                                            <div className="space-x-2">
                                                 <Button 
-                                                    variant="outline" 
-                                                    size="sm" 
-                                                    onClick={fetchNews}
-                                                    disabled={isNewsLoading}
-                                                    className="text-xs h-7"
+                                                size="sm" 
+                                                variant="outline" 
+                                                onClick={() => {
+                                                    if (competitorAnalysis?.analysis) {
+                                                    const updatedAnalysis = {
+                                                        ...competitorAnalysis,
+                                                        analysis: {
+                                                        ...competitorAnalysis.analysis,
+                                                        research: [...editableResearch]
+                                                        }
+                                                    };
+                                                    setCompetitorAnalysis(updatedAnalysis);
+                                                    }
+                                                    setIsEditingResearch(false);
+                                                }}
                                                 >
-                                                    {isNewsLoading ? (
-                                                        <>
-                                                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                                                            Loading
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <RefreshCw className="mr-1 h-3 w-3" />
-                                                            Refresh
-                                                        </>
-                                                    )}
+                                                Save
+                                                </Button>
+                                                <Button 
+                                                size="sm" 
+                                                variant="ghost" 
+                                                onClick={() => setIsEditingResearch(false)}
+                                                >
+                                                Cancel
                                                 </Button>
                                             </div>
-                                            
-                                            {isNewsLoading && !news.length ? (
-                                                <div className="flex items-center justify-center py-4">
-                                                    <Loader2 className="h-5 w-5 animate-spin text-amber-500 mr-2" />
-                                                    <span className="text-amber-700 text-sm">Loading news...</span>
-                                                </div>
-                                            ) : newsError ? (
-                                                <div className="p-3 bg-red-50 text-red-600 rounded text-sm">
-                                                    {newsError}
-                                                </div>
-                                            ) : news.length > 0 ? (
-                                                <ul className="space-y-3 list-disc pl-5">
-                                                    {news.map((item, index) => (
-                                                        <li key={index} className="text-amber-900">
-                                                            <div className="font-medium">{item.title}</div>
-                                                            {item.summary && (
-                                                                <div className="mt-1 text-sm text-amber-800">
-                                                                    {item.summary}
-                                                                </div>
-                                                            )}
-                                                        </li>
-                                                    ))}
-                                                </ul>
                                             ) : (
-                                                <div className="text-center py-4 text-amber-700 text-sm">
-                                                    No recent news found. Try refreshing to check for updates.
-                                                </div>
+                                            <Button 
+                                                size="sm" 
+                                                variant="ghost" 
+                                                onClick={() => setIsEditingResearch(true)}
+                                                className="text-indigo-600 hover:text-indigo-800"
+                                            >
+                                                Edit
+                                            </Button>
                                             )}
+                                        </div>
+
+                                        {isEditingResearch ? (
+                                            <div className="space-y-2">
+                                            {editableResearch.map((item, i) => (
+                                                <div key={i} className="flex items-start space-x-2">
+                                                <Textarea
+                                                    value={item}
+                                                    onChange={(e) => {
+                                                    const newResearch = [...editableResearch];
+                                                    newResearch[i] = e.target.value;
+                                                    setEditableResearch(newResearch);
+                                                    }}
+                                                    className="flex-1"
+                                                />
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                    const newResearch = [...editableResearch];
+                                                    newResearch.splice(i, 1);
+                                                    setEditableResearch(newResearch);
+                                                    }}
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </Button>
+                                                </div>
+                                            ))}
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => setEditableResearch([...editableResearch, ""])}
+                                                className="w-full mt-2"
+                                            >
+                                                <Plus className="h-4 w-4 mr-2" />
+                                                Add Research Item
+                                            </Button>
+                                            </div>
+                                        ) : (
+                                            <ul className="list-disc pl-5 space-y-2 text-sm">
+                                            {editableResearch.length > 0 ? (
+                                                editableResearch.map((item, i) => (
+                                                <li key={i} className="text-gray-700">
+                                                    {item || <span className="text-gray-400">Empty research item</span>}
+                                                </li>
+                                                ))
+                                            ) : (
+                                                <li className="text-gray-500">No research data available</li>
+                                            )}
+                                            </ul>
+                                        )}
                                         </div>
                                         
                                         {/* Summary Section - Full Width */}
